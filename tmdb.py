@@ -18,6 +18,13 @@ def _headers() -> dict:
     return {"Authorization": f"Bearer {_api_key()}", "Accept": "application/json"}
 
 
+def has_api_key() -> bool:
+    """True when a TMDB token is configured. Note the API is called with bearer
+    auth, so this must be a v4 'Read Access Token' (starts with 'ey'), not a v3
+    API key - a v3 key is accepted here but 401s on every request."""
+    return bool(_api_key())
+
+
 def _get(path: str, params: dict | None = None, timeout: int = 10) -> dict | None:
     if not _api_key():
         log.warning("TMDB_API_KEY not set; skipping %s", path)
