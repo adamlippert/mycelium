@@ -37,7 +37,10 @@ def _safe_next_path(nxt: str | None, default: str = "/ui") -> str:
 
 
 def is_enabled() -> bool:
-    return bool(cfg.OIDC_ENABLED and cfg.OIDC_ISSUER_URL and cfg.OIDC_CLIENT_ID)
+    import settings as _settings
+
+    enabled = _settings.get("OIDC_ENABLED", cfg.OIDC_ENABLED)
+    return bool(enabled and cfg.OIDC_ISSUER_URL and cfg.OIDC_CLIENT_ID)
 
 
 def provider_name() -> str:
