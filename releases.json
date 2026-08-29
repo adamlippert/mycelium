@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.6.6",
+    "date": "2026-08-29",
+    "notes": [
+      "Fix: Debridio results were systematically outranked on language - Debridio ships language data as flag emoji in the stream title and Mycelium was discarding all of it, so every Debridio result scored worst-but-one on the third ranking term and lost to any Torrentio release that spelled out ENGLISH",
+      "Fix: language detection now lives in one place and is used by all three scrapers, reading flag emoji as well as release-name tokens",
+      "Note: better data can move a release DOWN as well as up - a release flagged only French and German now correctly ranks below a preferred-language release, where it previously scored as unknown",
+      "Fix: the detectable vocabulary grows from 4 language codes to 34, and AUDIO_LANGUAGE_PREFERENCE / EXCLUDE_LANGUAGES are now validated on save instead of silently accepting a code that never matches",
+      "Fix: Zilean's total absence of language data is now explicit rather than indistinguishable from a release that simply did not state its language"
+    ]
+  },
+  {
     "version": "0.6.5",
     "date": "2026-08-29",
     "notes": [

@@ -2,6 +2,15 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.6.6] - 2026-08-29
+
+### Fixed
+
+- Debridio results were being systematically outranked on a criterion they could not win. Debridio ships language information as flag emoji in the stream title, but `debridio.py` never populated `Stream.languages`, so every Debridio result arrived with an empty language set. Language is the third term of the ranking tuple - above WEB-DL, HEVC, seeders and size - and an empty set scores worst-but-one, so with the default `AUDIO_LANGUAGE_PREFERENCE=en,multi` a Debridio release lost to any Torrentio release whose name happened to spell out "ENGLISH", regardless of which was the better file. Debridio is queried first, so this quietly suppressed the scraper that was supposed to lead. Detection now lives in one place, `streams.detect_languages()`, reads flag emoji as well as name tokens, and is used by all three scrapers.
+- **This can move a release down as well as up.** A release flagged only French and German previously scored as "unknown"; now it correctly scores below a release in a preferred language, and below an untagged one. That is the intended behaviour - we know more than we did - but a picked release changing after upgrade is expected rather than a fault.
+- The detectable language vocabulary grows from four codes (`nl`, `en`, `multi`, `ru`) to 34, so `AUDIO_LANGUAGE_PREFERENCE` and `EXCLUDE_LANGUAGES` can now name languages that were previously undetectable. Both settings are validated when saved: an unknown code such as `english` is rejected with the valid codes listed, where before it was accepted silently and simply never matched. Values arriving from `.env` bypass that check and warn at startup instead.
+- Zilean carries no language data of any kind. That is now explicit (`zilean.LANGUAGES_AVAILABLE`) rather than an accident of an empty field, and an empty language set is documented as meaning "the release did not say", never "this release has no audio" - untagged English is the default in release naming, so anything treating absence as a positive fact would discard most of the catalogue.
+
 ## [0.6.5] - 2026-08-29
 
 ### Added
