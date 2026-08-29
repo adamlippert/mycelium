@@ -4,15 +4,13 @@ from typing import Optional
 
 import blacklist
 import db
-import health_cache
 import jellyfin
 import locks
 import monitor
 import notify
+import scrapers
 import strm_generator
 import torbox
-import torrentio
-import zilean
 import settings as _settings
 from torrentio import TorrentioStream
 from webhook_parser import MediaRequest
@@ -33,10 +31,6 @@ class RateLimited(Exception):
     """Raised when TorBox returns 429 and the short in-call retry is exhausted.
     Signals the caller to reschedule via the retry queue rather than marking
     the request permanently failed (and without blacklisting the torrent)."""
-
-
-def _rank(streams, prefer_season_pack: bool = False, override: dict | None = None):
-    return torrentio.rank_streams(streams, prefer_season_pack=prefer_season_pack, override=override)
 
 
 def _movie_runtime_minutes(imdb_id: str) -> float | None:
@@ -60,41 +54,15 @@ def _episode_runtime_minutes(imdb_id: str, season: int, episode: int) -> float |
 def _fetch_movie_candidates(req: MediaRequest) -> list:
     override = dict(db.get_show_override(req.imdb_id) or {})
     override["runtime_minutes"] = _movie_runtime_minutes(req.imdb_id)
-    streams: list[TorrentioStream] = []
-    seen_hashes: set[str] = set()
-    if _settings.get("ZILEAN_ENABLED", False) and health_cache.is_up("zilean"):
-        for s in zilean.fetch_streams(req.imdb_id):
-            if s.info_hash not in seen_hashes:
-                seen_hashes.add(s.info_hash)
-                streams.append(s)
-    if health_cache.is_up("torrentio"):
-        for s in torrentio.fetch_streams("movie", req.imdb_id):
-            if s.info_hash not in seen_hashes:
-                seen_hashes.add(s.info_hash)
-                streams.append(s)
-    if streams:
-        log.info("Combined %d unique streams for movie %s (zilean+torrentio)", len(streams), req.title)
-    return _rank(streams, override=override)
+    return scrapers.fetch_candidates("movie", req.imdb_id, override=override)
 
 
-def _fetch_season_candidates(req: MediaRequest, season: int, episode: int, prefer_season_pack: bool = False) -> list:
+def _fetch_season_candidates(req: MediaRequest, season: int, episode: int,
+                             prefer_season_pack: bool = False) -> list:
     override = dict(db.get_show_override(req.imdb_id) or {})
     override["runtime_minutes"] = _episode_runtime_minutes(req.imdb_id, season, episode)
-    streams: list[TorrentioStream] = []
-    seen_hashes: set[str] = set()
-    if _settings.get("ZILEAN_ENABLED", False) and health_cache.is_up("zilean"):
-        for s in zilean.fetch_streams(req.imdb_id, season=season, episode=episode):
-            if s.info_hash not in seen_hashes:
-                seen_hashes.add(s.info_hash)
-                streams.append(s)
-    if health_cache.is_up("torrentio"):
-        for s in torrentio.fetch_streams("series", req.imdb_id, season=season, episode=episode):
-            if s.info_hash not in seen_hashes:
-                seen_hashes.add(s.info_hash)
-                streams.append(s)
-    if streams:
-        log.info("Combined %d unique streams for %s S%02dE%02d (zilean+torrentio)", len(streams), req.title, season, episode)
-    return _rank(streams, prefer_season_pack=prefer_season_pack, override=override)
+    return scrapers.fetch_candidates("series", req.imdb_id, season=season, episode=episode,
+                                      prefer_season_pack=prefer_season_pack, override=override)
 
 
 def _is_429(exc: Exception) -> bool:
@@ -561,6 +529,26 @@ def _process_season(req: MediaRequest, season: int) -> tuple[bool, Optional[Torr
     return added > 0, first_winner
 
 
+def _record_source_metrics(winner) -> None:
+    """Record which source won, and whether it was the only one that had it.
+
+    Win rate alone is misleading: dedup is won by merge order, and Debridio is
+    both first and a ~79% superset of Torrentio, so it absorbs wins Torrentio
+    would previously have recorded. source_unique_win is the honest signal.
+    """
+    db.record_metric("source_win", winner.source, value_int=1)
+    is_unique = not getattr(winner, "also_seen_in", ())
+    if is_unique:
+        db.record_metric("source_unique_win", winner.source, value_int=1)
+    try:
+        import metrics_prom
+        metrics_prom.source_wins_total.labels(source=winner.source).inc()
+        if is_unique:
+            metrics_prom.source_unique_wins_total.labels(source=winner.source).inc()
+    except Exception as exc:
+        log.debug("metrics_prom (source) failed: %s", exc)
+
+
 def process(req: MediaRequest, _retry_attempt: int = 0) -> bool:
     with locks.imdb_mutex(req.imdb_id, blocking=False) as got:
         if not got:
@@ -695,11 +683,10 @@ def _process_locked(req: MediaRequest, _retry_attempt: int) -> bool:
             log.debug("metrics_prom (success) failed: %s", exc)
         if winner:
             db.record_metric("quality_added", winner.quality, value_int=1)
-            db.record_metric("source_win", winner.source, value_int=1)
+            _record_source_metrics(winner)
             try:
                 import metrics_prom
                 metrics_prom.quality_added_total.labels(quality=winner.quality or "unknown").inc()
-                metrics_prom.source_wins_total.labels(source=winner.source).inc()
             except Exception as exc:
                 log.debug("metrics_prom (quality) failed: %s", exc)
     elif req.imdb_id in _WANTED:

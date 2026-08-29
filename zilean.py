@@ -76,19 +76,26 @@ def fetch_streams(
     season: int | None = None,
     episode: int | None = None,
     timeout: int = 10,
+    raise_on_error: bool = False,
 ) -> list[TorrentioStream]:
+    """raise_on_error=True re-raises on a query failure instead of the default
+    fail-open []. scrapers.py sets this so its outage guard can tell "could
+    not search" apart from "searched, found nothing"."""
     mode = _settings.get("ZILEAN_MODE", "external")
     if mode == "native":
-        return _fetch_streams_native(imdb_id, season, episode)
-    return _fetch_streams_external(imdb_id, season, episode, timeout)
+        return _fetch_streams_native(imdb_id, season, episode, raise_on_error)
+    return _fetch_streams_external(imdb_id, season, episode, timeout, raise_on_error)
 
 
-def _fetch_streams_native(imdb_id: str, season: int | None, episode: int | None) -> list[TorrentioStream]:
+def _fetch_streams_native(imdb_id: str, season: int | None, episode: int | None,
+                          raise_on_error: bool = False) -> list[TorrentioStream]:
     import tmdb
     import zilean_index
     try:
         title = tmdb.display_title(imdb_id, media_type="tv" if season is not None else "movie")
         if not title:
+            # A per-title condition (nothing to resolve), not a scraper outage:
+            # never raise here even when raise_on_error is set.
             log.warning("Zilean (native): could not resolve title for %s, skipping", imdb_id)
             return []
         raw_list = zilean_index.search(title, season=season, episode=episode)
@@ -100,6 +107,8 @@ def _fetch_streams_native(imdb_id: str, season: int | None, episode: int | None)
         # (disk I/O, lock contention on the shared zilean_index file) must
         # not propagate up into processor.py's season loop.
         log.warning("Zilean (native) unavailable for %s: %s", imdb_id, exc)
+        if raise_on_error:
+            raise
         return []
 
 
@@ -108,6 +117,7 @@ def _fetch_streams_external(
     season: int | None,
     episode: int | None,
     timeout: int,
+    raise_on_error: bool = False,
 ) -> list[TorrentioStream]:
     params: dict[str, object] = {"ImdbId": imdb_id}
     if season is not None:
@@ -122,6 +132,8 @@ def _fetch_streams_external(
         resp.raise_for_status()
     except requests.RequestException as exc:
         log.warning("Zilean unavailable: %s", exc)
+        if raise_on_error:
+            raise
         return []
     raw_list = resp.json() or []
     parsed = [s for s in (_to_stream(r, season) for r in raw_list) if s is not None]

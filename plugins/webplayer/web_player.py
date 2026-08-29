@@ -14,12 +14,11 @@ import requests as req_lib
 import requests.exceptions as _req_exc
 
 import db
-import health_cache
+import scrapers
 import settings as _settings
+import streams
 import subtitles as _subtitles
 import torbox
-import torrentio
-import zilean
 
 log = logging.getLogger(__name__)
 
@@ -96,11 +95,11 @@ def _parse_browser_caps(user_agent: str) -> dict:
 
 # ── Torrent selection ──────────────────────────────────────────────────────────
 
-def _web_score(stream: torrentio.TorrentioStream,
+def _web_score(stream: streams.Stream,
                caps: dict | None = None) -> int:
     caps = caps or {}
     blob = f"{stream.name} {stream.title}"
-    if torrentio._DV_RE.search(blob):      return -1  # Dolby Vision: browser-incompatible
+    if streams._DV_RE.search(blob):        return -1  # Dolby Vision: browser-incompatible
     if _NO_BROWSER_VIDEO_RE.search(blob):  return -1  # AV1/VP9/VP8: no browser HLS support
     if _HDR_NAME_RE.search(blob):          return -1  # HDR: browsers can't tone-map
 
@@ -113,7 +112,7 @@ def _web_score(stream: torrentio.TorrentioStream,
     elif stream.quality == "2160p": return -1   # 4K = altijd HEVC + groot, niet geschikt voor web
     elif stream.quality == "720p":  score += 50
 
-    if torrentio._WEBDL_RE.search(blob): score += 40
+    if streams._WEBDL_RE.search(blob):   score += 40
 
     is_h264 = bool(_H264_RE.search(blob))
     is_aac  = bool(_AAC_NAME_RE.search(blob))
@@ -144,32 +143,21 @@ def _web_score(stream: torrentio.TorrentioStream,
 def find_web_candidates(imdb_id: str, media_type: str,
                         season: int | None = None,
                         episode: int | None = None,
-                        browser_caps: dict | None = None) -> list[torrentio.TorrentioStream]:
-    streams: list[torrentio.TorrentioStream] = []
-    seen: set[str] = set()
-
-    if _settings.get("ZILEAN_ENABLED", False) and health_cache.is_up("zilean"):
-        try:
-            for s in zilean.fetch_streams(imdb_id, season=season, episode=episode):
-                if s.info_hash not in seen:
-                    seen.add(s.info_hash)
-                    streams.append(s)
-        except Exception as exc:
-            log.warning("web_player: zilean fetch failed: %s", exc)
-
-    if health_cache.is_up("torrentio"):
-        kind = "movie" if media_type == "movie" else "series"
-        try:
-            for s in torrentio.fetch_streams(kind, imdb_id, season=season,
-                                             episode=episode, timeout=12):
-                if s.info_hash not in seen:
-                    seen.add(s.info_hash)
-                    streams.append(s)
-        except Exception as exc:
-            log.warning("web_player: torrentio fetch failed: %s", exc)
+                        browser_caps: dict | None = None) -> list[streams.Stream]:
+    # merge_candidates, not fetch_candidates: the house ranking would drop
+    # candidates this player still wants, because _web_score below orders by
+    # browser compatibility rather than by quality.
+    try:
+        pool = scrapers.merge_candidates(
+            "movie" if media_type == "movie" else "series",
+            imdb_id, season=season, episode=episode, timeout=12,
+        )
+    except Exception as exc:
+        log.warning("web_player: candidate search failed: %s", exc)
+        return []
 
     scored = sorted(
-        ((s, _web_score(s, browser_caps)) for s in streams
+        ((s, _web_score(s, browser_caps)) for s in pool
          if _web_score(s, browser_caps) >= 0),
         key=lambda x: x[1], reverse=True,
     )
@@ -233,7 +221,7 @@ def get_job(job_id: str) -> PrepareJob | None:
 
 # ── Pipeline ───────────────────────────────────────────────────────────────────
 
-def _get_cdn_url(stream: torrentio.TorrentioStream,
+def _get_cdn_url(stream: streams.Stream,
                  ) -> tuple[str | None, int | None, int | None]:
     """Resolve a TorrentioStream to (cdn_url, torrent_id, file_id).
 

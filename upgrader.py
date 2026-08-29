@@ -12,11 +12,10 @@ from pathlib import Path
 
 import db
 import jellyfin
+import scrapers
 import settings as _settings
 import strm_generator
 import torbox
-import torrentio
-import zilean
 from config import MEDIA_PATH
 from webhook_parser import MediaRequest
 
@@ -49,25 +48,13 @@ def _episode_runtime_override(imdb_id: str, season: int, episode: int = 1) -> di
 
 
 def _fetch_movie_candidates(imdb_id: str) -> list:
-    override = _movie_runtime_override(imdb_id)
-    if _settings.get("ZILEAN_ENABLED", False):
-        streams = zilean.fetch_streams(imdb_id)
-        candidates = torrentio.rank_streams(streams, override=override)
-        if candidates:
-            return candidates
-    streams = torrentio.fetch_streams("movie", imdb_id)
-    return torrentio.rank_streams(streams, override=override)
+    return scrapers.fetch_candidates("movie", imdb_id, override=_movie_runtime_override(imdb_id))
 
 
 def _fetch_season_candidates(imdb_id: str, season: int) -> list:
-    override = _episode_runtime_override(imdb_id, season)
-    if _settings.get("ZILEAN_ENABLED", False):
-        streams = zilean.fetch_streams(imdb_id, season=season, episode=1)
-        candidates = torrentio.rank_streams(streams, prefer_season_pack=True, override=override)
-        if candidates:
-            return candidates
-    streams = torrentio.fetch_streams("series", imdb_id, season=season, episode=1)
-    return torrentio.rank_streams(streams, prefer_season_pack=True, override=override)
+    return scrapers.fetch_candidates("series", imdb_id, season=season, episode=1,
+                                      prefer_season_pack=True,
+                                      override=_episode_runtime_override(imdb_id, season))
 
 
 def _better_cached(candidates: list, current_quality: str, current_hash: str) -> object | None:
