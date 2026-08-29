@@ -42,3 +42,33 @@ def test_torrentio_still_exports_the_old_name():
 def test_size_is_blank_when_unknown():
     assert _stream(size_gb=0.0).size == ""
     assert _stream(size_gb=5.25).size == "5.25 GB"
+
+
+def test_parse_quality_recognises_each_bucket():
+    assert streams.parse_quality("Movie.2160p.WEB") == "2160p"
+    assert streams.parse_quality("Movie.1080p.WEB") == "1080p"
+    assert streams.parse_quality("Movie.720p.WEB") == "720p"
+    assert streams.parse_quality("Movie.480p.WEB") == "480p"
+
+
+def test_parse_quality_treats_4k_and_uhd_as_2160p():
+    assert streams.parse_quality("Movie 4K HDR") == "2160p"
+    assert streams.parse_quality("Movie UHD BluRay") == "2160p"
+
+
+def test_parse_quality_returns_empty_when_unknown():
+    assert streams.parse_quality("Movie.DVDRip") == ""
+
+
+def test_parse_size_gb_handles_gb_and_mb():
+    assert streams.parse_size_gb("⚡ 📺 4k 💾 85.37 GB") == 85.37
+    assert streams.parse_size_gb("💾 700 MB") == 0.7
+
+
+def test_parse_size_gb_returns_zero_when_absent():
+    assert streams.parse_size_gb("no size here") == 0.0
+
+
+def test_parse_seeders():
+    assert streams.parse_seeders("👤 42 💾 5 GB") == 42
+    assert streams.parse_seeders("no seeders") == 0

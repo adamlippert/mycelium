@@ -20,7 +20,7 @@ from config import (
     TORRENTIO_BASE_URL,
     TORRENTIO_OPTS,
 )
-from streams import Stream
+from streams import Stream, _QUALITY_PATTERNS, _SEEDERS_RE, _SIZE_RE
 
 log = logging.getLogger(__name__)
 
@@ -34,13 +34,6 @@ _HTTP_HEADERS = {
     "Accept": "application/json, text/plain, */*",
 }
 
-_QUALITY_PATTERNS = {
-    "2160p": re.compile(r"\b(2160p|4k|uhd)\b", re.IGNORECASE),
-    "1080p": re.compile(r"\b1080p\b", re.IGNORECASE),
-    "720p": re.compile(r"\b720p\b", re.IGNORECASE),
-    "480p": re.compile(r"\b480p\b", re.IGNORECASE),
-}
-
 _REMUX_RE = re.compile(r"\b(remux|bdremux)\b", re.IGNORECASE)
 _BLURAY_RE = re.compile(r"\b(bluray|blu-ray|bdrip|brrip)\b", re.IGNORECASE)
 _CAM_RE = re.compile(r"\b(cam|camrip|hdcam|ts|telesync|hdts|scr|screener|dvdscr|workprint|r5)\b", re.IGNORECASE)
@@ -51,8 +44,6 @@ _HEVC_RE  = re.compile(r"\b(hevc|x265|h\.?265)\b", re.IGNORECASE)
 # and is NOT matched here.
 _DV_RE    = re.compile(r"\b(dovi|dolby[\s.]?vision|\.dv\.)\b", re.IGNORECASE)
 _HDR10_RE = re.compile(r"\bhdr10(?!\+)\b", re.IGNORECASE)
-_SEEDERS_RE = re.compile(r"👤\s*(\d+)")
-_SIZE_RE = re.compile(r"💾\s*([\d.]+)\s*(GB|MB)", re.IGNORECASE)
 
 # Some release groups mislabel a cam/trailer/junk file as a much higher
 # quality than it really is (title says "2160p" or doesn't mention "CAM" at
