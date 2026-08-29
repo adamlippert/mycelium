@@ -1,6 +1,5 @@
 import logging
 import re
-from dataclasses import dataclass
 
 import requests
 
@@ -21,8 +20,13 @@ from config import (
     TORRENTIO_BASE_URL,
     TORRENTIO_OPTS,
 )
+from streams import Stream
 
 log = logging.getLogger(__name__)
+
+# Historical name. Six call sites and several tests import TorrentioStream
+# from here; keep it working.
+TorrentioStream = Stream
 
 _HTTP_HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -79,26 +83,6 @@ _LANG_PATTERNS = {
 }
 
 
-@dataclass
-class TorrentioStream:
-    name: str
-    title: str
-    info_hash: str
-    quality: str
-    seeders: int
-    size_gb: float
-    is_season_pack: bool
-    languages: tuple[str, ...] = ()
-    source: str = "torrentio"
-
-    @property
-    def magnet(self) -> str:
-        return f"magnet:?xt=urn:btih:{self.info_hash}"
-
-    @property
-    def size(self) -> str:
-        """Human-readable size (used in UI)."""
-        return f"{self.size_gb:.2f} GB" if self.size_gb > 0 else ""
 
 
 def _classify_quality(stream: dict) -> str:
