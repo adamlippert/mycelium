@@ -611,6 +611,13 @@ def test_redact_removes_credentials_from_a_play_url():
 def test_redact_handles_none_and_empty():
     assert debridio.redact("") == ""
     assert debridio.redact(None) == ""
+
+
+def test_redact_scrubs_the_live_credential_values(configured):
+    msg = "Error for url: https://x/" + "dk" * 16 + "/y and key tb-uuid-value"
+    out = debridio.redact(msg)
+    assert "dk" * 16 not in out
+    assert "tb-uuid-value" not in out
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -692,10 +699,19 @@ def redact(text) -> str:
     Every log, HTTP response and health payload that might carry a Debridio
     URL must pass through this. The config segment and the play-URL path both
     contain the user's TorBox key.
+
+    Scrubs the live credential values first: requests embeds URLs in exception
+    messages in shapes we cannot enumerate, so matching the actual secrets is
+    the only reliable protection. The pattern rules below are a backstop.
     """
     if not text:
         return ""
-    out = _B64_SEGMENT_RE.sub("/<config>", str(text))
+    out = str(text)
+    for key in ("DEBRIDIO_CONFIG_TOKEN", "DEBRIDIO_API_KEY", "TORBOX_API_KEY"):
+        secret = (_s(key) or "").strip()
+        if len(secret) >= 8:          # too short to be a key; avoid over-scrubbing
+            out = out.replace(secret, "<redacted>")
+    out = _B64_SEGMENT_RE.sub("/<config>", out)
     out = re.sub(r"/play/(\w+)/(\w+)/[^/]+/[^/]+/", r"/play/\1/\2/<redacted>/<redacted>/", out)
     return out
 ```
@@ -755,7 +771,11 @@ class _Resp:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise RuntimeError(f"{self.status_code} Error for url: https://addon.debridio.com/SECRET/x")
+            # requests puts the full URL in its exception message. Shape this
+            # like a real one: a base64 config segment starting "ey".
+            raise RuntimeError(
+                f"{self.status_code} Server Error for url: https://addon.debridio.com/"
+                "eyJhcGlfa2V5IjoiZGtka2RrZGtka2RrZGsi/stream/movie/tt1.json")
 
     def json(self):
         return self._p
@@ -848,7 +868,7 @@ def test_url_never_reaches_the_logs(configured, monkeypatch, caplog):
     blob = " ".join(r.getMessage() for r in caplog.records)
     assert "dkdk" not in blob
     assert "tb-uuid-value" not in blob
-    assert "SECRET" not in blob
+    assert "eyJhcGlfa2V5" not in blob
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1388,7 +1408,9 @@ def test_every_call_site_uses_the_orchestrator():
     root = pathlib.Path(__file__).resolve().parent.parent
     offenders = []
     allowed = {"scrapers.py", "zilean.py", "torrentio.py", "debridio.py", "catchup.py"}
-    pattern = re.compile(r"\b(zilean|torrentio|debridio)\.fetch(_streams)?\s*\(")
+    # \b would miss catbox's "_zilean.fetch_streams" alias, so match an
+    # optional leading underscore-prefix instead.
+    pattern = re.compile(r"\w*(?:zilean|torrentio|debridio)\.fetch(?:_streams)?\s*\(")
     for path in root.glob("*.py"):
         if path.name in allowed:
             continue
@@ -1524,8 +1546,11 @@ gains the health gating the other sites already had."
 ### Task 10: Record unique wins
 
 **Files:**
-- Modify: `processor.py:696-704`, `metrics_prom.py:27-31`, `app.py:2073-2080`,
-  `templates/ui.html:1085-1096`
+- Modify: `processor.py` (the `if winner:` block that calls
+  `db.record_metric("quality_added", ...)` — **locate it by content, not line
+  number: Task 9 rewrites lines 60-97 above it and shifts everything down**),
+  `metrics_prom.py` (after `source_wins_total`), `app.py`
+  (`ui_api_metrics_summary`), `templates/ui.html` (the `source-bars` block)
 - Test: `tests/test_scrapers.py`
 
 **Interfaces:**
