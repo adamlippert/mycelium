@@ -4,15 +4,13 @@ from typing import Optional
 
 import blacklist
 import db
-import health_cache
 import jellyfin
 import locks
 import monitor
 import notify
+import scrapers
 import strm_generator
 import torbox
-import torrentio
-import zilean
 import settings as _settings
 from torrentio import TorrentioStream
 from webhook_parser import MediaRequest
@@ -33,10 +31,6 @@ class RateLimited(Exception):
     """Raised when TorBox returns 429 and the short in-call retry is exhausted.
     Signals the caller to reschedule via the retry queue rather than marking
     the request permanently failed (and without blacklisting the torrent)."""
-
-
-def _rank(streams, prefer_season_pack: bool = False, override: dict | None = None):
-    return torrentio.rank_streams(streams, prefer_season_pack=prefer_season_pack, override=override)
 
 
 def _movie_runtime_minutes(imdb_id: str) -> float | None:
@@ -60,41 +54,15 @@ def _episode_runtime_minutes(imdb_id: str, season: int, episode: int) -> float |
 def _fetch_movie_candidates(req: MediaRequest) -> list:
     override = dict(db.get_show_override(req.imdb_id) or {})
     override["runtime_minutes"] = _movie_runtime_minutes(req.imdb_id)
-    streams: list[TorrentioStream] = []
-    seen_hashes: set[str] = set()
-    if _settings.get("ZILEAN_ENABLED", False) and health_cache.is_up("zilean"):
-        for s in zilean.fetch_streams(req.imdb_id):
-            if s.info_hash not in seen_hashes:
-                seen_hashes.add(s.info_hash)
-                streams.append(s)
-    if health_cache.is_up("torrentio"):
-        for s in torrentio.fetch_streams("movie", req.imdb_id):
-            if s.info_hash not in seen_hashes:
-                seen_hashes.add(s.info_hash)
-                streams.append(s)
-    if streams:
-        log.info("Combined %d unique streams for movie %s (zilean+torrentio)", len(streams), req.title)
-    return _rank(streams, override=override)
+    return scrapers.fetch_candidates("movie", req.imdb_id, override=override)
 
 
-def _fetch_season_candidates(req: MediaRequest, season: int, episode: int, prefer_season_pack: bool = False) -> list:
+def _fetch_season_candidates(req: MediaRequest, season: int, episode: int,
+                             prefer_season_pack: bool = False) -> list:
     override = dict(db.get_show_override(req.imdb_id) or {})
     override["runtime_minutes"] = _episode_runtime_minutes(req.imdb_id, season, episode)
-    streams: list[TorrentioStream] = []
-    seen_hashes: set[str] = set()
-    if _settings.get("ZILEAN_ENABLED", False) and health_cache.is_up("zilean"):
-        for s in zilean.fetch_streams(req.imdb_id, season=season, episode=episode):
-            if s.info_hash not in seen_hashes:
-                seen_hashes.add(s.info_hash)
-                streams.append(s)
-    if health_cache.is_up("torrentio"):
-        for s in torrentio.fetch_streams("series", req.imdb_id, season=season, episode=episode):
-            if s.info_hash not in seen_hashes:
-                seen_hashes.add(s.info_hash)
-                streams.append(s)
-    if streams:
-        log.info("Combined %d unique streams for %s S%02dE%02d (zilean+torrentio)", len(streams), req.title, season, episode)
-    return _rank(streams, prefer_season_pack=prefer_season_pack, override=override)
+    return scrapers.fetch_candidates("series", req.imdb_id, season=season, episode=episode,
+                                      prefer_season_pack=prefer_season_pack, override=override)
 
 
 def _is_429(exc: Exception) -> bool:

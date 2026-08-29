@@ -6,12 +6,10 @@ from urllib.parse import parse_qs, urlparse
 
 import db
 import jellyfin
+import scrapers
 import strm_generator
 import tmdb
 import torbox
-import torrentio
-import zilean
-import settings as _settings
 from config import MEDIA_PATH
 from torrentio import TorrentioStream
 
@@ -116,21 +114,9 @@ def _resolve_imdb(title: str, year: int | None, media_type: str) -> str | None:
 
 def _fetch_candidates(imdb_id: str, title: str, media_type: str) -> list:
     if media_type == "movie":
-        if _settings.get("ZILEAN_ENABLED", False):
-            streams = zilean.fetch_streams(imdb_id)
-            candidates = torrentio.rank_streams(streams)
-            if candidates:
-                return candidates
-        streams = torrentio.fetch_streams("movie", imdb_id)
-        return torrentio.rank_streams(streams)
-    else:
-        if _settings.get("ZILEAN_ENABLED", False):
-            streams = zilean.fetch_streams(imdb_id, season=1, episode=1)
-            candidates = torrentio.rank_streams(streams, prefer_season_pack=True)
-            if candidates:
-                return candidates
-        streams = torrentio.fetch_streams("series", imdb_id, season=1, episode=1)
-        return torrentio.rank_streams(streams, prefer_season_pack=True)
+        return scrapers.fetch_candidates("movie", imdb_id)
+    return scrapers.fetch_candidates("series", imdb_id, season=1, episode=1,
+                                      prefer_season_pack=True)
 
 
 def _repair_strm(path: Path, run_id: int, mylist: list[dict]) -> str:

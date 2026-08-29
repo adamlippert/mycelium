@@ -6,11 +6,10 @@ import os
 from datetime import date
 
 import db
+import scrapers
 import seerr
 import tmdb
 import torbox
-import torrentio
-import zilean
 import settings as _settings
 from config import MEDIA_PATH
 
@@ -219,19 +218,7 @@ def _retry_episode(ep: dict) -> bool:
     log.info("Monitor: searching %s S%02dE%02d (attempt %d)", title, season, episode, ep["attempt_count"] + 1)
     db.increment_episode_attempt(ep["id"])
 
-    streams: list = []
-    seen_hashes: set = set()
-    if _settings.get("ZILEAN_ENABLED", False):
-        for s in zilean.fetch_streams(imdb_id, season=season, episode=episode):
-            if s.info_hash not in seen_hashes:
-                seen_hashes.add(s.info_hash)
-                streams.append(s)
-    for s in torrentio.fetch_streams("series", imdb_id, season=season, episode=episode):
-        if s.info_hash not in seen_hashes:
-            seen_hashes.add(s.info_hash)
-            streams.append(s)
-
-    candidates = torrentio.rank_streams(streams)
+    candidates = scrapers.fetch_candidates("series", imdb_id, season=season, episode=episode)
     if not candidates:
         log.info("Monitor: no acceptable candidates for %s S%02dE%02d (still wanted)",
                  title, season, episode)
@@ -309,12 +296,8 @@ def search_episode_now(imdb_id: str, title: str, season: int, episode: int) -> b
 
 def _search_and_add_season(imdb_id: str, title: str, seasons: list[int]) -> None:
     for season in seasons:
-        streams: list = []
-        if _settings.get("ZILEAN_ENABLED", False):
-            streams = zilean.fetch_streams(imdb_id, season=season, episode=1)
-        if not streams:
-            streams = torrentio.fetch_streams("series", imdb_id, season=season, episode=1)
-        candidates = torrentio.rank_streams(streams, prefer_season_pack=True)
+        candidates = scrapers.fetch_candidates("series", imdb_id, season=season, episode=1,
+                                                prefer_season_pack=True)
         if not candidates:
             continue
         cached_hashes = torbox.check_cached([s.info_hash for s in candidates])

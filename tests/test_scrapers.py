@@ -128,3 +128,23 @@ def test_zilean_receives_no_media_type_argument(monkeypatch):
 def test_empty_everywhere_returns_empty(monkeypatch):
     _wire(monkeypatch)
     assert scrapers.fetch_candidates("movie", "tt1") == []
+
+
+def test_every_call_site_uses_the_orchestrator():
+    """No module may call a scraper's fetch directly any more; that is what
+    produced three inconsistent orchestration patterns in the first place."""
+    import pathlib
+    import re
+    root = pathlib.Path(__file__).resolve().parent.parent
+    offenders = []
+    allowed = {"scrapers.py", "zilean.py", "torrentio.py", "debridio.py", "catchup.py"}
+    # \b would miss catbox's "_zilean.fetch_streams" alias, so match an
+    # optional leading underscore-prefix instead.
+    pattern = re.compile(r"\w*(?:zilean|torrentio|debridio)\.fetch(?:_streams)?\s*\(")
+    for path in root.glob("*.py"):
+        if path.name in allowed:
+            continue
+        for i, line in enumerate(path.read_text().splitlines(), 1):
+            if pattern.search(line):
+                offenders.append(f"{path.name}:{i}")
+    assert offenders == [], f"direct scraper calls remain: {offenders}"

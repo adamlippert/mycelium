@@ -26,15 +26,14 @@ import notify
 import processor
 import recovery
 import retry_queue
+import scrapers
 import stats
 import strm_generator
 import tmdb
 import torbox
-import torrentio
 import trending
 import upgrader
 import watchdog
-import zilean
 from config import (
     AUTO_APPROVE_INTERVAL_HOURS,
     AUTO_UPGRADE_ENABLED,
@@ -1165,17 +1164,9 @@ def ui_api_search_candidates():
         return jsonify(error="invalid imdb id"), 400
 
     if media_type == "movie":
-        streams = zilean.fetch_streams(imdb_id) if _settings_mod.get("ZILEAN_ENABLED", cfg.ZILEAN_ENABLED) else []
-        candidates = torrentio.rank_streams(streams)
-        if not candidates:
-            streams = torrentio.fetch_streams("movie", imdb_id)
-            candidates = torrentio.rank_streams(streams)
+        candidates = scrapers.fetch_candidates("movie", imdb_id)
     else:
-        streams = zilean.fetch_streams(imdb_id, season=season, episode=episode) if _settings_mod.get("ZILEAN_ENABLED", cfg.ZILEAN_ENABLED) else []
-        candidates = torrentio.rank_streams(streams)
-        if not candidates:
-            streams = torrentio.fetch_streams("series", imdb_id, season=season, episode=episode)
-            candidates = torrentio.rank_streams(streams)
+        candidates = scrapers.fetch_candidates("series", imdb_id, season=season, episode=episode)
 
     cached_hashes = torbox.check_cached([c.info_hash for c in candidates[:30]]) if candidates else set()
     out = [{

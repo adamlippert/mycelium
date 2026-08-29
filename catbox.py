@@ -652,43 +652,19 @@ def _search_best_cached_release(item: dict) -> tuple[str, str] | None | object:
                     item["title"])
         return _SEARCH_UNAVAILABLE
     try:
-        import concurrent.futures
-        import torrentio
+        import scrapers
         import debrid
         import blacklist
         media_type = item["media_type"]
         season = item.get("season")
         episode = item.get("episode")
-        import zilean as _zilean
 
-        # Run Zilean and Torrentio in parallel to halve search latency.
-        def _fetch_zilean():
-            if not _settings.get("ZILEAN_ENABLED", False):
-                return []
-            return _zilean.fetch_streams(imdb_id, season=season, episode=episode)
-
-        def _fetch_torrentio():
-            return torrentio.fetch_streams(
-                "movie" if media_type == "movie" else "series",
-                imdb_id, season=season, episode=episode,
-            )
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
-            f_zilean = ex.submit(_fetch_zilean)
-            f_torrentio = ex.submit(_fetch_torrentio)
-            zilean_streams = f_zilean.result()
-            torrentio_streams = f_torrentio.result()
-
-        log.info("Catbox search: Zilean=%d Torrentio=%d stream(s) for %s (%s)",
-                 len(zilean_streams), len(torrentio_streams), item.get("title"), imdb_id)
-        # Merge: Zilean first, add Torrentio entries not already in Zilean (dedup by info_hash)
-        seen_hashes = {s.info_hash for s in zilean_streams}
-        streams = zilean_streams + [s for s in torrentio_streams if s.info_hash not in seen_hashes]
-        log.info("Catbox search: %d stream(s) total after merge for %s",
-                 len(streams), item.get("title"))
-        if not streams:
+        ranked = scrapers.fetch_candidates(
+            "movie" if media_type == "movie" else "series",
+            imdb_id, season=season, episode=episode,
+        )
+        if not ranked:
             return None
-        ranked = torrentio.rank_streams(streams)
         ranked = blacklist.filter_candidates(ranked)
         log.info("Catbox search: %d candidate(s) after ranking/filter for %s",
                  len(ranked), item.get("title"))
