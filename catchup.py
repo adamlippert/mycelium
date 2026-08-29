@@ -34,7 +34,11 @@ def _build_request(item: dict) -> MediaRequest | None:
         log.debug("Catch-up: skipping request %s  -  no IMDB ID (tmdbId=%s)", item.get("id"), media.get("tmdbId"))
         return None
 
-    title = media.get("title") or str(imdb_id)
+    # Seerr's Media entity has no title column (only mediaType/tmdbId/tvdbId/
+    # imdbId/status), so media.get("title") is always None here and every
+    # catch-up request would otherwise be recorded under its raw tt id. Resolve
+    # a real one the same way webhook_parser does for a payload with no subject.
+    title = media.get("title") or tmdb.display_title(imdb_id, media_type) or str(imdb_id)
 
     seasons: list[int] = []
     if media_type == "series":
