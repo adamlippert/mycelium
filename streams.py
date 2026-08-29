@@ -79,6 +79,12 @@ def _min_plausible_size_gb(quality: str, runtime_minutes: float | None) -> float
 # Anything that treats absence as a positive fact will throw away most of the
 # catalogue. Use languages_or_unknown() where that distinction has to be
 # visible.
+#
+# LANGUAGE_UNKNOWN and languages_or_unknown() below have no production callers
+# yet - they are deliberate groundwork for a planned filter model where "the
+# release did not say" must stay distinguishable from "has no languages" (the
+# current EXCLUDE_LANGUAGES filter only ever looks at s.languages directly, so
+# it doesn't need this yet). Keep them; this is not dead code left by mistake.
 
 LANGUAGE_UNKNOWN = "unknown"
 
@@ -91,6 +97,10 @@ _LANG_NAME_PATTERNS = {
 
 # Regional indicator pairs, as Debridio ships them. Several regions map to one
 # language on purpose - a GB and a US flag both mean English for our purposes.
+# This is deliberately lossy for multilingual regions: CA -> en, BE -> nl,
+# CH -> de, IN -> hi, so e.g. a French-Canadian track flagged with a Canada
+# flag comes out tagged "en". There is no per-region sub-language signal in a
+# flag emoji to do better than that.
 _FLAG_RE = re.compile(r"[\U0001F1E6-\U0001F1FF]{2}")
 _REGION_TO_LANGUAGE = {
     "GB": "en", "US": "en", "AU": "en", "CA": "en", "IE": "en", "NZ": "en",
@@ -106,8 +116,10 @@ _REGION_TO_LANGUAGE = {
     "IL": "he", "SA": "ar", "EG": "ar", "AE": "ar", "IR": "fa",
 }
 
-# Every code a release can be tagged with. AUDIO_LANGUAGE_PREFERENCE and
-# EXCLUDE_LANGUAGES are validated against this.
+# Every code a release can be tagged with. settings.set() validates
+# AUDIO_LANGUAGE_PREFERENCE and EXCLUDE_LANGUAGES against this (rejecting
+# unknown codes); settings.py also warns - without raising - about values that
+# arrived via .env, since config.py's own parsing can't see this module.
 LANGUAGE_CODES = tuple(sorted(set(_LANG_NAME_PATTERNS) | set(_REGION_TO_LANGUAGE.values())))
 
 
@@ -120,7 +132,16 @@ def detect_languages(text: str) -> tuple[str, ...]:
     """Languages a release positively declares, from flag emoji and name tokens.
 
     Empty means the release did not say - never that it has no audio. Order is
-    deterministic so the ranking index it feeds is stable across calls.
+    deterministic for its own sake (stable logs, stable tests, and a possible
+    future filter model may care about it) - NOT because it feeds a ranking
+    index: _lang_score in rank_streams indexes into audio_pref, not into this
+    tuple's order, so detection order has no effect on ranking today.
+
+    Note also that knowing more can rank a release WORSE, not just better: a
+    release that positively declares a language outside AUDIO_LANGUAGE_PREFERENCE
+    scores worse in _lang_score than one that declared nothing at all (the
+    latter is merely "unknown", the former is a known non-match). That is a
+    real, intended outcome of adding a new detection source, not a bug.
     """
     blob = text or ""
     found: list[str] = []

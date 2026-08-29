@@ -12,6 +12,7 @@ import logging
 
 import config as _config
 import db
+import streams as _streams
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +48,14 @@ _LIST_KEYS = {
     "AUDIO_LANGUAGE_PREFERENCE",
     "EXCLUDE_LANGUAGES",
     "OPENSUBTITLES_LANGUAGES",
+}
+# List keys whose values must each be a code detect_languages() can actually
+# produce (streams.LANGUAGE_CODES). Checked in set() below, the same way
+# _ENUM_KEYS is checked, so a typo like AUDIO_LANGUAGE_PREFERENCE=english
+# fails loudly instead of silently becoming a preference that never matches.
+_LANGUAGE_LIST_KEYS = {
+    "AUDIO_LANGUAGE_PREFERENCE",
+    "EXCLUDE_LANGUAGES",
 }
 _FLOAT_KEYS = {
     "AUTO_ADD_MIN_RATING",
@@ -320,6 +329,17 @@ def set(key: str, value) -> None:
         return
     if key in _ENUM_KEYS and str(value) not in _ENUM_KEYS[key]:
         raise ValueError(f"{key} must be one of {_ENUM_KEYS[key]}, got {value!r}")
+    if key in _LANGUAGE_LIST_KEYS:
+        codes = (
+            value if isinstance(value, (list, tuple))
+            else [v.strip() for v in str(value).split(",") if v.strip()]
+        )
+        unknown = sorted({c.lower() for c in codes if c.lower() not in _streams.LANGUAGE_CODES})
+        if unknown:
+            raise ValueError(
+                f"{key} has unknown language code(s) {unknown}; valid codes "
+                f"are {', '.join(_streams.LANGUAGE_CODES)}"
+            )
     if isinstance(value, bool):
         stored = "true" if value else "false"
     elif isinstance(value, (list, tuple)):
@@ -327,6 +347,27 @@ def set(key: str, value) -> None:
     else:
         stored = str(value)
     db.set_setting(key, stored)
+
+
+def _warn_unknown_env_language_codes() -> None:
+    """AUDIO_LANGUAGE_PREFERENCE/EXCLUDE_LANGUAGES set via .env bypass set()'s
+    validation entirely - config.py just lowercase-splits on commas and
+    accepts anything, since it cannot import streams (streams imports config,
+    and a cycle back would break both). So check the .env-derived values once,
+    here, at import time - and only warn, never raise: a bad .env value must
+    not crash startup, it should just behave like "no preference" until fixed.
+    """
+    for key in _LANGUAGE_LIST_KEYS:
+        codes = getattr(_config, key, None) or []
+        unknown = sorted({c for c in codes if c not in _streams.LANGUAGE_CODES})
+        if unknown:
+            log.warning(
+                "%s in .env has unknown language code(s) %s; valid codes are: %s",
+                key, unknown, ", ".join(_streams.LANGUAGE_CODES),
+            )
+
+
+_warn_unknown_env_language_codes()
 
 
 def all_for_ui() -> list[dict]:

@@ -11,6 +11,11 @@ log = logging.getLogger(__name__)
 # Zilean's DMM payload carries no language information of any kind, so every
 # stream it returns has an empty `languages`. That is "did not say", not "has
 # no audio" - see streams.detect_languages.
+#
+# No production code reads this flag today - it has no callers outside tests.
+# It is deliberate groundwork for a planned filter model that needs to tell
+# "this scraper cannot possibly know" apart from "this stream just didn't say".
+# Keep it; it is not unused by oversight.
 LANGUAGES_AVAILABLE = False
 
 _BYTES_PER_GB = 1024 ** 3
