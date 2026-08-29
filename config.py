@@ -42,6 +42,15 @@ ZILEAN_PG_PASSWORD = _env("ZILEAN_PG_PASSWORD", "")
 TORRENTIO_BASE_URL = _env("TORRENTIO_BASE_URL", "https://torrentio.strem.fun")
 TORRENTIO_OPTS = _env("TORRENTIO_OPTS", "")
 
+DEBRIDIO_ENABLED = _env("DEBRIDIO_ENABLED", "false").lower() in ("1", "true", "yes")
+DEBRIDIO_API_KEY = _env("DEBRIDIO_API_KEY", "")
+DEBRIDIO_BASE_URL = _env("DEBRIDIO_BASE_URL", "https://addon.debridio.com")
+DEBRIDIO_MAX_RESULTS = _env_int("DEBRIDIO_MAX_RESULTS", 100)
+# Escape hatch: a full pre-built config segment, used verbatim when set. We
+# build the config against an undocumented third-party schema; if Debridio
+# changes it, this keeps users running without waiting for a release.
+DEBRIDIO_CONFIG_TOKEN = _env("DEBRIDIO_CONFIG_TOKEN", "")
+
 JELLYFIN_URL = _env("JELLYFIN_URL", "")
 JELLYFIN_API_KEY = _env("JELLYFIN_API_KEY", "")
 
