@@ -187,55 +187,68 @@ This is better than storing the URL for four reasons:
    rotating the TorBox key silently breaks Debridio until the user regenerates
    and re-pastes the URL — a failure with no obvious cause.
 3. The TorBox key lives in exactly one settings row instead of two.
-4. We control the config, which is what makes the settings mapping below
-   possible.
+4. We control the config, so we can guarantee it stays permissive (see below)
+   rather than depending on whatever the user happened to tick in Debridio's
+   generator — which would otherwise silently pre-filter results.
 
 `DEBRIDIO_CONFIG_TOKEN` exists because we are constructing a payload against
 an undocumented third-party schema. If Debridio changes it, the user can paste
 a working config segment and stay running without waiting for a release.
 
-### Debridio config mapping
+### Debridio config: deliberately permissive
 
-Debridio's config exposes filters that overlap mycelium's own quality settings.
-We derive them from mycelium's settings so the two do not have to be maintained
-separately.
+**We send Debridio a permissive config and do all filtering locally.**
 
-**The governing invariant: only push a filter when mycelium's own ranker would
-discard the same items locally anyway.** Under that rule, pushing filters is a
-pure payload optimisation with no behavioural change — Debridio just stops
-sending things `rank_streams` was about to drop. Violating it means the same
-release is judged differently depending on which scraper found it, which is a
-bug that would be very hard to diagnose from the outside.
+The tempting design is to derive Debridio's `resolutions` / `excludedQualities`
+/ `maxSize` from mycelium's own quality settings, so the two need not be kept in
+sync. That is wrong, and the reason is subtle enough to record.
 
-| mycelium setting | Debridio field | Mapping |
+Every filter in `rank_streams` is **soft** — it self-disables rather than return
+nothing:
+
+```python
+if exclude_remux:
+    filtered = [s for s in candidates if not _REMUX_RE.search(...)]
+    if filtered:
+        candidates = filtered
+    else:
+        log.warning("Only remux candidates available; allowing them")
+```
+
+The same pattern governs `EXCLUDE_BLURAY`, `EXCLUDE_CAM`, `EXCLUDE_DV_P5`,
+`EXCLUDE_UNDERSIZED_RELEASES`, `MIN_SEEDERS`, `MAX_SIZE_GB`,
+`EXCLUDE_LANGUAGES` and the `ALLOW_4K` gate. `STRICT_NO_CAM` is the only setting
+that hard-rejects.
+
+Debridio's filters are hard. Pushing a soft filter down as a hard one means the
+excluded streams never reach the ranker, so the "allow them anyway" fallback
+cannot fire. A title that exists only as a remux would silently return nothing
+from Debridio, and the user would see fewer results with no indication why.
+
+So the config we build is fixed and permissive:
+
+| Field | Value | Why |
 |---|---|---|
-| `QUALITY_PREFERENCE`, `ALLOW_4K` | `resolutions` | `2160p`→`4k`, plus `8k` when `ALLOW_4K`. **Always include `unknown`** |
-| `EXCLUDE_REMUX` | `excludedQualities` | `+ ["BluRay REMUX"]` — mirrors `_REMUX_RE` |
-| `EXCLUDE_BLURAY` | `excludedQualities` | `+ ["BluRay","BDRip","BRRip"]` — mirrors `_BLURAY_RE` |
-| `EXCLUDE_CAM`, `STRICT_NO_CAM` | `excludedQualities` | `+ ["CAM","TeleSync","TeleCine","SCR","R5"]` — mirrors `_CAM_RE` |
-| `MAX_SIZE_GB` (when > 0) | `maxSize` | Direct. Unit confirmed **GB**, hard cap |
-| `AUDIO_LANGUAGE_PREFERENCE` | `preferredLang` | Only names Debridio offers; unrecognised names dropped |
-| `DEBRIDIO_MAX_RESULTS` | `maxReturnPerQuality` | Volume control |
-| — | `disableUncached` | Always `false`. Mycelium adds uncached torrents to TorBox itself |
+| `resolutions` | all, including `unknown` | Mycelium infers quality from the release name |
+| `excludedQualities` | `[]` | All exclusion is local and soft |
+| `maxSize` | `""` | `MAX_SIZE_GB` is soft; enforced locally |
+| `preferredLang` | `[]` | Ranking preference, not a filter |
+| `disableUncached` | `false` | Mycelium adds uncached torrents to TorBox itself |
+| `maxReturnPerQuality` | from `DEBRIDIO_MAX_RESULTS` | Volume control only |
 
-Deliberately **not** mapped, and why:
+`maxReturnPerQuality` is the one exception, and it is safe because it is
+per-quality: breadth across resolutions is preserved, only the deep tail within
+each is trimmed. It should be set generously (default derived from
+`DEBRIDIO_MAX_RESULTS = 100`), not to a small number.
 
-- `PREFER_WEBDL`, `PREFER_HEVC` — these are *ranking preferences*, and
-  Debridio's only lever is *exclusion*. Translating "prefer WEB-DL" into
-  "exclude everything that isn't WEB-DL" inverts the semantics and would
-  silently gut results. They stay local.
-- `MIN_SEEDERS`, `EXCLUDE_DV_P5`, `EXCLUDE_UNDERSIZED_RELEASES` — no Debridio
-  equivalent. The last one needs TMDB runtime data Debridio doesn't have.
-- `EXCLUDE_LANGUAGES` — Debridio offers *preferred* languages only, not
-  excluded ones. Not the same operation.
+This also keeps all three scrapers judged by identical rules. Any divergence
+would mean the same release is treated differently depending on which scraper
+found it — a bug that would be very hard to diagnose from the outside.
 
-`unknown` must stay in `resolutions`: mycelium infers quality from the release
-name, so a stream Debridio buckets as unknown is often one mycelium can
-classify. Dropping it loses content for no gain.
-
-Verified live: `resolutions:["1080p"]` narrowed 702 → 255, `maxSize:"5"`
-narrowed 780 → 344 with nothing above 4.99 GB, and `maxReturnPerQuality:"3"`
-narrowed to 28. The filters behave as documented.
+Verified live that the filters do work as documented, should we ever want them:
+`resolutions:["1080p"]` narrowed 702 → 255, `maxSize:"5"` narrowed 780 → 344
+with nothing above 4.99 GB, `maxReturnPerQuality:"3"` narrowed to 28. The
+decision not to use them is about semantics, not capability.
 
 ### Secret handling
 
