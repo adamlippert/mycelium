@@ -8,6 +8,11 @@ from torrentio import TorrentioStream, _looks_like_season_pack
 
 log = logging.getLogger(__name__)
 
+# Zilean's DMM payload carries no language information of any kind, so every
+# stream it returns has an empty `languages`. That is "did not say", not "has
+# no audio" - see streams.detect_languages.
+LANGUAGES_AVAILABLE = False
+
 _BYTES_PER_GB = 1024 ** 3
 
 # Maps Zilean quality field to the token that rank_streams() regex filters recognise.

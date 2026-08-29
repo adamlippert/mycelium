@@ -67,6 +67,82 @@ def _min_plausible_size_gb(quality: str, runtime_minutes: float | None) -> float
     return floor * (runtime_minutes / 90.0)
 
 
+# ── Languages ────────────────────────────────────────────────────────────────
+#
+# Two independent sources, because the scrapers disagree wildly about what they
+# ship. Torrentio spells a language out in the release name, when it says so at
+# all; Debridio ships flag emoji in the title, which is richer and structured;
+# Zilean carries nothing (see zilean.LANGUAGES_AVAILABLE).
+#
+# An empty result means "the release did not say", NOT "this release has no
+# languages" - untagged English is the overwhelming default in release naming.
+# Anything that treats absence as a positive fact will throw away most of the
+# catalogue. Use languages_or_unknown() where that distinction has to be
+# visible.
+
+LANGUAGE_UNKNOWN = "unknown"
+
+_LANG_NAME_PATTERNS = {
+    "nl":    re.compile(r"\b(dutch|nederlands?|nl[. -]?(?:nlt?[. -]?)?(?:dubbed|sub|audio|subs)|nl(?:nlt)?\b|nlsubs?)\b", re.IGNORECASE),
+    "en":    re.compile(r"\b(english|eng(?:lish)?(?:[. -](?:audio|dubbed|dub))?|eng-?subs?)\b", re.IGNORECASE),
+    "multi": re.compile(r"\b(multi(?:lang|-?audio|-?subs?)?|dual[. -]?audio|tri-?audio)\b", re.IGNORECASE),
+    "ru":    re.compile(r"\b(russian|rus(?:sian)?|ru[. -]?dub(?:bed)?|rudub)\b|[\u0430-\u044f\u0410-\u042f\u0451\u0401]{4,}", re.IGNORECASE),
+}
+
+# Regional indicator pairs, as Debridio ships them. Several regions map to one
+# language on purpose - a GB and a US flag both mean English for our purposes.
+_FLAG_RE = re.compile(r"[\U0001F1E6-\U0001F1FF]{2}")
+_REGION_TO_LANGUAGE = {
+    "GB": "en", "US": "en", "AU": "en", "CA": "en", "IE": "en", "NZ": "en",
+    "NL": "nl", "BE": "nl",
+    "FR": "fr", "DE": "de", "AT": "de", "CH": "de",
+    "ES": "es", "MX": "es", "AR": "es", "CO": "es", "CL": "es",
+    "IT": "it", "PT": "pt", "BR": "pt",
+    "RU": "ru", "UA": "uk", "PL": "pl", "CZ": "cs", "SK": "sk",
+    "HU": "hu", "RO": "ro", "BG": "bg", "GR": "el", "TR": "tr",
+    "SE": "sv", "NO": "no", "DK": "da", "FI": "fi", "IS": "is",
+    "JP": "ja", "KR": "ko", "CN": "zh", "TW": "zh", "HK": "zh",
+    "IN": "hi", "TH": "th", "VN": "vi", "ID": "id", "MY": "ms",
+    "IL": "he", "SA": "ar", "EG": "ar", "AE": "ar", "IR": "fa",
+}
+
+# Every code a release can be tagged with. AUDIO_LANGUAGE_PREFERENCE and
+# EXCLUDE_LANGUAGES are validated against this.
+LANGUAGE_CODES = tuple(sorted(set(_LANG_NAME_PATTERNS) | set(_REGION_TO_LANGUAGE.values())))
+
+
+def _flag_to_region(flag: str) -> str:
+    """Regional-indicator pair -> ISO country code, e.g. the GB flag -> "GB"."""
+    return "".join(chr(ord(c) - 0x1F1E6 + ord("A")) for c in flag)
+
+
+def detect_languages(text: str) -> tuple[str, ...]:
+    """Languages a release positively declares, from flag emoji and name tokens.
+
+    Empty means the release did not say - never that it has no audio. Order is
+    deterministic so the ranking index it feeds is stable across calls.
+    """
+    blob = text or ""
+    found: list[str] = []
+    for flag in _FLAG_RE.findall(blob):
+        code = _REGION_TO_LANGUAGE.get(_flag_to_region(flag))
+        if code and code not in found:
+            found.append(code)
+    for code, pattern in _LANG_NAME_PATTERNS.items():
+        if code not in found and pattern.search(blob):
+            found.append(code)
+    return tuple(found)
+
+
+def languages_or_unknown(languages) -> tuple[str, ...]:
+    """Detected languages, or ("unknown",) when the release did not say.
+
+    Use where the difference has to be visible - a filter that treats absence as
+    a match, or a UI that would otherwise render an empty cell.
+    """
+    return tuple(languages) if languages else (LANGUAGE_UNKNOWN,)
+
+
 def parse_quality(text: str) -> str:
     """Highest-resolution bucket named in the text, or 'unknown' if none.
 

@@ -9,6 +9,7 @@ from config import (
 )
 from streams import (
     Stream,
+    detect_languages,
     rank_streams,
     parse_seeders,
     parse_size_gb,
@@ -28,14 +29,6 @@ _HTTP_HEADERS = {
 }
 
 # Language / audio markers in release titles
-_LANG_PATTERNS = {
-    "nl":     re.compile(r"\b(dutch|nederlands?|nl[. -]?(?:nlt?[. -]?)?(?:dubbed|sub|audio|subs)|nl(?:nlt)?\b|nlsubs?)\b", re.IGNORECASE),
-    "en":     re.compile(r"\b(english|eng(?:lish)?(?:[. -](?:audio|dubbed|dub))?|eng-?subs?)\b", re.IGNORECASE),
-    "multi":  re.compile(r"\b(multi(?:lang|-?audio|-?subs?)?|dual[. -]?audio|tri-?audio)\b", re.IGNORECASE),
-    "ru":     re.compile(r"\b(russian|rus(?:sian)?|ru[. -]?dub(?:bed)?|rudub)\b|[а-яА-ЯёЁ]{4,}", re.IGNORECASE),
-}
-
-
 def _classify_quality(stream: dict) -> str:
     blob = f"{stream.get('name', '')} {stream.get('title', '')}"
     for label, pattern in _QUALITY_PATTERNS.items():
@@ -55,14 +48,6 @@ def _looks_like_season_pack(title: str, season: int | None) -> bool:
     if re.search(rf"s0*{season}(?!\d)(?!e\d)", blob, re.IGNORECASE):
         return True
     return False
-
-
-def _detect_languages(text: str) -> tuple[str, ...]:
-    found = []
-    for code, pat in _LANG_PATTERNS.items():
-        if pat.search(text):
-            found.append(code)
-    return tuple(found)
 
 
 def _to_stream(raw: dict, season: int | None) -> TorrentioStream | None:
@@ -85,7 +70,7 @@ def _to_stream(raw: dict, season: int | None) -> TorrentioStream | None:
         seeders=parse_seeders(title),
         size_gb=parse_size_gb(title),
         is_season_pack=_looks_like_season_pack(title, season),
-        languages=_detect_languages(f"{name} {title}"),
+        languages=detect_languages(f"{name} {title}"),
     )
 
 
