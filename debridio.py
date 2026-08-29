@@ -94,7 +94,8 @@ def redact(text) -> str:
     return out
 
 
-from streams import Stream, parse_quality, parse_seeders, parse_size_gb
+from streams import (Stream, detect_languages, parse_quality, parse_seeders,
+                     parse_size_gb)
 
 _SEASON_PACK_RE = re.compile(r"\b(complete|season|s\d{1,2}(?!\s*e))\b", re.IGNORECASE)
 
@@ -137,6 +138,11 @@ def _to_stream(item: dict) -> Stream | None:
         is_season_pack=bool(_SEASON_PACK_RE.search(filename or title)),
         source="debridio",
         cached="⚡" in name,
+        # Debridio ships flag emoji in the title, which is richer than any
+        # name-based guess. Before this it shipped nothing, so every Debridio
+        # result tied for worst on the language sort term and lost races it
+        # had no way to win.
+        languages=detect_languages(blob),
     )
 
 
