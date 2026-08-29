@@ -220,7 +220,7 @@ def test_parse_quality_returns_empty_when_unknown():
 
 def test_parse_size_gb_handles_gb_and_mb():
     assert streams.parse_size_gb("⚡ 📺 4k 💾 85.37 GB") == 85.37
-    assert streams.parse_size_gb("💾 700 MB") == 0.7
+    assert streams.parse_size_gb("💾 700 MB") == pytest.approx(700 / 1024)
 
 
 def test_parse_size_gb_returns_zero_when_absent():
@@ -266,7 +266,9 @@ def parse_size_gb(text: str) -> float:
     if not m:
         return 0.0
     value = float(m.group(1))
-    return value if m.group(2).upper() == "GB" else value / 1000.0
+    # 1024, not 1000: matches torrentio._parse_size_gb, and both feed the
+    # same MAX_SIZE_GB threshold and undersized check.
+    return value if m.group(2).upper() == "GB" else value / 1024.0
 
 
 def parse_seeders(text: str) -> int:
