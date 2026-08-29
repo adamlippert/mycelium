@@ -203,8 +203,47 @@ def test_results_are_capped(configured, monkeypatch):
     assert len(debridio.fetch("movie", "tt1")) == 10
 
 
+def test_malformed_stream_item_is_skipped(configured, monkeypatch):
+    # A None entry has no .get(); must be counted and skipped, not raised.
+    monkeypatch.setattr(debridio.requests, "get", lambda *a, **k: _Resp({"streams": [None]}))
+    assert debridio.fetch("movie", "tt1") == []
+
+
+def test_non_list_streams_value_is_treated_as_empty(configured, monkeypatch):
+    monkeypatch.setattr(debridio.requests, "get",
+                        lambda *a, **k: _Resp({"streams": "notalist"}))
+    assert debridio.fetch("movie", "tt1") == []
+
+
+def test_one_malformed_item_does_not_discard_the_rest(configured, monkeypatch):
+    # A single bad element in a ~700-item real response must not cost every
+    # other stream in the payload.
+    payload = {"streams": [None, _PAYLOAD["streams"][0]]}
+    monkeypatch.setattr(debridio.requests, "get", lambda *a, **k: _Resp(payload))
+    out = debridio.fetch("movie", "tt1")
+    assert len(out) == 1
+    assert out[0].info_hash == "a" * 40
+
+
 def test_url_never_reaches_the_logs(configured, monkeypatch, caplog):
-    monkeypatch.setattr(debridio.requests, "get", lambda *a, **k: _Resp({}, status=500))
+    class _LeakyResp:
+        status_code = 500
+
+        def raise_for_status(self):
+            # requests puts the full URL in its exception message; shape this
+            # like a real one, embedding BOTH credential values the
+            # `configured` fixture sets so the assertions below are not
+            # tautological (they must actually depend on redact() working).
+            raise RuntimeError(
+                "500 Server Error for url: https://addon.debridio.com/"
+                "eyJhcGlfa2V5IjoiZGtka2RrZGtka2RrZGsi/stream/movie/tt1.json "
+                "(from play url https://addon.debridio.com/play/movie/torbox/"
+                + "dk" * 16 + "/tb-uuid-value/" + "a" * 40 + "/File.mkv)")
+
+        def json(self):
+            return {}
+
+    monkeypatch.setattr(debridio.requests, "get", lambda *a, **k: _LeakyResp())
     with caplog.at_level("DEBUG"):
         debridio.fetch("movie", "tt1")
     blob = " ".join(r.getMessage() for r in caplog.records)

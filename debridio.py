@@ -153,9 +153,14 @@ def fetch(media_type: str, imdb_id: str, season: int | None = None,
         return []
 
     raw = payload.get("streams") or []
+    if not isinstance(raw, list):
+        raw = []
     out, skipped = [], 0
     for item in raw:
-        stream = _to_stream(item)
+        try:
+            stream = _to_stream(item)
+        except Exception:
+            stream = None
         if stream is None:
             skipped += 1
         else:
