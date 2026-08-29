@@ -2067,6 +2067,7 @@ def ui_api_metrics_summary():
     return jsonify(
         quality=db.get_metric_summary("quality_added", days=30),
         sources=db.get_metric_summary("source_win", days=30),
+        unique_sources=db.get_metric_summary("source_unique_win", days=30),
         latency=db.get_metric_summary("latency_seconds", days=30),
         failures=db.get_metric_summary("request_failed", days=30),
     )

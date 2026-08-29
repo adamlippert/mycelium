@@ -1087,12 +1087,15 @@
       const sources = d.sources || [];
       if (sources.length) {
         const max = Math.max(...sources.map(s => s.count), 1);
+        const uniq = {};
+        (d.unique_sources || []).forEach(u => { uniq[u.label] = u.count; });
         sourceEl.innerHTML = sources.map(s => {
           const pct = (100 * s.count / max).toFixed(0);
+          const u = uniq[s.label] || 0;
           return `<div class="quality-bar-row">
             <div class="quality-label">${s.label || '?'}</div>
             <div class="quality-bar-bg"><div class="quality-bar-fill" style="width:${pct}%"></div></div>
-            <div class="quality-count">${s.count}</div></div>`;
+            <div class="quality-count">${s.count} <span class="dim">(${u} uniq)</span></div></div>`;
         }).join('');
       }
     } catch(e) {}

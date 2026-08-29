@@ -29,6 +29,11 @@ source_wins_total = Counter(
     "Source provider that won candidate selection",
     ["source"],
 )
+source_unique_wins_total = Counter(
+    "mycelium_source_unique_wins_total",
+    "Source provider that won with a release no other source returned",
+    ["source"],
+)
 blacklist_failures_total = Counter(
     "mycelium_blacklist_failures_total",
     "Hash add failures recorded",

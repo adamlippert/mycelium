@@ -137,14 +137,45 @@ def test_every_call_site_uses_the_orchestrator():
     import re
     root = pathlib.Path(__file__).resolve().parent.parent
     offenders = []
-    allowed = {"scrapers.py", "zilean.py", "torrentio.py", "debridio.py", "catchup.py"}
+    allowed = {
+        "scrapers.py", "zilean.py", "torrentio.py", "debridio.py", "catchup.py",
+        # find_web_candidates deliberately bypasses fetch_candidates: it does
+        # not rank by our quality/health scoring, it applies its own
+        # _web_score browser-compatibility ordering to the raw merged pool.
+        # Routing it through the pre-ranking orchestrator would silently
+        # narrow its candidate pool.
+        "plugins/webplayer/web_player.py",
+    }
+    skip_dirs = {".venv", ".git", "node_modules", "tests"}
     # \b would miss catbox's "_zilean.fetch_streams" alias, so match an
     # optional leading underscore-prefix instead.
     pattern = re.compile(r"\w*(?:zilean|torrentio|debridio)\.fetch(?:_streams)?\s*\(")
-    for path in root.glob("*.py"):
-        if path.name in allowed:
+    for path in root.rglob("*.py"):
+        rel = path.relative_to(root)
+        if any(part in skip_dirs or part.startswith(".venv") for part in rel.parts[:-1]):
+            continue
+        if str(rel) in allowed or rel.name in allowed:
             continue
         for i, line in enumerate(path.read_text().splitlines(), 1):
             if pattern.search(line):
-                offenders.append(f"{path.name}:{i}")
+                offenders.append(f"{rel}:{i}")
     assert offenders == [], f"direct scraper calls remain: {offenders}"
+
+
+def test_unique_win_recorded_only_when_no_other_source_had_it(monkeypatch):
+    import processor
+    recorded = []
+    monkeypatch.setattr(processor.db, "record_metric",
+                        lambda metric, label=None, **kw: recorded.append((metric, label)))
+
+    unique = _s("a" * 40, "debridio")
+    processor._record_source_metrics(unique)
+    assert ("source_win", "debridio") in recorded
+    assert ("source_unique_win", "debridio") in recorded
+
+    recorded.clear()
+    shared = _s("b" * 40, "debridio")
+    shared.also_seen_in = ("torrentio",)
+    processor._record_source_metrics(shared)
+    assert ("source_win", "debridio") in recorded
+    assert ("source_unique_win", "debridio") not in recorded

@@ -529,6 +529,26 @@ def _process_season(req: MediaRequest, season: int) -> tuple[bool, Optional[Torr
     return added > 0, first_winner
 
 
+def _record_source_metrics(winner) -> None:
+    """Record which source won, and whether it was the only one that had it.
+
+    Win rate alone is misleading: dedup is won by merge order, and Debridio is
+    both first and a ~79% superset of Torrentio, so it absorbs wins Torrentio
+    would previously have recorded. source_unique_win is the honest signal.
+    """
+    db.record_metric("source_win", winner.source, value_int=1)
+    is_unique = not getattr(winner, "also_seen_in", ())
+    if is_unique:
+        db.record_metric("source_unique_win", winner.source, value_int=1)
+    try:
+        import metrics_prom
+        metrics_prom.source_wins_total.labels(source=winner.source).inc()
+        if is_unique:
+            metrics_prom.source_unique_wins_total.labels(source=winner.source).inc()
+    except Exception as exc:
+        log.debug("metrics_prom (source) failed: %s", exc)
+
+
 def process(req: MediaRequest, _retry_attempt: int = 0) -> bool:
     with locks.imdb_mutex(req.imdb_id, blocking=False) as got:
         if not got:
@@ -663,11 +683,10 @@ def _process_locked(req: MediaRequest, _retry_attempt: int) -> bool:
             log.debug("metrics_prom (success) failed: %s", exc)
         if winner:
             db.record_metric("quality_added", winner.quality, value_int=1)
-            db.record_metric("source_win", winner.source, value_int=1)
+            _record_source_metrics(winner)
             try:
                 import metrics_prom
                 metrics_prom.quality_added_total.labels(quality=winner.quality or "unknown").inc()
-                metrics_prom.source_wins_total.labels(source=winner.source).inc()
             except Exception as exc:
                 log.debug("metrics_prom (quality) failed: %s", exc)
     elif req.imdb_id in _WANTED:
