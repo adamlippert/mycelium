@@ -2,6 +2,16 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.6.4] - 2026-08-29
+
+### Fixed
+
+- Catch-up requests were recorded under their raw IMDB id (`tt2017109` instead of the actual title), which then propagated into the library folder name on disk. Seerr's `Media` entity has no title column - it carries only `mediaType`, `tmdbId`, `tvdbId`, `imdbId` and `status` - so `media.get("title")` in `catchup._build_request` was always `None` and the raw id fallback fired every time. Titles now resolve through `tmdb.display_title()`, the same fallback `webhook_parser` uses for a payload with no subject. This was always broken but only surfaced at scale in 0.6.3: while the webhook was rejecting requests for want of an IMDB id, approved requests piled up unprocessed in Seerr, and the first restart after that fix let catch-up replay the whole backlog at once. **Existing rows and folders can be repaired with the "Fix IMDB titles" button in Admin > Maintenance**, which renames on disk and updates the database and strm paths.
+
+### Internal
+
+- `test_strm_generator` swapped mocks into `sys.modules` and then imported `strm_generator`, which is silently order-dependent: if any earlier test module had already imported `strm_generator` for real, the swap bound nothing and every test relying on a mocked `settings`/`db` ran against the real module instead - failing on an unrelated assertion with no indication why. Dependencies are now patched as module attributes in an autouse fixture, so the file passes regardless of import order, and the mocks are function-scoped so direct assignments no longer leak between tests.
+
 ## [0.6.3] - 2026-08-28
 
 ### Fixed

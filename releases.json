@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.6.4",
+    "date": "2026-08-29",
+    "notes": [
+      "Fix: catch-up requests were recorded under their raw IMDB id (tt2017109 instead of the real title), which then carried into the library folder name on disk - Seerr's request API has no title field, so the fallback fired every time",
+      "Fix: titles now resolve through TMDB, the same fallback the webhook parser uses when a payload arrives without a subject",
+      "Repair: existing tt-named requests and folders can be fixed with the 'Fix IMDB titles' button in Admin > Maintenance",
+      "Internal: strm_generator's test mocks are no longer dependent on test import order, which had been silently running several tests against the real settings/db modules"
+    ]
+  },
+  {
     "version": "0.6.3",
     "date": "2026-08-28",
     "notes": [
