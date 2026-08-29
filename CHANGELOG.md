@@ -2,6 +2,15 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.6.3] - 2026-08-28
+
+### Fixed
+
+- Seerr/Jellyseerr requests were intermittently rejected with `400 No IMDB id found in webhook payload or Seerr API`, most often for TV and anime. Three things combined to make this the common case rather than an edge case: Seerr's shipped default webhook template emits only `media_type`/`tmdbId`/`tvdbId`/`status` and has no `{{media_imdbid}}`, so no id ever arrives in the payload; Seerr creates its own `Media` row without an `imdbId`, and only ever backfills one for movies its Jellyfin scanner has already found on disk (never for TV); and the TMDB fallback that should have covered both was called from *inside* the Seerr API branch, so any failure of that round-trip - unreachable, 404, 401, or a payload with no `request_id` - skipped it entirely, despite the `tmdbId` sitting in the payload the whole time. The fallback is now hoisted out of that branch and runs off whichever `tmdbId` is available, choosing TMDB's movie or tv `external_ids` endpoint from the payload's own `media_type`. Requires `TMDB_API_KEY` to be a v4 Read Access Token (the long `ey...` string) - the API is called with bearer auth, so a v3 key returns 401 on every call and resolution silently fails.
+- The webhook handler no longer contacts Seerr at all when `SEERR_URL` is unset - it previously made a guaranteed-to-fail request and logged a misleading `Seerr API lookup failed` warning on every single request.
+- A webhook template rendering an unsubstituted `{{media_tmdbid}}` raised `ValueError` out of `int()`, which is not a `WebhookError` and so escaped as an HTTP 500 with a traceback instead of a clean 400.
+- The "no IMDB id" error now names the subject, the `tmdb_id` it tried, and whether `TMDB_API_KEY` is set at all, instead of reporting the same opaque string for four unrelated causes.
+
 ## [0.6.2] - 2026-07-11
 
 ### Added

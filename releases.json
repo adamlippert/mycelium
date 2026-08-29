@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.6.3",
+    "date": "2026-08-28",
+    "notes": [
+      "Fix: Seerr/Jellyseerr requests intermittently failed with '400 No IMDB id found', most often for TV and anime - the TMDB fallback that resolves tmdbId to an IMDB id was only reachable through a successful Seerr API round-trip, so it was skipped whenever Seerr was unreachable, returned 404/401, or the payload carried no request_id",
+      "Fix: requires TMDB_API_KEY to be a v4 Read Access Token (starts with 'ey') - the API uses bearer auth, so a v3 key 401s silently on every call",
+      "Fix: the webhook no longer calls Seerr when SEERR_URL is unset, instead of making a guaranteed-to-fail request and logging a misleading warning every time",
+      "Fix: an unsubstituted {{media_tmdbid}} in a webhook template raised out of int() as an HTTP 500 with a traceback instead of a clean 400",
+      "Fix: the 'no IMDB id' error now names the subject, the tmdb_id tried, and whether TMDB_API_KEY is set, instead of one opaque string for four unrelated causes"
+    ]
+  },
+  {
     "version": "0.6.1",
     "date": "2026-07-05",
     "notes": [
