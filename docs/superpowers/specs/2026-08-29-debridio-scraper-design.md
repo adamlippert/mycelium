@@ -371,6 +371,29 @@ Existing suites must stay green via the `torrentio.py` re-exports.
 
 ## Follow-up, out of scope
 
+**Unified quality and resolution settings (its own project, agreed 2026-08-29).**
+Mycelium's quality settings are an ad-hoc set of booleans that expose six source
+types where Debridio recognises nineteen, and `ALLOW_4K` duplicates what an
+include-style resolution list would express. The intended shape is one
+multi-select for excluded source types and one ordered multi-select for
+resolutions, with `ALLOW_4K` folded into the latter. That work needs:
+
+- a regex and soft-filter slot per newly exposed source type (UHDRip, HDRip,
+  SATRip, TVRip, PPVRip, R5, DVDRip, DVD, HDTV, BDRip, BRRip, WEBRip)
+- a decision on whether the excludes remain N sequentially-applied soft filters
+  (where order changes the outcome — currently hardcoded as DV → remux → bluray
+  → cam → undersized → seeders → size → languages) or become one soft group
+- ordered selection in the UI, since `QUALITY_PREFERENCE` is a preference order
+  and a plain checkbox list would lose it
+- migration of `EXCLUDE_REMUX` / `EXCLUDE_BLURAY` / `EXCLUDE_CAM` / `ALLOW_4K`
+  in both `settings` and the `show_quality_override` table (`db.py:170-171`),
+  which carries per-show `quality_preference` and `allow_4k`
+
+It is independent of this project: Debridio receives a permissive config either
+way, and the rework improves ranking for all three scrapers whenever it lands.
+
+**Smaller items.**
+
 - Replace the client-side `/KEY|TOKEN|SECRET|PASSWORD/` masking heuristic with
   a server-supplied `secret` flag per setting.
 - Consider using Debridio's `cached` flag to skip TorBox cache-check API calls.
