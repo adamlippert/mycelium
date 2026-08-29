@@ -189,6 +189,40 @@ def test_a_survivor_that_found_something_is_not_an_outage(monkeypatch):
     assert [s.source for s in out] == ["torrentio"]
 
 
+def test_fetch_debridio_wires_raise_on_error(monkeypatch):
+    # Pins A3 itself: every outage test elsewhere replaces scrapers.debridio
+    # wholesale with a lambda that ignores kwargs, so none of them would
+    # notice if raise_on_error=True were quietly dropped from this call site
+    # - which would silently reopen the exact gap A1-A3 exist to close.
+    seen = {}
+
+    def _record(*a, **k):
+        seen.update(k)
+        return []
+
+    monkeypatch.setattr(scrapers.debridio, "fetch", _record)
+    scrapers._fetch_debridio("movie", "tt1", None, None)
+    assert seen.get("raise_on_error") is True
+    seen.clear()
+    scrapers._fetch_debridio("movie", "tt1", None, None, timeout=5)
+    assert seen.get("raise_on_error") is True
+
+
+def test_fetch_zilean_wires_raise_on_error(monkeypatch):
+    seen = {}
+
+    def _record(*a, **k):
+        seen.update(k)
+        return []
+
+    monkeypatch.setattr(scrapers.zilean, "fetch_streams", _record)
+    scrapers._fetch_zilean("movie", "tt1", None, None)
+    assert seen.get("raise_on_error") is True
+    seen.clear()
+    scrapers._fetch_zilean("movie", "tt1", None, None, timeout=5)
+    assert seen.get("raise_on_error") is True
+
+
 def test_merge_candidates_does_not_rank(monkeypatch):
     calls = []
     monkeypatch.setattr(scrapers, "rank_streams",

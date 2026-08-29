@@ -12,6 +12,7 @@ os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
+import requests
 
 import scrapers
 import streams as streams_mod
@@ -213,3 +214,51 @@ def test_all_scrapers_succeed_and_return_empty_is_a_real_miss(monkeypatch, _all_
     monkeypatch.setattr(scrapers.torrentio, "fetch_streams", lambda *a, **k: [])
 
     assert scrapers.fetch_candidates("movie", "tt1", raise_if_inconclusive=True) == []
+
+
+# ── end-to-end: the real Debridio/Zilean adapters, not stand-ins for them ─────
+#
+# Every test above replaces scrapers.debridio.fetch / scrapers.zilean.fetch_streams
+# wholesale with a lambda that ignores kwargs. That pins the orchestrator's
+# logic, but none of those lambdas would notice if raise_on_error=True were
+# quietly dropped from _fetch_debridio/_fetch_zilean's call sites - the exact
+# regression that would silently reopen the gap A1-A3 exist to close (an
+# outage where Torrentio isn't in the active set and only Debridio/Zilean are
+# actually down). This drives the real adapter functions and fails them at
+# their own request layer instead.
+
+def test_debridio_and_zilean_outage_raises_through_the_real_adapters(monkeypatch):
+    import debridio as debridio_mod
+    import zilean as zilean_mod
+
+    def _settings_get(k, d=None):
+        values = {
+            "DEBRIDIO_ENABLED": True,
+            "ZILEAN_ENABLED": True,
+            "DEBRIDIO_API_KEY": "dk" * 16,
+            "TORBOX_API_KEY": "tb-test-key-value",
+            "DEBRIDIO_CONFIG_TOKEN": "",
+        }
+        return values.get(k, d)
+
+    # settings is a single shared module: patching it here also affects the
+    # debridio._settings / zilean._settings references those modules hold.
+    monkeypatch.setattr(scrapers._settings, "get", _settings_get)
+
+    # Torrentio health-gated inactive; Debridio and Zilean healthy.
+    monkeypatch.setattr(scrapers.health_cache, "is_up", lambda name: name != "torrentio")
+
+    def _boom(*a, **k):
+        raise RuntimeError("connection refused")
+
+    # Fail each adapter at its own request layer, not by replacing the
+    # adapter function itself.
+    monkeypatch.setattr(debridio_mod.requests, "get", _boom)
+
+    def _zilean_boom(*a, **k):
+        raise requests.RequestException("connection refused")
+
+    monkeypatch.setattr(zilean_mod.requests, "get", _zilean_boom)
+
+    with pytest.raises(scrapers.ScrapersUnavailable):
+        scrapers.fetch_candidates("movie", "tt1", raise_if_inconclusive=True)
