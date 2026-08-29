@@ -14,13 +14,17 @@ def _s(key: str) -> str:
     return (settings.get(key, getattr(config, key, "")) or "").strip()
 
 
-def _ping(name: str, url: str, headers: dict | None = None, timeout: int = 5) -> dict:
+def _ping(name: str, url: str, headers: dict | None = None, timeout: int = 5,
+          redact=None) -> dict:
     try:
         r = requests.get(url, headers=headers or {}, timeout=timeout)
         ok = r.status_code < 500
         return {"name": name, "status": "ok" if ok else "down", "code": r.status_code}
     except Exception as exc:
-        return {"name": name, "status": "down", "error": str(exc)[:80]}
+        msg = str(exc)
+        if redact is not None:
+            msg = redact(msg)
+        return {"name": name, "status": "down", "error": msg[:80]}
 
 
 def check_all() -> list[dict]:
@@ -38,9 +42,8 @@ def check_all() -> list[dict]:
     import debridio as _debridio
     if settings.get("DEBRIDIO_ENABLED", False) and _debridio.is_configured():
         base = _s("DEBRIDIO_BASE_URL").rstrip("/") or "https://addon.debridio.com"
-        entry = _ping("Debridio", f"{base}/{_debridio.build_config_token()}/manifest.json")
-        if entry.get("error"):
-            entry["error"] = _debridio.redact(entry["error"])[:80]
+        entry = _ping("Debridio", f"{base}/{_debridio.build_config_token()}/manifest.json",
+                      redact=_debridio.redact)
         services.append(entry)
     else:
         services.append({"name": "Debridio", "status": "disabled"})

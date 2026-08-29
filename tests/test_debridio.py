@@ -259,6 +259,41 @@ def test_health_error_is_redacted(monkeypatch):
     assert "SECRET" not in str(entry)
 
 
+def test_health_error_truncation_does_not_leak_a_token_fragment(configured, monkeypatch):
+    # The old ordering truncated str(exc) to 80 chars BEFORE redacting. A
+    # long, realistic error message with the full config token embedded puts
+    # the 80-char cut partway through the token: past the literal
+    # "eyJhcGlfa2V5" prefix, but short of redact()'s 16-trailing-char regex
+    # threshold, so the leftover fragment slipped through unredacted.
+    # Redact must run before the slice, not after.
+    import health
+    # Compute the real token first, while only the `configured` fixture's
+    # patch is in effect. build_config_token/is_configured are then pinned
+    # directly (rather than re-patching settings.get) so this doesn't depend
+    # on health.settings and debridio._settings being the same module object
+    # -- a `settings` module identity that another test file's
+    # sys.modules.pop("settings") can split apart depending on collection
+    # order.
+    token = debridio.build_config_token()
+    assert len(token) > 80  # sanity: the token alone exceeds the truncation window
+    monkeypatch.setattr(debridio, "build_config_token", lambda: token)
+    monkeypatch.setattr(debridio, "is_configured", lambda: True)
+    monkeypatch.setattr(health.settings, "get",
+                        lambda k, d=None: {"DEBRIDIO_ENABLED": True}.get(k, d))
+
+    def _boom(*a, **k):
+        raise RuntimeError(
+            "connection timed out while contacting https://addon.debridio.com/"
+            f"{token}/manifest.json after 3 retries, giving up on this host entirely")
+
+    monkeypatch.setattr(health.requests, "get", _boom)
+    entry = [s for s in health.check_all() if s["name"] == "Debridio"][0]
+    assert token not in entry["error"]
+    assert "dk" * 16 not in entry["error"]
+    assert "tb-uuid-value" not in entry["error"]
+    assert "eyJhcGlfa2V5" not in entry["error"]
+
+
 def test_url_never_reaches_the_logs(configured, monkeypatch, caplog):
     class _LeakyResp:
         status_code = 500
