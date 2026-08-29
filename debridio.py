@@ -141,8 +141,12 @@ def _to_stream(item: dict) -> Stream | None:
 
 
 def fetch(media_type: str, imdb_id: str, season: int | None = None,
-          episode: int | None = None, timeout: int = 30) -> list[Stream]:
-    """Return Debridio candidates. Never raises; returns [] on any failure."""
+          episode: int | None = None, timeout: int = 30,
+          raise_on_error: bool = False) -> list[Stream]:
+    """Return Debridio candidates. Never raises by default; returns [] on any
+    request/parse failure. raise_on_error=True re-raises instead, for callers
+    that need to tell "could not search" apart from "searched, found nothing"
+    (scrapers.py, so its outage guard can actually see this scraper fail)."""
     token = build_config_token()
     if not token:
         return []
@@ -158,6 +162,8 @@ def fetch(media_type: str, imdb_id: str, season: int | None = None,
         payload = resp.json() or {}
     except Exception as exc:
         log.warning("Debridio request failed for %s: %s", imdb_id, redact(exc))
+        if raise_on_error:
+            raise
         return []
 
     raw = payload.get("streams") or []

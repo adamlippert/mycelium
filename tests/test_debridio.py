@@ -182,6 +182,14 @@ def test_http_error_returns_empty_and_never_raises(configured, monkeypatch):
     assert debridio.fetch("movie", "tt1") == []
 
 
+def test_http_error_propagates_when_raise_on_error(configured, monkeypatch):
+    # scrapers.py sets this so its outage guard can see this scraper fail
+    # instead of the failure disappearing into an empty list.
+    monkeypatch.setattr(debridio.requests, "get", lambda *a, **k: _Resp({}, status=500))
+    with pytest.raises(Exception):
+        debridio.fetch("movie", "tt1", raise_on_error=True)
+
+
 def test_unconfigured_returns_empty_without_calling_out(monkeypatch):
     monkeypatch.setattr(debridio._settings, "get", lambda k, d=None: d)
 

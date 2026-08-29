@@ -663,7 +663,7 @@ def _search_best_cached_release(item: dict) -> tuple[str, str] | None | object:
             ranked = scrapers.fetch_candidates(
                 "movie" if media_type == "movie" else "series",
                 imdb_id, season=season, episode=episode,
-                raise_if_all_failed=True,
+                raise_if_inconclusive=True,
             )
         except scrapers.ScrapersUnavailable as exc:
             # "Could not search" is not "nothing is cached": the caller backs

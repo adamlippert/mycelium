@@ -117,9 +117,9 @@ def _fetch_candidates(imdb_id: str, title: str, media_type: str) -> list:
     scraper could be searched at all - an empty list from here means "searched
     and found nothing", and _repair_strm deletes the .strm on that."""
     if media_type == "movie":
-        return scrapers.fetch_candidates("movie", imdb_id, raise_if_all_failed=True)
+        return scrapers.fetch_candidates("movie", imdb_id, raise_if_inconclusive=True)
     return scrapers.fetch_candidates("series", imdb_id, season=1, episode=1,
-                                      prefer_season_pack=True, raise_if_all_failed=True)
+                                      prefer_season_pack=True, raise_if_inconclusive=True)
 
 
 def _repair_strm(path: Path, run_id: int, mylist: list[dict]) -> str:

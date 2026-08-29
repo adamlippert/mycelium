@@ -3,7 +3,7 @@
 fetch_candidates swallows every scraper exception, so an empty list means both
 "searched and found nothing" and "could not search". The two call sites that
 destroy or de-prioritise something on an empty result ask for the distinction
-via raise_if_all_failed; these tests pin both halves of it.
+via raise_if_inconclusive; these tests pin both halves of it.
 """
 import os
 import sys
@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import pytest
 
 import scrapers
+import streams as streams_mod
 
 
 # ── cleanup._repair_strm ───────────────────────────────────────────────────────
@@ -86,10 +87,10 @@ def test_cleanup_asks_for_the_distinction():
     try:
         scrapers.fetch_candidates = lambda *a, **k: seen.update(k) or []
         cleanup._fetch_candidates("tt1", "X", "movie")
-        assert seen["raise_if_all_failed"] is True
+        assert seen["raise_if_inconclusive"] is True
         seen.clear()
         cleanup._fetch_candidates("tt1", "X", "series")
-        assert seen["raise_if_all_failed"] is True
+        assert seen["raise_if_inconclusive"] is True
     finally:
         scrapers.fetch_candidates = real
 
@@ -115,3 +116,73 @@ def test_catbox_real_miss_still_returns_none(monkeypatch):
     import catbox
     monkeypatch.setattr(scrapers, "fetch_candidates", lambda *a, **k: [])
     assert catbox._search_best_cached_release(dict(_ITEM)) is None
+
+
+# ── scrapers.fetch_candidates: the guard itself, with realistic adapters ──────
+#
+# fetch_candidates only turns "could not search" into ScrapersUnavailable if
+# raise_if_inconclusive asks for it, and only if the underlying failure
+# actually surfaces as an exception. Of the three real adapters, only
+# Torrentio propagates - Debridio and Zilean both document "never raises,
+# returns [] on failure". A mock that makes all three raise passes even with
+# the old, broken `failed == len(active)` guard and hides that gap entirely.
+# These mirror the real adapters' failure shape instead.
+
+@pytest.fixture
+def _all_scrapers_enabled_and_healthy(monkeypatch):
+    monkeypatch.setattr(scrapers._settings, "get", lambda k, d=None: True)
+    monkeypatch.setattr(scrapers.health_cache, "is_up", lambda name: True)
+    monkeypatch.setattr(scrapers, "rank_streams",
+                        lambda s, prefer_season_pack=False, override=None: list(s))
+
+
+def test_all_three_failing_at_the_query_layer_raises(monkeypatch, _all_scrapers_enabled_and_healthy):
+    # health_cache still says "up" (it probes a different endpoint on a TTL,
+    # not the query path) while every scraper actually fails to find anything.
+    monkeypatch.setattr(scrapers.debridio, "fetch", lambda *a, **k: [])
+    monkeypatch.setattr(scrapers.zilean, "fetch_streams", lambda *a, **k: [])
+
+    def _boom(*a, **k):
+        raise RuntimeError("torrentio down")
+
+    monkeypatch.setattr(scrapers.torrentio, "fetch_streams", _boom)
+
+    with pytest.raises(scrapers.ScrapersUnavailable):
+        scrapers.fetch_candidates("movie", "tt1", raise_if_inconclusive=True)
+
+
+def test_one_scraper_fails_another_still_finds_candidates(monkeypatch, _all_scrapers_enabled_and_healthy):
+    h = "a" * 40
+
+    def _boom(*a, **k):
+        raise RuntimeError("debridio down")
+
+    monkeypatch.setattr(scrapers.debridio, "fetch", _boom)
+    monkeypatch.setattr(scrapers.zilean, "fetch_streams", lambda *a, **k: [])
+    monkeypatch.setattr(scrapers.torrentio, "fetch_streams",
+                        lambda *a, **k: [streams_mod.Stream(
+                            name="t", title="T.1080p", info_hash=h, quality="1080p",
+                            seeders=1, size_gb=1.0, is_season_pack=False, source="torrentio")])
+
+    out = scrapers.fetch_candidates("movie", "tt1", raise_if_inconclusive=True)
+    assert [s.source for s in out] == ["torrentio"]
+
+
+def test_one_scraper_fails_others_return_empty_raises(monkeypatch, _all_scrapers_enabled_and_healthy):
+    def _boom(*a, **k):
+        raise RuntimeError("debridio down")
+
+    monkeypatch.setattr(scrapers.debridio, "fetch", _boom)
+    monkeypatch.setattr(scrapers.zilean, "fetch_streams", lambda *a, **k: [])
+    monkeypatch.setattr(scrapers.torrentio, "fetch_streams", lambda *a, **k: [])
+
+    with pytest.raises(scrapers.ScrapersUnavailable):
+        scrapers.fetch_candidates("movie", "tt1", raise_if_inconclusive=True)
+
+
+def test_all_scrapers_succeed_and_return_empty_is_a_real_miss(monkeypatch, _all_scrapers_enabled_and_healthy):
+    monkeypatch.setattr(scrapers.debridio, "fetch", lambda *a, **k: [])
+    monkeypatch.setattr(scrapers.zilean, "fetch_streams", lambda *a, **k: [])
+    monkeypatch.setattr(scrapers.torrentio, "fetch_streams", lambda *a, **k: [])
+
+    assert scrapers.fetch_candidates("movie", "tt1", raise_if_inconclusive=True) == []

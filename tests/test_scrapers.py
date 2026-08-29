@@ -114,7 +114,7 @@ def test_merge_order_is_priority_not_completion_order(monkeypatch):
 def test_zilean_receives_no_media_type_argument(monkeypatch):
     seen = {}
 
-    def _zilean(imdb_id, season=None, episode=None):
+    def _zilean(imdb_id, season=None, episode=None, **kwargs):
         seen["args"] = (imdb_id, season, episode)
         return []
 
@@ -141,31 +141,52 @@ def test_all_failed_raises_only_when_asked(monkeypatch):
     # unaffected.
     assert scrapers.fetch_candidates("movie", "tt1") == []
     with pytest.raises(scrapers.ScrapersUnavailable):
-        scrapers.fetch_candidates("movie", "tt1", raise_if_all_failed=True)
+        scrapers.fetch_candidates("movie", "tt1", raise_if_inconclusive=True)
 
 
 def test_no_active_scraper_raises_when_asked(monkeypatch):
     monkeypatch.setattr(scrapers.health_cache, "is_up", lambda name: False)
     assert scrapers.fetch_candidates("movie", "tt1") == []
     with pytest.raises(scrapers.ScrapersUnavailable):
-        scrapers.fetch_candidates("movie", "tt1", raise_if_all_failed=True)
+        scrapers.fetch_candidates("movie", "tt1", raise_if_inconclusive=True)
 
 
 def test_searched_successfully_and_found_nothing_does_not_raise(monkeypatch):
     # The whole point of the flag: a real "nothing out there" must stay an
     # empty list, or cleanup would stop deleting genuinely dead titles.
     _wire(monkeypatch)
-    assert scrapers.fetch_candidates("movie", "tt1", raise_if_all_failed=True) == []
+    assert scrapers.fetch_candidates("movie", "tt1", raise_if_inconclusive=True) == []
 
 
-def test_one_survivor_is_not_an_outage(monkeypatch):
+def test_a_survivor_that_found_nothing_is_still_inconclusive(monkeypatch):
+    # The guard is evaluated AFTER the merge: two scrapers erroring and the
+    # third finding nothing gives no way to conclude the title is really
+    # gone, so this must raise rather than return [] - unlike the case below,
+    # where the survivor actually found something.
     def _boom(*a, **k):
         raise RuntimeError("down")
 
     monkeypatch.setattr(scrapers.debridio, "fetch", _boom)
     monkeypatch.setattr(scrapers.zilean, "fetch_streams", _boom)
     monkeypatch.setattr(scrapers.torrentio, "fetch_streams", lambda *a, **k: [])
-    assert scrapers.fetch_candidates("movie", "tt1", raise_if_all_failed=True) == []
+    with pytest.raises(scrapers.ScrapersUnavailable):
+        scrapers.fetch_candidates("movie", "tt1", raise_if_inconclusive=True)
+
+
+def test_a_survivor_that_found_something_is_not_an_outage(monkeypatch):
+    # But if the survivor DID find candidates, a partial failure must not
+    # block a legitimate repair.
+    h = "a" * 40
+
+    def _boom(*a, **k):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(scrapers.debridio, "fetch", _boom)
+    monkeypatch.setattr(scrapers.zilean, "fetch_streams", _boom)
+    monkeypatch.setattr(scrapers.torrentio, "fetch_streams",
+                        lambda *a, **k: [_s(h, "torrentio")])
+    out = scrapers.fetch_candidates("movie", "tt1", raise_if_inconclusive=True)
+    assert [s.source for s in out] == ["torrentio"]
 
 
 def test_merge_candidates_does_not_rank(monkeypatch):

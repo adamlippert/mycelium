@@ -21,25 +21,34 @@ log = logging.getLogger(__name__)
 class ScrapersUnavailable(Exception):
     """No scraper could be searched at all.
 
-    Raised only when the caller asks for it (raise_if_all_failed=True) and
-    either nothing was active or every active scraper errored. It never means
-    "found nothing" -- a successful search with no results is still an empty
-    list. Callers that delete files on an empty result must tell the two apart
-    or a ten-minute upstream outage looks like a library full of dead titles.
+    Raised only when the caller asks for it (raise_if_inconclusive=True) and
+    either nothing was active, or something failed AND nothing was found. A
+    partial failure that still produced candidates is not inconclusive - it
+    proceeds normally. It never means "found nothing" -- a successful search
+    with no results is still an empty list. Callers that delete files on an
+    empty result must tell the two apart or a ten-minute upstream outage looks
+    like a library full of dead titles.
     """
 
 
 def _fetch_debridio(media_type, imdb_id, season, episode, timeout=None):
+    # raise_on_error=True: Debridio's adapter documents "never raises,
+    # returns [] on failure", which would otherwise hide its failures from
+    # the `failed` count below and defeat the outage guard entirely.
     if timeout is None:
-        return debridio.fetch(media_type, imdb_id, season, episode)
-    return debridio.fetch(media_type, imdb_id, season, episode, timeout=timeout)
+        return debridio.fetch(media_type, imdb_id, season, episode, raise_on_error=True)
+    return debridio.fetch(media_type, imdb_id, season, episode, timeout=timeout,
+                          raise_on_error=True)
 
 
 def _fetch_zilean(media_type, imdb_id, season, episode, timeout=None):
-    # zilean.fetch_streams takes no media_type.
+    # zilean.fetch_streams takes no media_type. raise_on_error=True for the
+    # same reason as _fetch_debridio above - Zilean fails open too.
     if timeout is None:
-        return zilean.fetch_streams(imdb_id, season=season, episode=episode)
-    return zilean.fetch_streams(imdb_id, season=season, episode=episode, timeout=timeout)
+        return zilean.fetch_streams(imdb_id, season=season, episode=episode,
+                                    raise_on_error=True)
+    return zilean.fetch_streams(imdb_id, season=season, episode=episode, timeout=timeout,
+                                raise_on_error=True)
 
 
 def _fetch_torrentio(media_type, imdb_id, season, episode, timeout=None):
@@ -71,7 +80,7 @@ def _active() -> list[tuple]:
 
 
 def merge_candidates(media_type: str, imdb_id: str, season: int | None = None,
-                     episode: int | None = None, *, raise_if_all_failed: bool = False,
+                     episode: int | None = None, *, raise_if_inconclusive: bool = False,
                      timeout: int | None = None) -> list[Stream]:
     """Fetch, merge and dedup candidates from every active scraper, UNRANKED.
 
@@ -82,7 +91,7 @@ def merge_candidates(media_type: str, imdb_id: str, season: int | None = None,
     active = _active()
     if not active:
         log.warning("No scrapers active for %s", imdb_id)
-        if raise_if_all_failed:
+        if raise_if_inconclusive:
             raise ScrapersUnavailable("no scraper is enabled and healthy")
         return []
 
@@ -100,9 +109,6 @@ def merge_candidates(media_type: str, imdb_id: str, season: int | None = None,
                 log.warning("Scraper %s failed for %s: %s",
                             name, imdb_id, debridio.redact(exc))
 
-    if failed == len(active) and raise_if_all_failed:
-        raise ScrapersUnavailable(f"all {failed} active scraper(s) failed")
-
     merged: list[Stream] = []
     by_hash: dict[str, Stream] = {}
     for name, _ in active:                       # priority order, not completion
@@ -116,6 +122,14 @@ def merge_candidates(media_type: str, imdb_id: str, season: int | None = None,
             elif name not in existing.also_seen_in and name != existing.source:
                 existing.also_seen_in = existing.also_seen_in + (name,)
 
+    # Evaluated AFTER the merge: a partial failure that still produced
+    # candidates is not inconclusive - incomplete information must never
+    # authorise a caller that deletes files, but if something WAS found the
+    # repair is valid and must proceed.
+    if raise_if_inconclusive and failed and not merged:
+        raise ScrapersUnavailable(
+            f"{failed} of {len(active)} active scraper(s) failed and nothing was found")
+
     log.info("Candidates for %s: %s -> %d unique",
              imdb_id, {n: len(results[n]) for n, _ in active}, len(merged))
     return merged
@@ -124,13 +138,13 @@ def merge_candidates(media_type: str, imdb_id: str, season: int | None = None,
 def fetch_candidates(media_type: str, imdb_id: str, season: int | None = None,
                      episode: int | None = None, *, prefer_season_pack: bool = False,
                      override: dict | None = None,
-                     raise_if_all_failed: bool = False) -> list[Stream]:
+                     raise_if_inconclusive: bool = False) -> list[Stream]:
     """Fetch, merge, dedup and rank candidates from every active scraper.
 
-    raise_if_all_failed=True turns "could not search" into ScrapersUnavailable
-    instead of an empty list; leave it off unless an empty result would make
-    the caller destroy something.
+    raise_if_inconclusive=True turns "could not search" into
+    ScrapersUnavailable instead of an empty list; leave it off unless an empty
+    result would make the caller destroy something.
     """
     merged = merge_candidates(media_type, imdb_id, season, episode,
-                              raise_if_all_failed=raise_if_all_failed)
+                              raise_if_inconclusive=raise_if_inconclusive)
     return rank_streams(merged, prefer_season_pack=prefer_season_pack, override=override)
