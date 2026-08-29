@@ -225,6 +225,40 @@ def test_one_malformed_item_does_not_discard_the_rest(configured, monkeypatch):
     assert out[0].info_hash == "a" * 40
 
 
+def test_is_up_false_when_disabled(monkeypatch):
+    import health_cache
+    monkeypatch.setattr(health_cache._settings, "get",
+                        lambda k, d=None: False if k == "DEBRIDIO_ENABLED" else d)
+    health_cache._cache.clear()
+    assert health_cache.is_up("debridio") is False
+
+
+def test_is_up_false_when_unconfigured(monkeypatch):
+    import health_cache
+    monkeypatch.setattr(health_cache._settings, "get",
+                        lambda k, d=None: True if k == "DEBRIDIO_ENABLED" else d)
+    monkeypatch.setattr(debridio, "is_configured", lambda: False)
+    health_cache._cache.clear()
+    assert health_cache.is_up("debridio") is False
+
+
+def test_health_error_is_redacted(monkeypatch):
+    # requests embeds the URL in its exception messages, and health.py:23
+    # returns str(exc)[:80] straight into an HTTP response.
+    import health
+    monkeypatch.setattr(health.settings, "get",
+                        lambda k, d=None: {"DEBRIDIO_ENABLED": True}.get(k, d))
+    monkeypatch.setattr(debridio, "is_configured", lambda: True)
+    monkeypatch.setattr(debridio, "build_config_token", lambda: "eyJhcGlfa2V5SECRET")
+
+    def _boom(*a, **k):
+        raise RuntimeError("failed for url: https://addon.debridio.com/eyJhcGlfa2V5SECRET/manifest.json")
+
+    monkeypatch.setattr(health.requests, "get", _boom)
+    entry = [s for s in health.check_all() if s["name"] == "Debridio"][0]
+    assert "SECRET" not in str(entry)
+
+
 def test_url_never_reaches_the_logs(configured, monkeypatch, caplog):
     class _LeakyResp:
         status_code = 500

@@ -35,6 +35,15 @@ def check_all() -> list[dict]:
     else:
         services.append({"name": "Zilean", "status": "disabled"})
     services.append(_ping("Torrentio", f"{TORRENTIO_BASE_URL.rstrip('/')}/manifest.json"))
+    import debridio as _debridio
+    if settings.get("DEBRIDIO_ENABLED", False) and _debridio.is_configured():
+        base = _s("DEBRIDIO_BASE_URL").rstrip("/") or "https://addon.debridio.com"
+        entry = _ping("Debridio", f"{base}/{_debridio.build_config_token()}/manifest.json")
+        if entry.get("error"):
+            entry["error"] = _debridio.redact(entry["error"])[:80]
+        services.append(entry)
+    else:
+        services.append({"name": "Debridio", "status": "disabled"})
     tmdb_api_key = _s("TMDB_API_KEY")
     if tmdb_api_key:
         services.append(_ping(

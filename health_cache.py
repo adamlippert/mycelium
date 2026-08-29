@@ -33,8 +33,17 @@ def _probe(name: str) -> bool:
         if name == "torrentio":
             r = requests.get(f"{TORRENTIO_BASE_URL.rstrip('/')}/manifest.json", timeout=3)
             return r.status_code < 500
+        if name == "debridio":
+            import debridio
+            token = debridio.build_config_token()
+            if not token:
+                return False
+            base = (_settings.get("DEBRIDIO_BASE_URL", "https://addon.debridio.com") or "").rstrip("/")
+            r = requests.get(f"{base}/{token}/manifest.json", timeout=3)
+            return r.status_code < 500
     except Exception as exc:
-        log.debug("health probe %s failed: %s", name, exc)
+        import debridio
+        log.debug("health probe %s failed: %s", name, debridio.redact(exc))
         return False
     return True
 
@@ -45,6 +54,10 @@ def is_up(name: str) -> bool:
         or not _settings.get("ZILEAN_URL", _ZILEAN_URL_DEFAULT)
     ):
         return False
+    if name == "debridio":
+        import debridio
+        if not _settings.get("DEBRIDIO_ENABLED", False) or not debridio.is_configured():
+            return False
     now = time.monotonic()
     with _lock:
         cached = _cache.get(name)
