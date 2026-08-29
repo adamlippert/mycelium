@@ -18,18 +18,36 @@ from streams import Stream, rank_streams
 log = logging.getLogger(__name__)
 
 
-def _fetch_debridio(media_type, imdb_id, season, episode):
-    return debridio.fetch(media_type, imdb_id, season, episode)
+class ScrapersUnavailable(Exception):
+    """No scraper could be searched at all.
+
+    Raised only when the caller asks for it (raise_if_all_failed=True) and
+    either nothing was active or every active scraper errored. It never means
+    "found nothing" -- a successful search with no results is still an empty
+    list. Callers that delete files on an empty result must tell the two apart
+    or a ten-minute upstream outage looks like a library full of dead titles.
+    """
 
 
-def _fetch_zilean(media_type, imdb_id, season, episode):
+def _fetch_debridio(media_type, imdb_id, season, episode, timeout=None):
+    if timeout is None:
+        return debridio.fetch(media_type, imdb_id, season, episode)
+    return debridio.fetch(media_type, imdb_id, season, episode, timeout=timeout)
+
+
+def _fetch_zilean(media_type, imdb_id, season, episode, timeout=None):
     # zilean.fetch_streams takes no media_type.
-    return zilean.fetch_streams(imdb_id, season=season, episode=episode)
+    if timeout is None:
+        return zilean.fetch_streams(imdb_id, season=season, episode=episode)
+    return zilean.fetch_streams(imdb_id, season=season, episode=episode, timeout=timeout)
 
 
-def _fetch_torrentio(media_type, imdb_id, season, episode):
+def _fetch_torrentio(media_type, imdb_id, season, episode, timeout=None):
     kind = "movie" if media_type == "movie" else "series"
-    return torrentio.fetch_streams(kind, imdb_id, season=season, episode=episode)
+    if timeout is None:
+        return torrentio.fetch_streams(kind, imdb_id, season=season, episode=episode)
+    return torrentio.fetch_streams(kind, imdb_id, season=season, episode=episode,
+                                   timeout=timeout)
 
 
 # (name, settings key or None if always on, fetch adapter)
@@ -52,25 +70,38 @@ def _active() -> list[tuple]:
     return out
 
 
-def fetch_candidates(media_type: str, imdb_id: str, season: int | None = None,
-                     episode: int | None = None, *, prefer_season_pack: bool = False,
-                     override: dict | None = None) -> list[Stream]:
-    """Fetch, merge, dedup and rank candidates from every active scraper."""
+def merge_candidates(media_type: str, imdb_id: str, season: int | None = None,
+                     episode: int | None = None, *, raise_if_all_failed: bool = False,
+                     timeout: int | None = None) -> list[Stream]:
+    """Fetch, merge and dedup candidates from every active scraper, UNRANKED.
+
+    Callers that want the house ranking use fetch_candidates(); this half
+    exists for the web player, which applies its own browser-compatibility
+    ordering to the raw pool and would silently narrow it by ranking first.
+    """
     active = _active()
     if not active:
         log.warning("No scrapers active for %s", imdb_id)
+        if raise_if_all_failed:
+            raise ScrapersUnavailable("no scraper is enabled and healthy")
         return []
 
     results: dict[str, list[Stream]] = {name: [] for name, _ in active}
+    failed = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(active)) as ex:
-        futures = {ex.submit(fn, media_type, imdb_id, season, episode): name
+        futures = {ex.submit(fn, media_type, imdb_id, season, episode, timeout): name
                    for name, fn in active}
         for future in concurrent.futures.as_completed(futures):
             name = futures[future]
             try:
                 results[name] = future.result() or []
             except Exception as exc:
-                log.warning("Scraper %s failed for %s: %s", name, imdb_id, exc)
+                failed += 1
+                log.warning("Scraper %s failed for %s: %s",
+                            name, imdb_id, debridio.redact(exc))
+
+    if failed == len(active) and raise_if_all_failed:
+        raise ScrapersUnavailable(f"all {failed} active scraper(s) failed")
 
     merged: list[Stream] = []
     by_hash: dict[str, Stream] = {}
@@ -87,4 +118,19 @@ def fetch_candidates(media_type: str, imdb_id: str, season: int | None = None,
 
     log.info("Candidates for %s: %s -> %d unique",
              imdb_id, {n: len(results[n]) for n, _ in active}, len(merged))
+    return merged
+
+
+def fetch_candidates(media_type: str, imdb_id: str, season: int | None = None,
+                     episode: int | None = None, *, prefer_season_pack: bool = False,
+                     override: dict | None = None,
+                     raise_if_all_failed: bool = False) -> list[Stream]:
+    """Fetch, merge, dedup and rank candidates from every active scraper.
+
+    raise_if_all_failed=True turns "could not search" into ScrapersUnavailable
+    instead of an empty list; leave it off unless an empty result would make
+    the caller destroy something.
+    """
+    merged = merge_candidates(media_type, imdb_id, season, episode,
+                              raise_if_all_failed=raise_if_all_failed)
     return rank_streams(merged, prefer_season_pack=prefer_season_pack, override=override)

@@ -659,10 +659,18 @@ def _search_best_cached_release(item: dict) -> tuple[str, str] | None | object:
         season = item.get("season")
         episode = item.get("episode")
 
-        ranked = scrapers.fetch_candidates(
-            "movie" if media_type == "movie" else "series",
-            imdb_id, season=season, episode=episode,
-        )
+        try:
+            ranked = scrapers.fetch_candidates(
+                "movie" if media_type == "movie" else "series",
+                imdb_id, season=season, episode=episode,
+                raise_if_all_failed=True,
+            )
+        except scrapers.ScrapersUnavailable as exc:
+            # "Could not search" is not "nothing is cached": the caller backs
+            # off 6h on a real miss, which would outlive the outage by hours.
+            log.warning("Catbox search: no scraper could be searched for %s (%s)"
+                        "  -  keeping .strm", item.get("title"), exc)
+            return _SEARCH_UNAVAILABLE
         if not ranked:
             return None
         ranked = blacklist.filter_candidates(ranked)

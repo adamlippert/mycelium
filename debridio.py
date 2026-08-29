@@ -21,6 +21,12 @@ import settings as _settings
 
 log = logging.getLogger(__name__)
 
+# Debridio is the only scraper that authenticates, so it is the only one with
+# a sub-500 failure mode: a lapsed subscription answers 401/403 and a garbled
+# config token 404. Both health probes must treat these as down so traffic
+# falls through to Torrentio/Zilean instead of retrying a dead addon forever.
+DOWN_STATUS_CODES = (401, 403, 404)
+
 _RESOLUTIONS = ["8k", "4k", "1440p", "1080p", "720p", "480p", "360p", "unknown"]
 _HEX40_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 _B64_SEGMENT_RE = re.compile(r"/(?:ey[A-Za-z0-9+/=_-]{16,})")
@@ -78,7 +84,9 @@ def redact(text) -> str:
         return ""
     out = str(text)
     for key in ("DEBRIDIO_CONFIG_TOKEN", "DEBRIDIO_API_KEY", "TORBOX_API_KEY"):
-        secret = (_s(key) or "").strip()
+        # str(): settings values are not guaranteed to be strings, and redact()
+        # is called from exception handlers - it must never raise itself.
+        secret = str(_s(key) or "").strip()
         if len(secret) >= 8:          # too short to be a key; avoid over-scrubbing
             out = out.replace(secret, "<redacted>")
     out = _B64_SEGMENT_RE.sub("/<config>", out)
@@ -170,7 +178,7 @@ def fetch(media_type: str, imdb_id: str, season: int | None = None,
                     "for %s - the response shape may have changed",
                     skipped, len(raw), imdb_id)
 
-    _QUALITY_ORDER = {"2160p": 0, "1080p": 1, "720p": 2, "480p": 3, "": 4}
+    _QUALITY_ORDER = {"2160p": 0, "1080p": 1, "720p": 2, "480p": 3, "unknown": 4}
     out.sort(key=lambda s: (_QUALITY_ORDER.get(s.quality, 4), -s.size_gb))
     capped = out[:_max_results()]
     log.info("Debridio: %d stream(s) for %s (%d after cap)", len(out), imdb_id, len(capped))

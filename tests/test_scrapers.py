@@ -130,6 +130,94 @@ def test_empty_everywhere_returns_empty(monkeypatch):
     assert scrapers.fetch_candidates("movie", "tt1") == []
 
 
+def test_all_failed_raises_only_when_asked(monkeypatch):
+    def _boom(*a, **k):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(scrapers.debridio, "fetch", _boom)
+    monkeypatch.setattr(scrapers.zilean, "fetch_streams", _boom)
+    monkeypatch.setattr(scrapers.torrentio, "fetch_streams", _boom)
+    # Default stays permissive so the seven non-destructive call sites are
+    # unaffected.
+    assert scrapers.fetch_candidates("movie", "tt1") == []
+    with pytest.raises(scrapers.ScrapersUnavailable):
+        scrapers.fetch_candidates("movie", "tt1", raise_if_all_failed=True)
+
+
+def test_no_active_scraper_raises_when_asked(monkeypatch):
+    monkeypatch.setattr(scrapers.health_cache, "is_up", lambda name: False)
+    assert scrapers.fetch_candidates("movie", "tt1") == []
+    with pytest.raises(scrapers.ScrapersUnavailable):
+        scrapers.fetch_candidates("movie", "tt1", raise_if_all_failed=True)
+
+
+def test_searched_successfully_and_found_nothing_does_not_raise(monkeypatch):
+    # The whole point of the flag: a real "nothing out there" must stay an
+    # empty list, or cleanup would stop deleting genuinely dead titles.
+    _wire(monkeypatch)
+    assert scrapers.fetch_candidates("movie", "tt1", raise_if_all_failed=True) == []
+
+
+def test_one_survivor_is_not_an_outage(monkeypatch):
+    def _boom(*a, **k):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(scrapers.debridio, "fetch", _boom)
+    monkeypatch.setattr(scrapers.zilean, "fetch_streams", _boom)
+    monkeypatch.setattr(scrapers.torrentio, "fetch_streams", lambda *a, **k: [])
+    assert scrapers.fetch_candidates("movie", "tt1", raise_if_all_failed=True) == []
+
+
+def test_merge_candidates_does_not_rank(monkeypatch):
+    calls = []
+    monkeypatch.setattr(scrapers, "rank_streams",
+                        lambda *a, **k: calls.append(1) or [])
+    _wire(monkeypatch, deb=[_s("a" * 40, "debridio")])
+    out = scrapers.merge_candidates("movie", "tt1")
+    assert [s.source for s in out] == ["debridio"]
+    assert calls == []
+
+
+def test_merge_candidates_still_dedups_and_records_also_seen_in(monkeypatch):
+    h = "a" * 40
+    _wire(monkeypatch, deb=[_s(h, "debridio")], tor=[_s(h, "torrentio")])
+    out = scrapers.merge_candidates("movie", "tt1")
+    assert len(out) == 1
+    assert out[0].also_seen_in == ("torrentio",)
+
+
+def test_timeout_is_forwarded_to_every_scraper(monkeypatch):
+    seen = {}
+
+    def _rec(name):
+        def _fn(*a, **k):
+            seen[name] = k.get("timeout")
+            return []
+        return _fn
+
+    monkeypatch.setattr(scrapers.debridio, "fetch", _rec("debridio"))
+    monkeypatch.setattr(scrapers.zilean, "fetch_streams", _rec("zilean"))
+    monkeypatch.setattr(scrapers.torrentio, "fetch_streams", _rec("torrentio"))
+    scrapers.merge_candidates("movie", "tt1", timeout=12)
+    assert seen == {"debridio": 12, "zilean": 12, "torrentio": 12}
+
+
+def test_scraper_failure_is_logged_through_redact(monkeypatch, caplog):
+    # build_config_token() is called outside the try, and the message shape
+    # requests produces embeds the whole URL. Nothing here may reach the log.
+    def _boom(*a, **k):
+        raise RuntimeError("failed for url: https://addon.debridio.com/"
+                           "eyJhcGlfa2V5IjoiZGtka2RrZGtka2RrZGsi/stream/movie/tt1.json")
+
+    monkeypatch.setattr(scrapers.debridio, "fetch", _boom)
+    monkeypatch.setattr(scrapers.zilean, "fetch_streams", lambda *a, **k: [])
+    monkeypatch.setattr(scrapers.torrentio, "fetch_streams", lambda *a, **k: [])
+    with caplog.at_level("DEBUG"):
+        scrapers.fetch_candidates("movie", "tt1")
+    blob = " ".join(r.getMessage() for r in caplog.records)
+    assert "eyJhcGlfa2V5" not in blob
+
+
 def test_every_call_site_uses_the_orchestrator():
     """No module may call a scraper's fetch directly any more; that is what
     produced three inconsistent orchestration patterns in the first place."""
@@ -137,15 +225,11 @@ def test_every_call_site_uses_the_orchestrator():
     import re
     root = pathlib.Path(__file__).resolve().parent.parent
     offenders = []
-    allowed = {
-        "scrapers.py", "zilean.py", "torrentio.py", "debridio.py", "catchup.py",
-        # find_web_candidates deliberately bypasses fetch_candidates: it does
-        # not rank by our quality/health scoring, it applies its own
-        # _web_score browser-compatibility ordering to the raw merged pool.
-        # Routing it through the pre-ranking orchestrator would silently
-        # narrow its candidate pool.
-        "plugins/webplayer/web_player.py",
-    }
+    # Only the scraper modules themselves, plus the orchestrator that fans out
+    # to them. find_web_candidates used to be exempted here; it now goes
+    # through scrapers.merge_candidates, which gives it the same merge and
+    # dedup without the ranking it deliberately does not want.
+    allowed = {"scrapers.py", "zilean.py", "torrentio.py", "debridio.py"}
     skip_dirs = {".venv", ".git", "node_modules", "tests"}
     # \b would miss catbox's "_zilean.fetch_streams" alias, so match an
     # optional leading underscore-prefix instead.
