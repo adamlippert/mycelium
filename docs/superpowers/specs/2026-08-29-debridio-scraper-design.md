@@ -110,7 +110,8 @@ def fetch(media_type: str, imdb_id: str,
           season: int | None = None, episode: int | None = None) -> list[Stream]
 ```
 
-- URL: `{DEBRIDIO_URL}/stream/{movie|series}/{tt…}.json`, series IDs as
+- URL: `{DEBRIDIO_BASE_URL}/{config}/stream/{movie|series}/{tt…}.json`,
+  where `{config}` is built per call (see Debridio config mapping). Series IDs as
   `tt0903747:1:1`.
 - Hash: `behaviorHints.bingeGroup` minus the `debridio-` prefix; fall back to
   the 40-hex path segment; if neither yields `^[0-9a-f]{40}$`, skip the stream
@@ -158,26 +159,100 @@ All six call sites — `processor.py` (×2), `monitor.py` (×2), `upgrader.py`
 
 ### Settings
 
+We store the **API key and build the config ourselves**, rather than storing
+the generated manifest URL.
+
 | Key | Default | Notes |
 |---|---|---|
 | `DEBRIDIO_ENABLED` | `false` | Existing installs unaffected until configured |
-| `DEBRIDIO_URL` | `""` | Paste the manifest URL; we strip a trailing `/manifest.json` |
-| `DEBRIDIO_MAX_RESULTS` | `100` | Caps per-query volume |
+| `DEBRIDIO_API_KEY` | `""` | Secret. From debridio.com/account |
+| `DEBRIDIO_BASE_URL` | `https://addon.debridio.com` | Rarely changed |
+| `DEBRIDIO_MAX_RESULTS` | `100` | Local cap; also drives `maxReturnPerQuality` |
+| `DEBRIDIO_CONFIG_TOKEN` | `""` | Secret. Escape hatch: a full pre-built config segment, used verbatim if set. Named `…_TOKEN` so the settings-UI masking predicate catches it |
+
+`providerKey` reuses the existing `TORBOX_API_KEY` — it is not stored twice.
 
 Added to `HOT_RELOAD` and the Connections group in `SETTING_GROUPS`.
 
+Verified live on 2026-08-29: a config rebuilt from these parts, with keys in a
+deliberately different order, returned byte-for-byte the same 702 streams as
+the user-generated URL. Debridio parses the JSON, so key order is irrelevant.
+
+This is better than storing the URL for four reasons:
+
+1. `DEBRIDIO_API_KEY` matches the existing `/KEY|TOKEN|SECRET|PASSWORD/`
+   masking predicate, so it is masked in the settings UI with no change to
+   `ui.html` — leak path 1 below disappears entirely.
+2. **Rotating `TORBOX_API_KEY` propagates automatically.** With a stored URL,
+   rotating the TorBox key silently breaks Debridio until the user regenerates
+   and re-pastes the URL — a failure with no obvious cause.
+3. The TorBox key lives in exactly one settings row instead of two.
+4. We control the config, which is what makes the settings mapping below
+   possible.
+
+`DEBRIDIO_CONFIG_TOKEN` exists because we are constructing a payload against
+an undocumented third-party schema. If Debridio changes it, the user can paste
+a working config segment and stay running without waiting for a release.
+
+### Debridio config mapping
+
+Debridio's config exposes filters that overlap mycelium's own quality settings.
+We derive them from mycelium's settings so the two do not have to be maintained
+separately.
+
+**The governing invariant: only push a filter when mycelium's own ranker would
+discard the same items locally anyway.** Under that rule, pushing filters is a
+pure payload optimisation with no behavioural change — Debridio just stops
+sending things `rank_streams` was about to drop. Violating it means the same
+release is judged differently depending on which scraper found it, which is a
+bug that would be very hard to diagnose from the outside.
+
+| mycelium setting | Debridio field | Mapping |
+|---|---|---|
+| `QUALITY_PREFERENCE`, `ALLOW_4K` | `resolutions` | `2160p`→`4k`, plus `8k` when `ALLOW_4K`. **Always include `unknown`** |
+| `EXCLUDE_REMUX` | `excludedQualities` | `+ ["BluRay REMUX"]` — mirrors `_REMUX_RE` |
+| `EXCLUDE_BLURAY` | `excludedQualities` | `+ ["BluRay","BDRip","BRRip"]` — mirrors `_BLURAY_RE` |
+| `EXCLUDE_CAM`, `STRICT_NO_CAM` | `excludedQualities` | `+ ["CAM","TeleSync","TeleCine","SCR","R5"]` — mirrors `_CAM_RE` |
+| `MAX_SIZE_GB` (when > 0) | `maxSize` | Direct. Unit confirmed **GB**, hard cap |
+| `AUDIO_LANGUAGE_PREFERENCE` | `preferredLang` | Only names Debridio offers; unrecognised names dropped |
+| `DEBRIDIO_MAX_RESULTS` | `maxReturnPerQuality` | Volume control |
+| — | `disableUncached` | Always `false`. Mycelium adds uncached torrents to TorBox itself |
+
+Deliberately **not** mapped, and why:
+
+- `PREFER_WEBDL`, `PREFER_HEVC` — these are *ranking preferences*, and
+  Debridio's only lever is *exclusion*. Translating "prefer WEB-DL" into
+  "exclude everything that isn't WEB-DL" inverts the semantics and would
+  silently gut results. They stay local.
+- `MIN_SEEDERS`, `EXCLUDE_DV_P5`, `EXCLUDE_UNDERSIZED_RELEASES` — no Debridio
+  equivalent. The last one needs TMDB runtime data Debridio doesn't have.
+- `EXCLUDE_LANGUAGES` — Debridio offers *preferred* languages only, not
+  excluded ones. Not the same operation.
+
+`unknown` must stay in `resolutions`: mycelium infers quality from the release
+name, so a stream Debridio buckets as unknown is often one mycelium can
+classify. Dropping it loses content for no gain.
+
+Verified live: `resolutions:["1080p"]` narrowed 702 → 255, `maxSize:"5"`
+narrowed 780 → 344 with nothing above 4.99 GB, and `maxReturnPerQuality:"3"`
+narrowed to 28. The filters behave as documented.
+
 ### Secret handling
 
-`DEBRIDIO_URL` embeds both the Debridio API key and the user's TorBox key. It
-must be treated as sensitive as `TORBOX_API_KEY`. Three concrete leak paths
-exist today and each needs closing:
+Storing the API key rather than the URL means no settings row holds a
+secret-bearing URL, and every new key name (`DEBRIDIO_API_KEY`,
+`DEBRIDIO_CONFIG_TOKEN`) is caught by the existing masking predicate. That
+closes the settings-UI exposure without touching `ui.html`.
 
-1. **Settings UI.** `templates/ui.html:1233` decides to mask a field with
-   `/KEY|TOKEN|SECRET|PASSWORD/.test(it.key)`. `DEBRIDIO_URL` matches none of
-   them, so it would render as a plaintext pre-filled input. Add `DEBRIDIO_URL`
-   to that predicate. The heuristic is fragile — a server-supplied `secret`
-   flag per setting would be the real fix — but that is out of scope here and
-   noted as a follow-up.
+The danger does not disappear, though: the **request URL we construct at call
+time still embeds both the Debridio key and the TorBox key** in its path. Two
+leak paths remain and each needs closing:
+
+1. **Settings UI** — closed by naming, as above. Worth recording that the
+   predicate is a client-side heuristic on the key's *name*: any future setting
+   holding a secret without one of those four words in its name will silently
+   render in plaintext. A server-supplied `secret` flag per setting is the real
+   fix, noted as follow-up.
 2. **Scraper logging.** `torrentio.py:189` logs its full request URL. The
    equivalent line for Debridio would write the TorBox key into the log buffer
    and the admin Logs tab. `debridio.py` logs the scraper name and result count
@@ -191,8 +266,10 @@ exist today and each needs closing:
 ### Health
 
 `health_cache._probe` gains a `"debridio"` branch hitting
-`{DEBRIDIO_URL}/manifest.json` (200 today, cheap, no stream query).
-`is_up("debridio")` returns false when disabled or unset, mirroring the
+`{DEBRIDIO_BASE_URL}/{config}/manifest.json` (200 today, cheap, no stream
+query).
+`is_up("debridio")` returns false when disabled, or when `DEBRIDIO_API_KEY`
+or `TORBOX_API_KEY` is unset, mirroring the
 existing Zilean guard. `health.py::check_all` gains a Debridio entry, reporting
 `disabled` when off. A lapsed subscription returns 401/403, marks it down, and
 traffic flows to the other scrapers automatically.
@@ -265,7 +342,7 @@ Existing suites must stay green via the `torrentio.py` re-exports.
 | Risk | Mitigation |
 |---|---|
 | Paid dependency in the primary path | Default off; health-gated; merge-not-replace, so lapse degrades silently |
-| TorBox key leaking via URL | Three leak paths closed above, plus a caplog test |
+| TorBox key leaking via the constructed URL | Settings-UI path closed by key naming; logging and health-probe paths redacted, plus a caplog test |
 | 6x result volume → ranking and TorBox cache-check cost | `DEBRIDIO_MAX_RESULTS` cap; user can also set `maxReturnPerQuality` in Debridio |
 | `upgrader`/`cleanup` behaviour change | Covered by `test_scrapers.py`; kept as separate reviewable commits |
 | New scraper forgets `source` | Explicit per-scraper assertion in tests |
