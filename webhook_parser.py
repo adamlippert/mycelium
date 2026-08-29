@@ -67,9 +67,17 @@ def _extract_request_id(payload: dict) -> str | None:
 
 
 def _fetch_from_seerr(payload: dict) -> tuple[str | None, list[int], int | None]:
-    """Return (imdb_id, seasons, tmdb_id) from the Seerr API using the request_id in the payload."""
+    """Return (imdb_id, seasons, tmdb_id) from the Seerr API using the request_id in the payload.
+
+    Seerr only stores imdbId on a Media row once a library scanner has enriched
+    it, so for a freshly requested title this returns (None, seasons, tmdb_id)
+    and the caller resolves the id through TMDB instead.
+    """
     request_id = _extract_request_id(payload)
     if not request_id:
+        return None, [], None
+    if not seerr.is_configured():
+        log.debug("Skipping Seerr lookup for request %s  -  SEERR_URL not set", request_id)
         return None, [], None
     try:
         data = seerr.get_request(request_id)
@@ -78,16 +86,11 @@ def _fetch_from_seerr(payload: dict) -> tuple[str | None, list[int], int | None]
         return None, [], None
 
     media = data.get("media") or {}
-    tmdb_id_raw = media.get("tmdbId") or media.get("tmdb_id")
-    tmdb_id_val: int | None = int(tmdb_id_raw) if tmdb_id_raw else None
+    tmdb_id_val = _coerce_tmdb_id(media.get("tmdbId") or media.get("tmdb_id"))
     imdb_id: str | None = media.get("imdbId") or media.get("imdb_id") or None
     if imdb_id:
         imdb_id = str(imdb_id).strip()
         log.info("Got IMDB ID from Seerr API: %s (request=%s)", imdb_id, request_id)
-    elif tmdb_id_val:
-        raw_type = (media.get("mediaType") or media.get("media_type") or "movie").lower()
-        media_type_for_tmdb = "movie" if raw_type == "movie" else "tv"
-        imdb_id = tmdb.tmdb_to_imdb(tmdb_id_val, media_type=media_type_for_tmdb)
 
     seasons: list[int] = []
     for s in data.get("seasons") or []:
@@ -96,6 +99,18 @@ def _fetch_from_seerr(payload: dict) -> tuple[str | None, list[int], int | None]
             seasons.append(num)
 
     return imdb_id or None, seasons, tmdb_id_val
+
+
+def _coerce_tmdb_id(raw) -> int | None:
+    """Seerr renders tmdbId as a string in webhook templates, and as an unsubstituted
+    '{{media_tmdbid}}' when the template is misconfigured. Never raise on either."""
+    if raw in (None, ""):
+        return None
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        log.warning("Ignoring non-numeric tmdbId %r in webhook payload", raw)
+        return None
 
 
 def _extract_media_type(payload: dict) -> str:
@@ -144,9 +159,7 @@ def parse(payload: dict) -> MediaRequest:
     tmdb_id: int | None = None
 
     media = payload.get("media") or {}
-    raw_tmdb = media.get("tmdbId") or media.get("tmdb_id")
-    if raw_tmdb:
-        tmdb_id = int(raw_tmdb)
+    tmdb_id = _coerce_tmdb_id(media.get("tmdbId") or media.get("tmdb_id"))
 
     if not imdb_id:
         log.info("IMDB ID not in payload; querying Seerr API")
@@ -154,8 +167,21 @@ def parse(payload: dict) -> MediaRequest:
         if not tmdb_id and seerr_tmdb:
             tmdb_id = seerr_tmdb
 
+    # Seerr's default webhook template omits imdbId, and Seerr's own Media row
+    # carries imdbId only for movies it has already scanned into the library
+    # (never for TV). The tmdbId we do have must therefore resolve on its own,
+    # whether it came from the payload or from Seerr - the same fallback
+    # catchup.py uses when replaying missed requests.
+    if not imdb_id and tmdb_id:
+        imdb_id = tmdb.tmdb_to_imdb(tmdb_id, media_type="movie" if media_type == "movie" else "tv")
+
     if not imdb_id:
-        raise WebhookError("No IMDB id found in webhook payload or Seerr API")
+        raise WebhookError(
+            f"No IMDB id found for {payload.get('subject') or media_type!r} "
+            f"(tmdb_id={tmdb_id}): not in the webhook payload, not on the Seerr "
+            f"request, and TMDB could not resolve it "
+            f"({'TMDB_API_KEY is not set' if not tmdb.has_api_key() else 'check TMDB_API_KEY and connectivity'})"
+        )
 
     title = payload.get("subject") or media.get("title") or imdb_id
     if not title or title == imdb_id or _IMDB_RE.fullmatch(title.strip()):
