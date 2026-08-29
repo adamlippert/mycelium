@@ -1,5 +1,20 @@
 [
   {
+    "version": "0.6.5",
+    "date": "2026-08-29",
+    "notes": [
+      "Added: Debridio joins Zilean and Torrentio as a third scraper, queried first when enabled. Needs DEBRIDIO_API_KEY (your Debridio account key) and reuses your existing TORBOX_API_KEY as the provider key; with either missing it stays out of rotation entirely",
+      "Added: the Debridio config is deliberately permissive rather than mirroring Mycelium's filters down into it - ours are soft and self-disabling, Debridio's are hard, so pushing them down would delete streams the ranker would have chosen to allow",
+      "Added: a source_unique_win metric counting only wins where no other scraper returned that hash, since plain win rate overstates whichever scraper sits first in the priority order",
+      "Fixed: candidate discovery is one scrapers.fetch_candidates() orchestrator instead of nine hand-rolled call sites in three different patterns; all scrapers are queried concurrently and merged in priority order, so duplicate hashes resolve deterministically instead of by race",
+      "Fixed: a transient scraper outage could delete the library - cleanup read a total upstream outage as 'this title no longer exists' and unlinked the .strm, its .nfo and the database row",
+      "Fixed: a lapsed Debridio subscription reported itself healthy, because both health probes treated any status below 500 as up and Debridio is the only scraper that authenticates",
+      "Fixed: with LOG_LEVEL=DEBUG, urllib3 logged Debridio's full request path - including the base64 config segment holding both API keys - into the admin Logs tab",
+      "Fixed: the web player never saw Debridio; it now shares the orchestrator's fetch and applies its own browser-compatibility scoring to the result",
+      "Fixed: Catbox cached the outage sentinel for 6 hours instead of not caching it, so a title went un-searched long after an outage ended"
+    ]
+  },
+  {
     "version": "0.6.4",
     "date": "2026-08-29",
     "notes": [
