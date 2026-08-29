@@ -84,3 +84,89 @@ def redact(text) -> str:
     out = _B64_SEGMENT_RE.sub("/<config>", out)
     out = re.sub(r"/play/(\w+)/(\w+)/[^/]+/[^/]+/", r"/play/\1/\2/<redacted>/<redacted>/", out)
     return out
+
+
+from streams import Stream, parse_quality, parse_seeders, parse_size_gb
+
+_SEASON_PACK_RE = re.compile(r"\b(complete|season|s\d{1,2}(?!\s*e))\b", re.IGNORECASE)
+
+
+def _max_results() -> int:
+    try:
+        return int(_s("DEBRIDIO_MAX_RESULTS") or 100)
+    except (TypeError, ValueError):
+        return 100
+
+
+def _extract_hash(item: dict) -> str:
+    """Recover the info hash from bingeGroup, falling back to the URL path."""
+    binge = (item.get("behaviorHints") or {}).get("bingeGroup") or ""
+    if binge.startswith("debridio-"):
+        candidate = binge[len("debridio-"):]
+        if _HEX40_RE.match(candidate):
+            return candidate.lower()
+    for part in (item.get("url") or "").split("/"):
+        if _HEX40_RE.match(part):
+            return part.lower()
+    return ""
+
+
+def _to_stream(item: dict) -> Stream | None:
+    info_hash = _extract_hash(item)
+    if not info_hash:
+        return None
+    name = item.get("name") or ""
+    title = item.get("title") or ""
+    filename = (item.get("behaviorHints") or {}).get("filename") or ""
+    blob = f"{name} {title} {filename}"
+    return Stream(
+        name=name,
+        title=title or filename,
+        info_hash=info_hash,
+        quality=parse_quality(blob),
+        seeders=parse_seeders(title),
+        size_gb=parse_size_gb(title),
+        is_season_pack=bool(_SEASON_PACK_RE.search(filename or title)),
+        source="debridio",
+        cached="⚡" in name,
+    )
+
+
+def fetch(media_type: str, imdb_id: str, season: int | None = None,
+          episode: int | None = None, timeout: int = 30) -> list[Stream]:
+    """Return Debridio candidates. Never raises; returns [] on any failure."""
+    token = build_config_token()
+    if not token:
+        return []
+    kind = "movie" if media_type == "movie" else "series"
+    stream_id = imdb_id if season is None else f"{imdb_id}:{season}:{episode or 1}"
+    base = (_s("DEBRIDIO_BASE_URL") or "https://addon.debridio.com").rstrip("/")
+    url = f"{base}/{token}/stream/{kind}/{stream_id}.json"
+
+    log.info("Querying Debridio for %s (%s)", imdb_id, kind)
+    try:
+        resp = requests.get(url, timeout=timeout)
+        resp.raise_for_status()
+        payload = resp.json() or {}
+    except Exception as exc:
+        log.warning("Debridio request failed for %s: %s", imdb_id, redact(exc))
+        return []
+
+    raw = payload.get("streams") or []
+    out, skipped = [], 0
+    for item in raw:
+        stream = _to_stream(item)
+        if stream is None:
+            skipped += 1
+        else:
+            out.append(stream)
+    if skipped:
+        log.warning("Debridio: %d/%d stream(s) had no recoverable info hash "
+                    "for %s - the response shape may have changed",
+                    skipped, len(raw), imdb_id)
+
+    _QUALITY_ORDER = {"2160p": 0, "1080p": 1, "720p": 2, "480p": 3, "": 4}
+    out.sort(key=lambda s: (_QUALITY_ORDER.get(s.quality, 4), -s.size_gb))
+    capped = out[:_max_results()]
+    log.info("Debridio: %d stream(s) for %s (%d after cap)", len(out), imdb_id, len(capped))
+    return capped
