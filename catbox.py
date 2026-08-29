@@ -613,7 +613,13 @@ def _search_cached_release(item: dict) -> object:
                       imdb_id, key[1:])
             return result
     result = _search_best_cached_release(item)
-    ttl = _SEARCH_HIT_TTL if result and result is not _SEARCH_UNAVAILABLE else _SEARCH_MISS_TTL
+    if result is _SEARCH_UNAVAILABLE:
+        # Don't cache the outage sentinel: the token's own retry cooldown is
+        # _FAIL_COOLDOWN_SEC (30s), but caching it here would fall through to
+        # _SEARCH_MISS_TTL (6h) below, same as a real miss - the title would
+        # not be re-searched again until long after any real outage ended.
+        return result
+    ttl = _SEARCH_HIT_TTL if result else _SEARCH_MISS_TTL
     with _search_cache_lock:
         _search_cache[key] = (now + ttl, result)
     return result

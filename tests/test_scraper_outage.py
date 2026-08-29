@@ -118,6 +118,33 @@ def test_catbox_real_miss_still_returns_none(monkeypatch):
     assert catbox._search_best_cached_release(dict(_ITEM)) is None
 
 
+def test_catbox_unavailable_result_is_not_cached_for_six_hours(monkeypatch):
+    # _search_cached_release used to fall through to _SEARCH_MISS_TTL (6h) for
+    # the sentinel too, since `result and result is not _SEARCH_UNAVAILABLE`
+    # is False for it just like for a real miss. That defeats the sentinel's
+    # whole point: a token's retry cooldown is 30s but the title itself
+    # wouldn't be re-searched for 6 hours, well past any real outage.
+    import catbox
+
+    calls = []
+
+    def _search(item):
+        calls.append(1)
+        return catbox._SEARCH_UNAVAILABLE
+
+    monkeypatch.setattr(catbox, "_search_best_cached_release", _search)
+    catbox._search_cache.clear()
+    try:
+        item = dict(_ITEM)
+        first = catbox._search_cached_release(item)
+        second = catbox._search_cached_release(item)
+        assert first is catbox._SEARCH_UNAVAILABLE
+        assert second is catbox._SEARCH_UNAVAILABLE
+        assert len(calls) == 2, "second call must re-search, not read a cached sentinel"
+    finally:
+        catbox._search_cache.clear()
+
+
 # ── scrapers.fetch_candidates: the guard itself, with realistic adapters ──────
 #
 # fetch_candidates only turns "could not search" into ScrapersUnavailable if
