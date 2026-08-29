@@ -23,30 +23,38 @@ os.environ.setdefault("SPORE_MEDIA_PATH", "/tmp/mycelium-test-spore")
 os.environ.setdefault("TORBOX_BASE_URL", "https://api.torbox.app/v1/api")
 os.environ.setdefault("SPORE_ENABLED", "true")
 
-# Mock zware imports zodat strm_generator importeerbaar is zonder DB/netwerk.
-# Onvoorwaardelijk overschrijven (niet setdefault): andere testbestanden kunnen
-# via hun eigen imports al een ECHTE "settings"/"db" module in sys.modules hebben
-# gezet voordat dit bestand geladen wordt, wat setdefault() zou laten staan.
-_MOCKED_MODULES = ("db", "jellyfin", "settings", "torbox", "nfo_generator", "mp4_faststart")
-_orig_modules = {_mod: sys.modules.get(_mod) for _mod in _MOCKED_MODULES}
-for _mod in _MOCKED_MODULES:
-    sys.modules[_mod] = MagicMock()
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import strm_generator as sg  # noqa: E402  (imports na sys.path setup)
 
 
-@pytest.fixture(autouse=True, scope="module")
-def _restore_mocked_modules():
-    """Herstelt sys.modules na dit bestand, zodat de mocks hier niet lekken
-    naar andere testbestanden die later in dezelfde sessie draaien."""
-    yield
-    for _mod, _orig in _orig_modules.items():
-        if _orig is None:
-            sys.modules.pop(_mod, None)
-        else:
-            sys.modules[_mod] = _orig
+# strm_generator doet bij import geen I/O (alleen regex-compilatie en een lock)
+# en bindt zijn zware dependencies als module-attributen: `import db`,
+# `import settings`, `import torbox as torbox_mod`. Daarom mocken we die
+# attributen per test, in plaats van sys.modules te overschrijven vlak voor de
+# import hieronder.
+#
+# Die oude aanpak was volgorde-afhankelijk en faalde stil: zodra een ander
+# testbestand strm_generator al echt geimporteerd had (test_catchup.py ->
+# catchup -> processor -> strm_generator), gaf `import strm_generator` hier de
+# gecachete module terug, met de ECHTE settings/db er al aan gebonden. De swap
+# in sys.modules deed dan niets en tests die op een gemockte settings leunen
+# draaiden ongemerkt tegen de echte module.
+_MOCKED_ATTRS = ("db", "jellyfin", "settings", "torbox_mod")
+
+# Deze twee worden lui geimporteerd binnen functies en zijn dus alleen via
+# sys.modules te onderscheppen. monkeypatch draait dat zelf weer terug, zodat
+# er niets naar andere testbestanden lekt.
+_MOCKED_LAZY = ("nfo_generator", "mp4_faststart")
+
+
+@pytest.fixture(autouse=True)
+def _mock_heavy_deps(monkeypatch):
+    """Verse mocks per test - geen state die tussen tests door lekt."""
+    for _attr in _MOCKED_ATTRS:
+        monkeypatch.setattr(sg, _attr, MagicMock())
+    for _mod in _MOCKED_LAZY:
+        monkeypatch.setitem(sys.modules, _mod, MagicMock())
 
 
 # =============================================================================
