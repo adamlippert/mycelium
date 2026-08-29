@@ -58,8 +58,13 @@ def test_parse_quality_treats_4k_and_uhd_as_2160p():
     assert streams.parse_quality("Movie UHD BluRay") == "2160p"
 
 
-def test_parse_quality_returns_empty_when_unknown():
-    assert streams.parse_quality("Movie.DVDRip") == ""
+def test_parse_quality_says_unknown_when_unrecognised():
+    # Must match torrentio._classify_quality exactly: both feed the
+    # quality_added metric label, and "" vs "unknown" splits one bucket
+    # into two on the dashboard's Quality card.
+    assert streams.parse_quality("Movie.DVDRip") == "unknown"
+    assert streams.parse_quality("Movie.DVDRip") == torrentio._classify_quality(
+        {"name": "Movie.DVDRip", "title": ""})
 
 
 def test_parse_size_gb_handles_gb_and_mb():

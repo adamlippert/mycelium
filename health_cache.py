@@ -40,7 +40,10 @@ def _probe(name: str) -> bool:
                 return False
             base = (_settings.get("DEBRIDIO_BASE_URL", "https://addon.debridio.com") or "").rstrip("/")
             r = requests.get(f"{base}/{token}/manifest.json", timeout=3)
-            return r.status_code < 500
+            # 401/403 (lapsed subscription) and 404 (garbled config token) are
+            # permanent for this config, not transient upstream trouble.
+            return (r.status_code < 500
+                    and r.status_code not in debridio.DOWN_STATUS_CODES)
     except Exception as exc:
         import debridio
         log.debug("health probe %s failed: %s", name, debridio.redact(exc))

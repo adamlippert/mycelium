@@ -68,11 +68,16 @@ def _min_plausible_size_gb(quality: str, runtime_minutes: float | None) -> float
 
 
 def parse_quality(text: str) -> str:
-    """Highest-resolution bucket named in the text, or '' if none."""
+    """Highest-resolution bucket named in the text, or 'unknown' if none.
+
+    'unknown' rather than '': the label lands in the quality_added metric, and
+    two spellings of the same thing split the dashboard's Quality card in two.
+    Zilean and Torrentio already said 'unknown', so that is the spelling.
+    """
     for quality, pattern in _QUALITY_PATTERNS.items():
         if pattern.search(text or ""):
             return quality
-    return ""
+    return "unknown"
 
 
 def parse_size_gb(text: str) -> float:

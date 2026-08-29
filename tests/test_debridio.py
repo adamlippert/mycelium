@@ -242,6 +242,54 @@ def test_is_up_false_when_unconfigured(monkeypatch):
     assert health_cache.is_up("debridio") is False
 
 
+class _StatusResp:
+    def __init__(self, status):
+        self.status_code = status
+
+
+@pytest.mark.parametrize("status", [401, 403, 404])
+def test_auth_failure_marks_debridio_down_in_health_cache(monkeypatch, status):
+    # A lapsed subscription answers 401/403 and a garbled config token 404.
+    # All are < 500, so the generic predicate called them healthy and every
+    # search kept paying a round trip to a dead addon.
+    import health_cache
+    monkeypatch.setattr(health_cache._settings, "get",
+                        lambda k, d=None: True if k == "DEBRIDIO_ENABLED" else d)
+    monkeypatch.setattr(debridio, "is_configured", lambda: True)
+    monkeypatch.setattr(debridio, "build_config_token", lambda: "TOKEN")
+    monkeypatch.setattr(health_cache.requests, "get",
+                        lambda *a, **k: _StatusResp(status))
+    health_cache._cache.clear()
+    assert health_cache.is_up("debridio") is False
+
+
+@pytest.mark.parametrize("status", [401, 403, 404])
+def test_auth_failure_marks_debridio_down_on_the_health_card(monkeypatch, status):
+    import health
+    monkeypatch.setattr(health.settings, "get",
+                        lambda k, d=None: {"DEBRIDIO_ENABLED": True}.get(k, d))
+    monkeypatch.setattr(debridio, "is_configured", lambda: True)
+    monkeypatch.setattr(debridio, "build_config_token", lambda: "TOKEN")
+    monkeypatch.setattr(health.requests, "get", lambda *a, **k: _StatusResp(status))
+    entry = [s for s in health.check_all() if s["name"] == "Debridio"][0]
+    assert entry["status"] == "down"
+
+
+def test_the_other_services_keep_the_plain_500_predicate(monkeypatch):
+    # Only Debridio authenticates; a 404 from Torrentio's manifest is not an
+    # auth failure and must not take it out of rotation.
+    import health
+    import health_cache
+    monkeypatch.setattr(health.settings, "get", lambda k, d=None: d)
+    monkeypatch.setattr(health.requests, "get", lambda *a, **k: _StatusResp(404))
+    entry = [s for s in health.check_all() if s["name"] == "Torrentio"][0]
+    assert entry["status"] == "ok"
+
+    monkeypatch.setattr(health_cache.requests, "get", lambda *a, **k: _StatusResp(404))
+    health_cache._cache.clear()
+    assert health_cache.is_up("torrentio") is True
+
+
 def test_health_error_is_redacted(monkeypatch):
     # requests embeds the URL in its exception messages, and health.py:23
     # returns str(exc)[:80] straight into an HTTP response.
@@ -292,6 +340,40 @@ def test_health_error_truncation_does_not_leak_a_token_fragment(configured, monk
     assert "dk" * 16 not in entry["error"]
     assert "tb-uuid-value" not in entry["error"]
     assert "eyJhcGlfa2V5" not in entry["error"]
+
+
+def test_a_real_request_at_debug_level_leaks_nothing(configured, monkeypatch, caplog):
+    # The mocked test below never lets urllib3 run, so it cannot see the third
+    # leak: urllib3.connectionpool logs the request line - method, host and the
+    # full path, which for Debridio is the base64 config token holding BOTH the
+    # Debridio key and the TorBox key - at DEBUG, underneath every redact()
+    # call site. LOG_LEVEL=DEBUG then puts it in log_buffer and the admin Logs
+    # tab. This one makes a genuine request (to a port nothing listens on, so
+    # it fails fast) so urllib3 really fires.
+    import logging
+
+    import config
+
+    monkeypatch.setitem(
+        configured, "DEBRIDIO_BASE_URL", "http://127.0.0.1:1")
+    token = debridio.build_config_token()
+    assert token.startswith("ey")
+
+    monkeypatch.setattr(config, "LOG_LEVEL", "DEBUG")
+    urllib3_log = logging.getLogger("urllib3")
+    monkeypatch.setattr(urllib3_log, "level", urllib3_log.level)
+    config.configure_logging()
+    assert urllib3_log.getEffectiveLevel() >= logging.WARNING
+
+    with caplog.at_level("DEBUG"):
+        assert debridio.fetch("movie", "tt1") == []
+
+    assert [r.name for r in caplog.records if r.name.startswith("urllib3")] == []
+    blob = " ".join(f"{r.name} {r.getMessage()}" for r in caplog.records)
+    assert token not in blob
+    assert "eyJhcGlfa2V5" not in blob
+    assert "dk" * 16 not in blob
+    assert "tb-uuid-value" not in blob
 
 
 def test_url_never_reaches_the_logs(configured, monkeypatch, caplog):

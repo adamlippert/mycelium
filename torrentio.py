@@ -7,7 +7,13 @@ from config import (
     TORRENTIO_BASE_URL,
     TORRENTIO_OPTS,
 )
-from streams import Stream, rank_streams, _QUALITY_PATTERNS, _SEEDERS_RE, _SIZE_RE
+from streams import (
+    Stream,
+    rank_streams,
+    parse_seeders,
+    parse_size_gb,
+    _QUALITY_PATTERNS,
+)
 
 log = logging.getLogger(__name__)
 
@@ -30,27 +36,12 @@ _LANG_PATTERNS = {
 }
 
 
-
-
 def _classify_quality(stream: dict) -> str:
     blob = f"{stream.get('name', '')} {stream.get('title', '')}"
     for label, pattern in _QUALITY_PATTERNS.items():
         if pattern.search(blob):
             return label
     return "unknown"
-
-
-def _parse_seeders(title: str) -> int:
-    m = _SEEDERS_RE.search(title or "")
-    return int(m.group(1)) if m else 0
-
-
-def _parse_size_gb(title: str) -> float:
-    m = _SIZE_RE.search(title or "")
-    if not m:
-        return 0.0
-    value, unit = float(m.group(1)), m.group(2).upper()
-    return value if unit == "GB" else value / 1024.0
 
 
 def _looks_like_season_pack(title: str, season: int | None) -> bool:
@@ -91,8 +82,8 @@ def _to_stream(raw: dict, season: int | None) -> TorrentioStream | None:
         title=title,
         info_hash=info_hash.lower(),
         quality=_classify_quality(augmented),
-        seeders=_parse_seeders(title),
-        size_gb=_parse_size_gb(title),
+        seeders=parse_seeders(title),
+        size_gb=parse_size_gb(title),
         is_season_pack=_looks_like_season_pack(title, season),
         languages=_detect_languages(f"{name} {title}"),
     )

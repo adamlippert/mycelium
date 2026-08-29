@@ -15,10 +15,10 @@ def _s(key: str) -> str:
 
 
 def _ping(name: str, url: str, headers: dict | None = None, timeout: int = 5,
-          redact=None) -> dict:
+          redact=None, down_codes: tuple[int, ...] = ()) -> dict:
     try:
         r = requests.get(url, headers=headers or {}, timeout=timeout)
-        ok = r.status_code < 500
+        ok = r.status_code < 500 and r.status_code not in down_codes
         return {"name": name, "status": "ok" if ok else "down", "code": r.status_code}
     except Exception as exc:
         msg = str(exc)
@@ -42,8 +42,13 @@ def check_all() -> list[dict]:
     import debridio as _debridio
     if settings.get("DEBRIDIO_ENABLED", False) and _debridio.is_configured():
         base = _s("DEBRIDIO_BASE_URL").rstrip("/") or "https://addon.debridio.com"
+        # Debridio is the only scraper with an auth failure mode: a lapsed
+        # subscription answers 401/403 and a garbled config token 404. All are
+        # < 500, so the generic predicate would report a dead addon as healthy
+        # and every search would keep paying a round trip for nothing.
         entry = _ping("Debridio", f"{base}/{_debridio.build_config_token()}/manifest.json",
-                      redact=_debridio.redact)
+                      redact=_debridio.redact,
+                      down_codes=_debridio.DOWN_STATUS_CODES)
         services.append(entry)
     else:
         services.append({"name": "Debridio", "status": "disabled"})

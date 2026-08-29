@@ -291,3 +291,9 @@ def configure_logging() -> None:
         level=getattr(logging, LOG_LEVEL, logging.INFO),
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
+    # urllib3 logs every request line - method, host and full path - at DEBUG,
+    # below any of our own code, so debridio.redact() never sees it. The
+    # Debridio path is a base64 config segment holding both the Debridio and
+    # the TorBox API key, and log_buffer surfaces the root logger in the admin
+    # Logs tab. Pinned at WARNING so LOG_LEVEL=DEBUG cannot leak credentials.
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
