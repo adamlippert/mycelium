@@ -1,6 +1,8 @@
 import os
 import sys
 
+import pytest
+
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -62,7 +64,7 @@ def test_parse_quality_returns_empty_when_unknown():
 
 def test_parse_size_gb_handles_gb_and_mb():
     assert streams.parse_size_gb("⚡ 📺 4k 💾 85.37 GB") == 85.37
-    assert streams.parse_size_gb("💾 700 MB") == 0.7
+    assert streams.parse_size_gb("💾 700 MB") == pytest.approx(700 / 1024)
 
 
 def test_parse_size_gb_returns_zero_when_absent():
@@ -72,3 +74,17 @@ def test_parse_size_gb_returns_zero_when_absent():
 def test_parse_seeders():
     assert streams.parse_seeders("👤 42 💾 5 GB") == 42
     assert streams.parse_seeders("no seeders") == 0
+
+
+def test_rank_streams_is_reexported_from_torrentio():
+    assert torrentio.rank_streams is streams.rank_streams
+
+
+def test_rank_streams_soft_filter_allows_remux_when_it_is_all_there_is(monkeypatch):
+    # Mycelium's excludes self-disable rather than return nothing. This is the
+    # property that stops us pushing filters down to Debridio; lock it in.
+    import settings as _settings
+    monkeypatch.setattr(_settings, "get",
+                        lambda k, d=None: True if k == "EXCLUDE_REMUX" else d)
+    only_remux = [_stream(name="Movie 2160p BluRay REMUX", title="Movie REMUX")]
+    assert len(streams.rank_streams(only_remux)) == 1

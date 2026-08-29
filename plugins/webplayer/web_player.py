@@ -16,6 +16,7 @@ import requests.exceptions as _req_exc
 import db
 import health_cache
 import settings as _settings
+import streams
 import subtitles as _subtitles
 import torbox
 import torrentio
@@ -100,7 +101,7 @@ def _web_score(stream: torrentio.TorrentioStream,
                caps: dict | None = None) -> int:
     caps = caps or {}
     blob = f"{stream.name} {stream.title}"
-    if torrentio._DV_RE.search(blob):      return -1  # Dolby Vision: browser-incompatible
+    if streams._DV_RE.search(blob):        return -1  # Dolby Vision: browser-incompatible
     if _NO_BROWSER_VIDEO_RE.search(blob):  return -1  # AV1/VP9/VP8: no browser HLS support
     if _HDR_NAME_RE.search(blob):          return -1  # HDR: browsers can't tone-map
 
@@ -113,7 +114,7 @@ def _web_score(stream: torrentio.TorrentioStream,
     elif stream.quality == "2160p": return -1   # 4K = altijd HEVC + groot, niet geschikt voor web
     elif stream.quality == "720p":  score += 50
 
-    if torrentio._WEBDL_RE.search(blob): score += 40
+    if streams._WEBDL_RE.search(blob):   score += 40
 
     is_h264 = bool(_H264_RE.search(blob))
     is_aac  = bool(_AAC_NAME_RE.search(blob))
