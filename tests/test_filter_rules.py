@@ -49,7 +49,15 @@ def test_all_for_ui_exposes_the_vocabulary_for_rule_and_sort_keys():
     groups = {item["key"]: item for g in _s.all_for_ui() for item in g["items"]}
     assert groups["SOURCE_EXCLUDED"]["options"] == list(rt.values_for("source"))
     assert groups["SORT_ORDER"]["options"] == list(_s._streams.SORT_CRITERIA)
-    assert groups["AUDIO_LANGUAGE_PREFERENCE"]["options"] == list(_s._streams.LANGUAGE_CODES)
+    # Was AUDIO_LANGUAGE_PREFERENCE, which is retired and no longer offered in
+    # the UI at all. LANGUAGE_PREFERRED replaced it. Its vocabulary is the
+    # detector's, which is every language code PLUS "unknown" - a first-class
+    # value in the rule model, since a release that named no language is not a
+    # release with no audio.
+    assert groups["LANGUAGE_PREFERRED"]["options"] == list(rt.values_for("language"))
+    assert set(_s._streams.LANGUAGE_CODES) <= set(groups["LANGUAGE_PREFERRED"]["options"])
+    assert "unknown" in groups["LANGUAGE_PREFERRED"]["options"]
+    assert "AUDIO_LANGUAGE_PREFERENCE" not in groups
 
 
 def test_no_quality_prefixed_rule_key_exists():

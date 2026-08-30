@@ -253,11 +253,16 @@ SETTING_GROUPS = [
         "keys": ["CATBOX_MODE", "CATBOX_LAZY_ADD", "CATBOX_PRELOAD", "CATBOX_HOST", "CATBOX_IDLE_MINUTES", "CATBOX_GC_INTERVAL_MINUTES"],
     },
     {
+        # Quality filtering itself moved to the "Filtering rules" group below.
+        # What is left here is the size and seeder floor, which the rule model
+        # does not cover. The retired booleans are deliberately absent: nothing
+        # reads them any more, so offering them would save a value that changes
+        # nothing, which reads as a broken control rather than a removed one.
+        # See migrate_filters.RETIRED, pinned by a test.
         "id": "quality",
-        "title": "Quality & filtering",
+        "title": "Size & seeders",
         "keys": [
-            "QUALITY_PREFERENCE", "ALLOW_4K", "EXCLUDE_REMUX", "EXCLUDE_BLURAY", "EXCLUDE_CAM",
-            "PREFER_WEBDL", "PREFER_HEVC", "MIN_SEEDERS", "MAX_SIZE_GB", "STRICT_NO_CAM",
+            "MIN_SEEDERS", "MAX_SIZE_GB",
             "EXCLUDE_UNDERSIZED_RELEASES", "EXCLUDE_UNDERSIZED_STRICT",
             "WEB_PLAYER_MAX_SIZE_GB",
         ],
@@ -273,9 +278,12 @@ SETTING_GROUPS = [
         "keys": ["SORT_ORDER"],
     },
     {
+        # Audio-language filtering is now LANGUAGE_PREFERRED / LANGUAGE_EXCLUDED
+        # in the rules editor. What remains here is subtitle fetching, which is
+        # unrelated to release selection.
         "id": "languages",
-        "title": "Languages & subtitles",
-        "keys": ["AUDIO_LANGUAGE_PREFERENCE", "EXCLUDE_LANGUAGES", "OPENSUBTITLES_LANGUAGES",
+        "title": "Subtitles",
+        "keys": ["OPENSUBTITLES_LANGUAGES",
                  "OPENSUBTITLES_API_KEY", "OPENSUBTITLES_USER_AGENT"],
     },
     {

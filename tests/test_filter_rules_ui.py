@@ -100,3 +100,47 @@ def test_bluray_is_not_excluded_by_default():
 
     assert "bluray" not in config.SOURCE_EXCLUDED
     assert "bdrip" not in config.SOURCE_EXCLUDED
+
+
+def test_no_retired_setting_is_still_offered_in_the_settings_ui():
+    """A retired key rendered as a live control is worse than no control at all.
+
+    The twelve booleans were replaced in 0.7.0 and nothing reads them any more,
+    but SETTING_GROUPS kept listing them, so the admin page still showed
+    EXCLUDE_CAM, PREFER_HEVC, QUALITY_PREFERENCE and the rest as editable
+    fields. Toggling one saved a value that no code path ever consults, which
+    reads as "the setting is broken" rather than "the setting is gone".
+
+    Ties the UI to migrate_filters.RETIRED, so retiring another key in future
+    fails here until it is also pulled out of the settings page.
+    """
+    import migrate_filters
+    import settings
+
+    shown = {k for group in settings.SETTING_GROUPS for k in group["keys"]}
+    still_offered = sorted(shown & set(migrate_filters.RETIRED))
+
+    assert not still_offered, (
+        "retired settings still editable in the UI: "
+        + ", ".join(f"{k} (use {migrate_filters.RETIRED[k]})" for k in still_offered)
+    )
+
+
+def test_the_settings_that_replaced_them_are_offered_instead():
+    """Removing the old controls must not leave the user with no way to filter."""
+    import settings
+
+    shown = {k for group in settings.SETTING_GROUPS for k in group["keys"]}
+    for key in ("RESOLUTION_PREFERRED", "SOURCE_EXCLUDED", "ENCODE_PREFERRED",
+                "LANGUAGE_EXCLUDED", "SORT_ORDER"):
+        assert key in shown, f"{key} is not reachable from the settings page"
+
+
+def test_live_size_and_seeder_settings_survive():
+    """These sit in the same group as the retired ones and are still read."""
+    import settings
+
+    shown = {k for group in settings.SETTING_GROUPS for k in group["keys"]}
+    for key in ("MIN_SEEDERS", "MAX_SIZE_GB", "EXCLUDE_UNDERSIZED_RELEASES",
+                "EXCLUDE_UNDERSIZED_STRICT", "OPENSUBTITLES_LANGUAGES"):
+        assert key in shown, f"{key} is live but no longer editable"
