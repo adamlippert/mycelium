@@ -51,6 +51,7 @@ _LIST_KEYS = {
     "AUDIO_LANGUAGE_PREFERENCE",
     "EXCLUDE_LANGUAGES",
     "OPENSUBTITLES_LANGUAGES",
+    "SORT_ORDER",
 }
 _RULE_PREFIX_BY_CATEGORY = {
     "resolution": "RESOLUTION",
@@ -163,6 +164,7 @@ HOT_RELOAD = {
     "MAX_SIZE_GB",
     "AUDIO_LANGUAGE_PREFERENCE",
     "EXCLUDE_LANGUAGES",
+    "SORT_ORDER",
     "OPENSUBTITLES_LANGUAGES",
     "OPENSUBTITLES_API_KEY",
     "OPENSUBTITLES_USER_AGENT",
@@ -247,6 +249,11 @@ SETTING_GROUPS = [
         "id": "filter_rules",
         "title": "Filtering rules",
         "keys": [k for k in _RULE_LIST_KEYS] + sorted(_RULE_STRICT_KEYS),
+    },
+    {
+        "id": "sort_order",
+        "title": "Sort order",
+        "keys": ["SORT_ORDER"],
     },
     {
         "id": "languages",
@@ -385,6 +392,17 @@ def set(key: str, value) -> None:
                 f"Valid values are {list(vocabulary)}"
             )
         value = values
+    if key == "SORT_ORDER":
+        names = [v.strip().lower() for v in
+                 (value if isinstance(value, list) else str(value).split(","))
+                 if str(v).strip()]
+        unknown = [n for n in names if n not in _streams.SORT_CRITERIA]
+        if unknown:
+            raise ValueError(
+                f"{key} has unknown criteria {unknown}. Valid names are "
+                f"{list(_streams.SORT_CRITERIA)}"
+            )
+        value = names
     if isinstance(value, bool):
         stored = "true" if value else "false"
     elif isinstance(value, (list, tuple)):

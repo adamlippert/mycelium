@@ -23,6 +23,7 @@ from config import (
     PREFER_HEVC,
     PREFER_WEBDL,
     QUALITY_PREFERENCE,
+    SORT_ORDER,
 )
 
 log = logging.getLogger(__name__)
@@ -283,27 +284,70 @@ def _apply_non_category_filters(candidates: list[Stream], override: dict) -> lis
     return candidates
 
 
+# Every name SORT_ORDER may contain, in the order _sort_candidates would use
+# them if a setting listed all ten. settings.py validates against this tuple
+# the same way a rule-list key is validated against release_tags.values_for().
+SORT_CRITERIA = (
+    "season_pack", "resolution", "cached", "language", "source",
+    "encode", "visual_tag", "audio_tag", "seeders", "size",
+)
+
+
+def _resolve_sort_order(raw) -> list[str]:
+    """Normalise a SORT_ORDER value: lowercase, drop unknown names (warning),
+    dedupe keeping the first occurrence, and fall back to the default when
+    nothing usable survives.
+
+    This is the one place that has to tolerate a value settings.set() never
+    validated - one that arrived via .env, which parses SORT_ORDER as a plain
+    comma-split list with no access to SORT_CRITERIA (config.py cannot import
+    streams.py; the reverse import already exists). A DB-stored value already
+    passed set()'s validation, but running it through here too is harmless and
+    keeps this function the single source of truth for what actually sorts.
+    """
+    names = raw if isinstance(raw, (list, tuple)) else []
+    seen: set[str] = set()
+    resolved: list[str] = []
+    for name in names:
+        name = str(name).strip().lower()
+        if not name or name in seen:
+            continue
+        if name not in SORT_CRITERIA:
+            log.warning(
+                "SORT_ORDER has unknown criterion %r; dropping it. Valid "
+                "names are %s", name, ", ".join(SORT_CRITERIA))
+            continue
+        seen.add(name)
+        resolved.append(name)
+    return resolved or list(SORT_ORDER)
+
+
 def _sort_candidates(
     candidates: list[Stream],
     rules: dict,
     prefer_season_pack: bool,
     override: dict,
 ) -> list[Stream]:
-    """Sort survivors by preference. The tuple shape and order are unchanged
-    from the old sort_key closure; only the inputs moved, from settings/config
-    to the rule dict the category engine already produced. Configurable
-    SORT_ORDER is out of scope for this step, see the follow-up task.
+    """Sort survivors by preference, in the order SORT_ORDER names.
+
+    The default order reproduces the old hardcoded tuple exactly: season pack,
+    resolution, language, source, encode, seeders, size. cached, visual_tag
+    and audio_tag are real criteria a user can add, but are deliberately absent
+    from that default - see config.SORT_ORDER.
 
     override is accepted for signature symmetry with _apply_non_category_filters;
     a per-show quality_preference/prefer_hevc override is already folded into
     rules by the caller (_apply_show_override), so nothing here reads it again.
     """
     import release_tags
+    import settings as _settings
 
     resolution_preferred = rules["resolution"]["preferred"]
     language_preferred = rules["language"]["preferred"]
     source_preferred = rules["source"]["preferred"]
     encode_preferred = rules["encode"]["preferred"]
+    visual_tag_preferred = rules["visual_tag"]["preferred"]
+    audio_tag_preferred = rules["audio_tag"]["preferred"]
 
     def _lang_score(s: Stream) -> int:
         if not language_preferred:          # no preference: everything ties
@@ -315,22 +359,32 @@ def _sort_candidates(
                 return idx                  # matched: by preference position
         return len(language_preferred) + 1  # positively non-matching: worst
 
+    # Reward any source/encode/visual tag/audio tag the user listed as
+    # preferred, not one hardcoded value. The old _WEBDL_RE matched web-dl,
+    # webrip and web alike, so hardcoding webdl here silently demoted the
+    # other two.
+    scorers = {
+        "season_pack": lambda s, blob: 0 if prefer_season_pack and s.is_season_pack else 1,
+        "resolution": lambda s, blob: _quality_rank(s, resolution_preferred),
+        "cached": lambda s, blob: 0 if s.cached else 1,
+        "language": lambda s, blob: _lang_score(s),
+        "source": lambda s, blob: 0 if any(
+            v in source_preferred for v in release_tags.detect_sources(blob)) else 1,
+        "encode": lambda s, blob: 0 if any(
+            v in encode_preferred for v in release_tags.detect_encode(blob)) else 1,
+        "visual_tag": lambda s, blob: 0 if any(
+            v in visual_tag_preferred for v in release_tags.detect_visual_tags(blob)) else 1,
+        "audio_tag": lambda s, blob: 0 if any(
+            v in audio_tag_preferred for v in release_tags.detect_audio_tags(blob)) else 1,
+        "seeders": lambda s, blob: -s.seeders,
+        "size": lambda s, blob: s.size_gb,
+    }
+
+    order = _resolve_sort_order(_settings.get("SORT_ORDER", SORT_ORDER))
+
     def sort_key(s: Stream) -> tuple:
         blob = f"{s.name} {s.title}"
-        return (
-            0 if prefer_season_pack and s.is_season_pack else 1,
-            _quality_rank(s, resolution_preferred),
-            _lang_score(s),
-            # Reward any source the user listed as preferred, not one hardcoded
-            # value. The old _WEBDL_RE matched web-dl, webrip and web alike, so
-            # hardcoding webdl here silently demoted the other two.
-            0 if any(v in source_preferred
-                     for v in release_tags.detect_sources(blob)) else 1,
-            0 if any(v in encode_preferred
-                     for v in release_tags.detect_encode(blob)) else 1,
-            -s.seeders,
-            s.size_gb,
-        )
+        return tuple(scorers[name](s, blob) for name in order)
 
     candidates.sort(key=sort_key)
     return candidates

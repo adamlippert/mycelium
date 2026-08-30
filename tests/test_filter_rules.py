@@ -406,3 +406,204 @@ def test_undersized_strict_makes_the_size_check_fatal(monkeypatch):
                           is_season_pack=False)
     kept, _ = streams.rank_streams_explained([tiny], override={"runtime_minutes": 120})
     assert kept == []
+
+
+# ── Task 12: configurable SORT_ORDER ─────────────────────────────────────────
+
+def _mk(name, info_hash, quality="1080p", seeders=10, size_gb=5.0,
+        is_season_pack=False, languages=(), source="torrentio", cached=False):
+    return streams.Stream(name=name, title=name, info_hash=info_hash, quality=quality,
+                           seeders=seeders, size_gb=size_gb, is_season_pack=is_season_pack,
+                           languages=languages, source=source, cached=cached)
+
+
+def _patch_sort_order(monkeypatch, order):
+    """Only SORT_ORDER is intercepted; _sort_candidates reads every other
+    preference from the rules dict the caller builds, not from settings.get."""
+    import settings as _s
+    monkeypatch.setattr(_s, "get", lambda k, d=None: order if k == "SORT_ORDER" else d)
+
+
+def test_sort_criteria_matches_the_ten_named_in_the_spec():
+    assert set(streams.SORT_CRITERIA) == {
+        "season_pack", "resolution", "cached", "language", "source",
+        "encode", "visual_tag", "audio_tag", "seeders", "size",
+    }
+
+
+def test_default_sort_order_is_registered_and_omits_the_new_capabilities():
+    assert list(streams.SORT_ORDER) == [
+        "season_pack", "resolution", "language", "source", "encode", "seeders", "size",
+    ]
+    for new_capability in ("cached", "visual_tag", "audio_tag"):
+        assert new_capability not in streams.SORT_ORDER, (
+            f"{new_capability} must not be in the default SORT_ORDER")
+
+
+def test_default_order_reproduces_todays_ranking(monkeypatch):
+    """A concrete multi-candidate ordering, not just that the setting exists.
+
+    Every candidate below differs from the "ideal" one in exactly one
+    criterion, holding every more-significant criterion equal to it. Ascending
+    tuple comparison then means a candidate degraded on a LESS significant
+    (later) criterion must rank ABOVE one degraded on a MORE significant
+    (earlier) criterion - exactly the seven-term precedence the old hardcoded
+    tuple encoded: season_pack, resolution, language, source, encode, seeders,
+    size.
+    """
+    _patch_sort_order(monkeypatch, list(streams.SORT_ORDER))
+    rules = _rules(
+        resolution={"preferred": ["1080p"]},
+        language={"preferred": ["en"]},
+        source={"preferred": ["webdl"]},
+        encode={"preferred": ["hevc"]},
+    )
+
+    ideal = _mk("Show.S01E01.1080p.WEB-DL.x265", "a" * 40,
+                is_season_pack=True, languages=("en",), seeders=100, size_gb=1.0)
+    degraded_size = _mk("Show.S01E01.1080p.WEB-DL.x265", "b" * 40,
+                         is_season_pack=True, languages=("en",), seeders=100, size_gb=9.0)
+    degraded_seeders = _mk("Show.S01E01.1080p.WEB-DL.x265", "c" * 40,
+                            is_season_pack=True, languages=("en",), seeders=1, size_gb=1.0)
+    degraded_encode = _mk("Show.S01E01.1080p.WEB-DL.x264", "d" * 40,
+                           is_season_pack=True, languages=("en",), seeders=100, size_gb=1.0)
+    degraded_source = _mk("Show.S01E01.1080p.BluRay.x265", "e" * 40,
+                           is_season_pack=True, languages=("en",), seeders=100, size_gb=1.0)
+    degraded_language = _mk("Show.S01E01.1080p.WEB-DL.x265", "f" * 40,
+                             is_season_pack=True, languages=("fr",), seeders=100, size_gb=1.0)
+    degraded_resolution = _mk("Show.S01E01.2160p.WEB-DL.x265", "g" * 40, quality="2160p",
+                               is_season_pack=True, languages=("en",), seeders=100, size_gb=1.0)
+    degraded_season_pack = _mk("Show.S01E01.1080p.WEB-DL.x265", "h" * 40,
+                                is_season_pack=False, languages=("en",), seeders=100, size_gb=1.0)
+
+    everyone = [degraded_season_pack, degraded_resolution, degraded_language,
+                degraded_source, degraded_encode, degraded_seeders, degraded_size, ideal]
+    ranked = streams._sort_candidates(everyone, rules, prefer_season_pack=True, override={})
+
+    assert [s.info_hash for s in ranked] == [
+        ideal.info_hash, degraded_size.info_hash, degraded_seeders.info_hash,
+        degraded_encode.info_hash, degraded_source.info_hash, degraded_language.info_hash,
+        degraded_resolution.info_hash, degraded_season_pack.info_hash,
+    ]
+
+
+def test_reordering_seeders_before_resolution_picks_the_other_release(monkeypatch):
+    """Two candidates where seeders and resolution disagree. Under the default
+    order resolution decides; putting seeders first flips the winner. A test
+    that cannot distinguish the two orders would not prove SORT_ORDER drives
+    anything."""
+    rules = _rules(resolution={"preferred": ["1080p"]})
+    high_seeders_low_res = _mk("A", "a" * 40, quality="2160p", seeders=500, size_gb=5.0)
+    low_seeders_high_res = _mk("B", "b" * 40, quality="1080p", seeders=5, size_gb=5.0)
+    candidates = [high_seeders_low_res, low_seeders_high_res]
+
+    _patch_sort_order(monkeypatch, ["resolution", "seeders"])
+    by_resolution = streams._sort_candidates(list(candidates), rules, False, {})
+    assert by_resolution[0].info_hash == low_seeders_high_res.info_hash
+
+    _patch_sort_order(monkeypatch, ["seeders", "resolution"])
+    by_seeders = streams._sort_candidates(list(candidates), rules, False, {})
+    assert by_seeders[0].info_hash == high_seeders_low_res.info_hash
+
+    assert by_resolution[0].info_hash != by_seeders[0].info_hash, (
+        "reordering SORT_ORDER did not change the winner - the sort key is "
+        "not actually driven by the setting")
+
+
+def test_omitting_a_criterion_removes_it_from_the_sort(monkeypatch):
+    """SORT_ORDER=[seeders] only: two candidates tied on seeders but different
+    resolution must keep their input order, because resolution is not part of
+    the sort at all."""
+    rules = _rules(resolution={"preferred": ["1080p"]})
+    better_resolution = _mk("A", "a" * 40, quality="1080p", seeders=10, size_gb=5.0)
+    worse_resolution = _mk("B", "b" * 40, quality="2160p", seeders=10, size_gb=5.0)
+
+    _patch_sort_order(monkeypatch, ["seeders"])
+    ranked = streams._sort_candidates(
+        [worse_resolution, better_resolution], rules, False, {})
+    assert [s.info_hash for s in ranked] == [
+        worse_resolution.info_hash, better_resolution.info_hash,
+    ], "resolution must have no effect when it is absent from SORT_ORDER"
+
+
+def test_duplicate_criterion_is_used_once_at_its_first_position():
+    resolved = streams._resolve_sort_order(["seeders", "resolution", "seeders", "size"])
+    assert resolved == ["seeders", "resolution", "size"]
+
+
+def test_unknown_criterion_name_is_dropped_with_a_warning():
+    resolved = streams._resolve_sort_order(["seeders", "not_a_real_criterion", "size"])
+    assert resolved == ["seeders", "size"]
+
+
+def test_settings_set_rejects_an_unknown_sort_criterion(monkeypatch):
+    import settings as _s
+    stored = {}
+    monkeypatch.setattr(_s.db, "set_setting", lambda k, v: stored.__setitem__(k, v))
+    with pytest.raises(ValueError) as exc:
+        _s.set("SORT_ORDER", ["seeders", "popularity"])
+    assert "popularity" in str(exc.value)
+    assert stored == {}
+
+
+def test_settings_set_accepts_a_known_sort_order(monkeypatch):
+    import settings as _s
+    stored = {}
+    monkeypatch.setattr(_s.db, "set_setting", lambda k, v: stored.__setitem__(k, v))
+    _s.set("SORT_ORDER", ["seeders", "resolution"])
+    assert stored["SORT_ORDER"] == "seeders,resolution"
+
+
+def test_empty_sort_order_falls_back_to_the_default():
+    assert streams._resolve_sort_order([]) == list(streams.SORT_ORDER)
+
+
+def test_empty_sort_order_setting_does_not_leave_candidates_unsorted(monkeypatch):
+    """An empty SORT_ORDER must behave exactly like the default, not like 'no
+    sort at all'."""
+    rules = _rules(resolution={"preferred": ["1080p"]})
+    better = _mk("A", "a" * 40, quality="1080p", seeders=1, size_gb=5.0)
+    worse = _mk("B", "b" * 40, quality="2160p", seeders=100, size_gb=5.0)
+
+    _patch_sort_order(monkeypatch, [])
+    with_empty = streams._sort_candidates([worse, better], rules, False, {})
+
+    _patch_sort_order(monkeypatch, list(streams.SORT_ORDER))
+    with_default = streams._sort_candidates([worse, better], rules, False, {})
+
+    assert [s.info_hash for s in with_empty] == [s.info_hash for s in with_default]
+    assert with_empty[0].info_hash == better.info_hash, (
+        "resolution must still decide the winner when SORT_ORDER is empty")
+
+
+def test_cached_criterion_is_absent_from_default_but_works_when_added(monkeypatch):
+    assert "cached" not in streams.SORT_ORDER
+    rules = _rules()
+    is_cached = _mk("A", "a" * 40, seeders=1, cached=True)
+    not_cached = _mk("B", "b" * 40, seeders=100, cached=False)
+
+    _patch_sort_order(monkeypatch, ["cached"])
+    ranked = streams._sort_candidates([not_cached, is_cached], rules, False, {})
+    assert ranked[0].info_hash == is_cached.info_hash
+
+
+def test_visual_tag_criterion_is_absent_from_default_but_works_when_added(monkeypatch):
+    assert "visual_tag" not in streams.SORT_ORDER
+    rules = _rules(visual_tag={"preferred": ["hdr10"]})
+    hdr = _mk("Movie.2024.1080p.WEB-DL.HDR10.x265", "a" * 40, seeders=1)
+    sdr = _mk("Movie.2024.1080p.WEB-DL.SDR.x265", "b" * 40, seeders=100)
+
+    _patch_sort_order(monkeypatch, ["visual_tag"])
+    ranked = streams._sort_candidates([sdr, hdr], rules, False, {})
+    assert ranked[0].info_hash == hdr.info_hash
+
+
+def test_audio_tag_criterion_is_absent_from_default_but_works_when_added(monkeypatch):
+    assert "audio_tag" not in streams.SORT_ORDER
+    rules = _rules(audio_tag={"preferred": ["atmos"]})
+    atmos = _mk("Movie.2024.1080p.WEB-DL.Atmos.x265", "a" * 40, seeders=1)
+    plain = _mk("Movie.2024.1080p.WEB-DL.AAC.x265", "b" * 40, seeders=100)
+
+    _patch_sort_order(monkeypatch, ["audio_tag"])
+    ranked = streams._sort_candidates([plain, atmos], rules, False, {})
+    assert ranked[0].info_hash == atmos.info_hash
