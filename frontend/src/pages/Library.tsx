@@ -4,31 +4,65 @@ import { api } from '../api';
 import { usePluginSlot } from '../hooks/usePluginSlots';
 import PosterCard from '../components/PosterCard';
 import DetailModal from '../components/DetailModal';
+import { StatTile, Chip, DataTable, Pill } from '../components/primitives';
+import type { Column, PillState } from '../components/primitives';
 import type { TmdbItem } from '../types';
 
-type Tab = 'movies' | 'series';
+// Mockup's type filter row is All/Movies/Series/Materialized/Lazy/Needs repair.
+// Materialized/Lazy/Needs repair need per-title virtual_items state that no current
+// endpoint exposes (see Plan 3); only the type split the page's data can answer
+// (All/Movies/Series) is implemented here.
+type Tab = 'all' | 'movies' | 'series';
 
 const PAGE_SIZE = 24;
 
+/** Maps a library item's request status to a Pill state. */
+function statusToPillState(status: string | undefined): PillState {
+  if (status === 'success' || status === 'available') return 'ready';
+  if (status === 'pending') return 'queued';
+  if (status === 'failed') return 'failed';
+  return 'lazy';
+}
+
+function formatAdded(created_at: string | undefined): string {
+  if (!created_at) return '-';
+  const d = new Date(created_at);
+  return Number.isNaN(d.getTime()) ? '-' : d.toLocaleDateString();
+}
+
+// Columns limited to fields the /ui/api/library/movies response actually carries
+// (title, year, quality, status, created_at); nothing invented.
+const movieColumns: Column<any>[] = [
+  { key: 'title', header: 'Title', render: (m) => m.title },
+  { key: 'year', header: 'Year', render: (m) => (m.year ? String(m.year) : '-') },
+  { key: 'quality', header: 'Quality', render: (m) => m.quality || '-' },
+  { key: 'state', header: 'State', render: (m) => <Pill state={statusToPillState(m.status)}>{m.status || 'lazy'}</Pill> },
+  { key: 'added', header: 'Added', render: (m) => formatAdded(m.created_at) },
+];
+
 export default function Library() {
   const [tab, setTab] = useState<Tab>('movies');
+  const { data: stats } = useQuery({ queryKey: ['stats'], queryFn: api.stats, staleTime: 60_000 });
   return (
     <div>
-      <div className="flex gap-2 border-b border-border mb-5">
-        {(['movies', 'series'] as Tab[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px capitalize transition ${
-              tab === t ? 'border-accent text-white' : 'border-transparent text-muted hover:text-white'
-            }`}
-          >
-            {t}
-          </button>
+      {stats && (
+        <div className="mb-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <StatTile value={String(stats.library.movie_count + stats.library.series_count)} label="Titles" glow="accent" />
+          <StatTile value={String(stats.library.episode_count)} label="Episodes" />
+          <StatTile value={`${Math.round(stats.requests.success_rate_7d)}%`} label="Success rate 7d" glow="ok" />
+        </div>
+      )}
+      <div className="flex gap-2 mb-5">
+        {([
+          ['all', 'All'],
+          ['movies', 'Movies'],
+          ['series', 'Series'],
+        ] as [Tab, string][]).map(([t, label]) => (
+          <Chip key={t} label={label} selected={tab === t} onClick={() => setTab(t)} />
         ))}
       </div>
-      {tab === 'movies' ? <MoviesPanel /> : <SeriesPanel />}
+      {tab !== 'series' && <MoviesPanel />}
+      {tab !== 'movies' && <SeriesPanel />}
     </div>
   );
 }
@@ -44,6 +78,7 @@ function MoviesPanel() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<'all' | 'available' | 'wanted'>('all');
+  const [view, setView] = useState<'grid' | 'table'>('grid');
   const [modalItem, setModalItem] = useState<{ tmdb_id: number; media_type: string; title: string } | null>(null);
 
   const items = useMemo(() => data?.items || [], [data]);
@@ -115,7 +150,7 @@ function MoviesPanel() {
   return (
     <>
       {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
+      <div className="flex flex-col sm:flex-row gap-3 mb-3">
         <input
           type="search"
           placeholder="Search movies..."
@@ -130,25 +165,22 @@ function MoviesPanel() {
             ['available', `Available (${available})`],
             ['wanted',    `Wanted (${wanted})`],
           ] as const).map(([v, label]) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => handleFilter(v)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
-                filter === v
-                  ? 'border-accent bg-accent/10 text-white'
-                  : 'border-border text-muted hover:text-white'
-              }`}
-            >
-              {label}
-            </button>
+            <Chip key={v} label={label} selected={filter === v} onClick={() => handleFilter(v)} />
           ))}
         </div>
       </div>
 
-      {/* Poster grid */}
+      {/* View toggle */}
+      <div className="flex justify-end gap-1 mb-3">
+        <Chip label="Grid" selected={view === 'grid'} onClick={() => setView('grid')} />
+        <Chip label="Table" selected={view === 'table'} onClick={() => setView('table')} />
+      </div>
+
+      {/* Poster grid / table */}
       {paginated.length === 0 ? (
         <p className="text-muted text-sm py-8 text-center">No movies found.</p>
+      ) : view === 'table' ? (
+        <DataTable columns={movieColumns} rows={paginated} empty="No movies found." />
       ) : (
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 200px))' }}>
           {paginated.map((m: any) => (
