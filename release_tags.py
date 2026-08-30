@@ -113,3 +113,81 @@ def detect_visual_tags(text: str) -> tuple[str, ...]:
     if "dv" in found and "hdr10" not in found:
         found.append("dv_only")
     return tuple(found)
+
+
+AUDIO_TAG_VALUES = (
+    "atmos", "truehd", "dts_hd", "dts", "ddp", "dd", "aac", "flac", "opus", UNKNOWN,
+)
+
+# A codec token may be followed by channel digits (DDP5.1), a separator, or the
+# end of the name, but never by another letter. A plain trailing \b would reject
+# DDP5.1 and AAC2.0, which are the most common real spellings. The negative
+# letter case is what keeps ddp from also satisfying dd.
+_AUDIO_TAG_TERMINATOR = r"(?=\d|\W|$)"
+
+_AUDIO_TAG_PATTERNS = (
+    ("atmos", re.compile(r"\batmos" + _AUDIO_TAG_TERMINATOR, re.IGNORECASE)),
+    ("truehd", re.compile(r"\btrue-?hd" + _AUDIO_TAG_TERMINATOR, re.IGNORECASE)),
+    ("dts_hd", re.compile(r"\bdts-?hd" + _AUDIO_TAG_TERMINATOR, re.IGNORECASE)),
+    ("dts", re.compile(r"\bdts" + _AUDIO_TAG_TERMINATOR, re.IGNORECASE)),
+    ("ddp", re.compile(r"\b(?:ddp|eac3|e-ac-3)" + _AUDIO_TAG_TERMINATOR, re.IGNORECASE)),
+    ("dd", re.compile(r"\b(?:dd|ac3|ac-3)" + _AUDIO_TAG_TERMINATOR, re.IGNORECASE)),
+    ("aac", re.compile(r"\baac" + _AUDIO_TAG_TERMINATOR, re.IGNORECASE)),
+    ("flac", re.compile(r"\bflac" + _AUDIO_TAG_TERMINATOR, re.IGNORECASE)),
+    ("opus", re.compile(r"\bopus" + _AUDIO_TAG_TERMINATOR, re.IGNORECASE)),
+)
+
+AUDIO_CHANNELS_VALUES = ("2.0", "5.1", "7.1", UNKNOWN)
+
+_AUDIO_CHANNEL_PATTERNS = (
+    ("7.1", re.compile(r"(?<!\d)7[\s._]?1(?!\d)")),
+    ("5.1", re.compile(r"(?<!\d)5[\s._]?1(?!\d)")),
+    ("2.0", re.compile(r"(?<!\d)2[\s._]?0(?!\d)")),
+)
+
+CATEGORIES = (
+    "resolution", "source", "encode", "visual_tag",
+    "audio_tag", "audio_channels", "language",
+)
+
+VALUES_BY_CATEGORY: dict[str, tuple[str, ...]] = {
+    "resolution": RESOLUTION_VALUES,
+    "source": SOURCE_VALUES,
+    "encode": ENCODE_VALUES,
+    "visual_tag": VISUAL_TAG_VALUES,
+    "audio_tag": AUDIO_TAG_VALUES,
+    "audio_channels": AUDIO_CHANNELS_VALUES,
+    "language": (),   # filled by Task 4 from streams.LANGUAGE_CODES
+}
+
+
+def detect_audio_tags(text: str) -> tuple[str, ...]:
+    blob = text or ""
+    return tuple(v for v, p in _AUDIO_TAG_PATTERNS if p.search(blob))
+
+
+def detect_audio_channels(text: str) -> tuple[str, ...]:
+    blob = text or ""
+    return tuple(v for v, p in _AUDIO_CHANNEL_PATTERNS if p.search(blob))
+
+
+def _or_unknown(values: tuple[str, ...]) -> tuple[str, ...]:
+    return values if values else (UNKNOWN,)
+
+
+def detect_all(text: str, languages: tuple[str, ...] = ()) -> dict[str, tuple[str, ...]]:
+    """Every category maps to a non-empty tuple. Silence is spelled UNKNOWN.
+
+    languages is passed in rather than detected here so this module never
+    imports streams, which would create a cycle.
+    """
+    resolution = detect_resolution(text)
+    return {
+        "resolution": (resolution,),
+        "source": _or_unknown(detect_sources(text)),
+        "encode": _or_unknown(detect_encode(text)),
+        "visual_tag": _or_unknown(detect_visual_tags(text)),
+        "audio_tag": _or_unknown(detect_audio_tags(text)),
+        "audio_channels": _or_unknown(detect_audio_channels(text)),
+        "language": _or_unknown(tuple(languages)),
+    }

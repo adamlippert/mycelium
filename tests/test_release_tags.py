@@ -85,3 +85,46 @@ def test_hdr10_plus_is_not_an_hdr10_fallback(text):
     assert "hdr10plus" in tags
     assert "hdr10" not in tags
     assert "dv_only" in tags
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Movie.2160p.TrueHD.Atmos.7.1", {"truehd", "atmos"}),
+    ("Movie.1080p.DTS-HD.MA.5.1", {"dts_hd", "dts"}),
+    ("Movie.1080p.DDP5.1.Atmos", {"ddp", "atmos"}),
+    ("Movie.1080p.AC3", {"dd"}),
+    ("Movie.1080p.AAC2.0", {"aac"}),
+    ("Movie.1080p.FLAC", {"flac"}),
+    ("Movie.1080p.x264", set()),
+    ("Movie.1080p.DD5.1", {"dd"}),
+    ("Movie.1080p.DDP.Atmos", {"ddp", "atmos"}),
+    ("Movie.AACS.Protected", set()),
+])
+def test_detect_audio_tags(text, expected):
+    assert set(rt.detect_audio_tags(text)) == expected
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Movie.2160p.TrueHD.7.1", {"7.1"}),
+    ("Movie.1080p.DDP5.1", {"5.1"}),
+    ("Movie.1080p.AAC2.0", {"2.0"}),
+    ("Movie.1080p.x264", set()),
+])
+def test_detect_audio_channels(text, expected):
+    assert set(rt.detect_audio_channels(text)) == expected
+
+
+def test_detect_all_covers_every_category():
+    tags = rt.detect_all("Movie.2024.1080p.WEB-DL.x265.HDR10.DDP5.1", ("en",))
+    assert set(tags) == set(rt.CATEGORIES)
+    assert tags["resolution"] == ("1080p",)
+    assert tags["source"] == ("webdl",)
+    assert tags["encode"] == ("hevc",)
+    assert tags["language"] == ("en",)
+
+
+def test_detect_all_uses_unknown_not_empty_for_silence():
+    """An empty tuple and UNKNOWN must not both be reachable, or the rule engine
+    has two spellings for the same idea."""
+    tags = rt.detect_all("Some.Release.Name", ())
+    for category, values in tags.items():
+        assert values == (rt.UNKNOWN,), f"{category} was {values!r}"
