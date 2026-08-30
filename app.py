@@ -68,7 +68,7 @@ configure_logging()
 log_buffer.install()
 log = logging.getLogger("mycelium")
 
-APP_VERSION = "0.7.2"
+APP_VERSION = "0.7.3"
 
 with open(_path.join(_path.dirname(__file__), "releases.json"), encoding="utf-8") as _f:
     RELEASES: list[dict] = _json.load(_f)

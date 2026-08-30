@@ -2,6 +2,16 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.7.3] - 2026-08-30
+
+### Fixed
+
+- **"Remove from library" left the title on screen.** The purge deleted the `.strm` files and their per-episode `.nfo`, and nothing else - but `nfo_generator` also writes the episode still (`<episode>-thumb.jpg`), `poster.jpg`/`fanart.jpg` in both the season folder and the series root, and `tvshow.nfo` in the series root. All of it survived, with two consequences: the folders were never empty so the `rmdir` sweep quietly left the whole tree in place, and Jellyfin, scanning a series folder that still held a valid `tvshow.nfo` and artwork, kept the show in the library. From the outside the button looked like it had done nothing, even though every `.strm` was already gone. The purge now clears those sidecars and removes the folders, deleting only filenames this project writes and skipping any folder that still holds a `.strm`, so a sibling title's files - and anything you put there yourself - keep both their artwork and their directory.
+- **A purge could delete the files and never tell Jellyfin.** `jellyfin.refresh_library()` debounces for 60 seconds so that bulk `.strm` generation does not hammer the server, but that also swallowed the refresh for a purge landing shortly after an unrelated one - observed live, 50 seconds after a scheduled refresh. A purge now forces the scan, and both skip paths log at info rather than debug, since the entire effect of a skip is something visibly not happening.
+- **`spore-nfs` and `spore-smb` no longer log every refresh.** Each printed `tree refreshed: N files, M dirs` roughly every ten seconds, from two processes, indefinitely - around seventeen thousand identical lines a day. With the compose default of `max-size 10m` / `max-file 5` that rotates real diagnostic history out of the log, and it actively obstructed diagnosing the bug above. Both now log only when the count changes, which also turns the log into a usable record of when the library actually moved.
+
+**Note:** the folder fix applies to future removals. A title purged by an earlier version has already left its artwork behind; those folders contain no `.strm` and can be deleted directly.
+
 ## [0.7.2] - 2026-08-30
 
 ### Added

@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.7.3",
+    "date": "2026-08-30",
+    "notes": [
+      "Fix: 'Remove from library' left the title visible in Jellyfin - the .strm files were deleted but the artwork and tvshow.nfo beside them were not, so the folder never emptied and Jellyfin kept scanning a valid-looking show",
+      "The purge only removes filenames Mycelium writes, and skips any folder still holding a .strm, so a sibling title's files and anything you put there yourself are left alone",
+      "Fix: a purge could delete the files and never tell Jellyfin, because the 60s refresh debounce swallowed the scan; a purge now forces it",
+      "Fix: spore-nfs and spore-smb logged a tree refresh every ten seconds each - about 17,000 lines a day - which rotated real history out of the log; they now log only on a change",
+      "Note: a title purged by an earlier version already left its artwork behind. Those folders hold no .strm and can be deleted directly."
+    ]
+  },
+  {
     "version": "0.7.2",
     "date": "2026-08-30",
     "notes": [
