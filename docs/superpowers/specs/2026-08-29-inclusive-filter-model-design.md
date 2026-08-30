@@ -3,7 +3,7 @@
 **Date:** 2026-08-29
 **Status:** draft, awaiting review
 **Scope:** C1 of two. C2 (rules-editor UI) is recorded at the end and is not
-covered here. C1 ships fully functional, edited as CSV settings rows.
+covered here. C1 ships fully functional, edited as plain comma-separated text rows.
 **Supersedes:** the abandoned exclusive-model work (`feat/ranking-and-limits`,
 `feat/source-type-filter-states`, both retired).
 
@@ -51,7 +51,7 @@ alternation. Nothing in the UI hints at any of this.
 resolution preference. Source type (remux, WEB-DL, cam) is expressed separately
 as booleans. The name has been wrong long enough that it appears in the UI, the
 README and `.env.example`. This is a migration hazard: `QUALITY_PREFERENCE` maps
-to `RESOLUTION_RULES`, not `QUALITY_RULES`.
+to the `RESOLUTION_*` rows, not the `SOURCE_*` ones.
 
 ### 4. The model can only subtract
 
@@ -133,14 +133,14 @@ Zilean result permanently.
 | Category | Values |
 |---|---|
 | `resolution` | 2160p, 1080p, 720p, 480p, unknown |
-| `quality` | remux, bluray, bdrip, brrip, webdl, webrip, web, hdrip, dvdrip, dvd, hdtv, satrip, tvrip, r5, ppvrip, ts, tc, scr, cam, unknown |
+| `source` | remux, bluray, bdrip, brrip, webdl, webrip, web, hdrip, dvdrip, dvd, hdtv, satrip, tvrip, r5, ppvrip, ts, tc, scr, cam, unknown |
 | `encode` | hevc, avc, av1, xvid, divx, unknown |
 | `visual_tag` | hdr10, hdr10plus, dv, dv_only, hlg, 10bit, sdr, imax, unknown |
 | `audio_tag` | atmos, truehd, dts_hd, dts, ddp, dd, aac, flac, opus, unknown |
 | `audio_channels` | 2.0, 5.1, 7.1, unknown |
 | `language` | the 34 codes in `streams.LANGUAGE_CODES`, plus unknown |
 
-`quality` splits what is today one overlapping pair into distinct, non-overlapping
+`source` splits what is today one overlapping pair into distinct, non-overlapping
 values, fixing defect 2. `bluray` no longer implies `bdrip`, and `bdremux`
 resolves to `remux`.
 
@@ -206,17 +206,17 @@ Defaults below are the shipped values, verified in `config.py`.
 
 | Current setting | Default | Becomes |
 |---|---|---|
-| `QUALITY_PREFERENCE` | `1080p,2160p,720p` | `RESOLUTION_RULES` preferred, in order. **Note the name trap.** |
-| `ALLOW_4K` | `true` | `RESOLUTION_RULES: 2160p=excluded` when false |
-| `EXCLUDE_REMUX` | `true` | `QUALITY_RULES: remux=excluded` |
-| `EXCLUDE_BLURAY` | `false` | `QUALITY_RULES: bluray,bdrip,brrip=excluded` (remux no longer swept up) |
-| `EXCLUDE_CAM` | `true` | `QUALITY_RULES: cam,ts,tc,scr,r5,ppvrip=excluded` |
-| `STRICT_NO_CAM` | `false` | `QUALITY_STRICT` |
-| `EXCLUDE_DV_P5` | `true` | `VISUAL_TAG_RULES: dv_only=excluded` |
-| `PREFER_WEBDL` | `true` | `QUALITY_RULES: webdl=preferred` |
-| `PREFER_HEVC` | `true` | `ENCODE_RULES: hevc=preferred` |
-| `AUDIO_LANGUAGE_PREFERENCE` | *(empty)* | `LANGUAGE_RULES` preferred, in order |
-| `EXCLUDE_LANGUAGES` | *(empty)* | `LANGUAGE_RULES` excluded. **Behaviour change, see below.** |
+| `QUALITY_PREFERENCE` | `1080p,2160p,720p` | `RESOLUTION_PREFERRED`, order kept. **Name trap: this is resolution.** |
+| `ALLOW_4K` | `true` | when false, `2160p` joins `RESOLUTION_EXCLUDED` |
+| `EXCLUDE_REMUX` | `true` | `SOURCE_EXCLUDED` gains `remux` |
+| `EXCLUDE_BLURAY` | `false` | `SOURCE_EXCLUDED` gains `bluray,bdrip,brrip` (remux no longer swept up) |
+| `EXCLUDE_CAM` | `true` | `SOURCE_EXCLUDED` gains `cam,ts,tc,scr,r5,ppvrip` |
+| `STRICT_NO_CAM` | `false` | `SOURCE_STRICT` |
+| `EXCLUDE_DV_P5` | `true` | `VISUAL_TAG_EXCLUDED` gains `dv_only` |
+| `PREFER_WEBDL` | `true` | `SOURCE_PREFERRED` gains `webdl` |
+| `PREFER_HEVC` | `true` | `ENCODE_PREFERRED` gains `hevc` |
+| `AUDIO_LANGUAGE_PREFERENCE` | *(empty)* | `LANGUAGE_PREFERRED`, order kept |
+| `EXCLUDE_LANGUAGES` | *(empty)* | `LANGUAGE_EXCLUDED`. **Behaviour change, see below.** |
 | `MIN_SEEDERS` | `3` | unchanged, not a category |
 | `MAX_SIZE_GB` | `0` | unchanged, not a category |
 | `EXCLUDE_UNDERSIZED_RELEASES` | `true` | unchanged, not a category |
@@ -265,14 +265,72 @@ will look like ranking bugs. Every pattern needs a test with a real release name
 like language-on-Zilean. The `unknown` rule covers it, but each new category
 needs an explicit answer to "which sources can actually populate this?"
 
-**Migration is one-way.** Once `*_RULES` rows exist, the old booleans stop being
+**Migration is one-way.** Once the new rows exist, the old booleans stop being
 read. A migration that misreads a setting is a silent behaviour change in the
 user's download picks, which is exactly the class of bug that is hardest to
 notice. The migration needs its own test per row of the table above.
 
+## Setting names, in full
+
+Seven categories, each with four state lists plus one strict toggle. Thirty-five
+settings.
+
+```
+RESOLUTION_PREFERRED      SOURCE_PREFERRED        ENCODE_PREFERRED
+RESOLUTION_EXCLUDED       SOURCE_EXCLUDED         ENCODE_EXCLUDED
+RESOLUTION_REQUIRED       SOURCE_REQUIRED         ENCODE_REQUIRED
+RESOLUTION_INCLUDED       SOURCE_INCLUDED         ENCODE_INCLUDED
+RESOLUTION_STRICT         SOURCE_STRICT           ENCODE_STRICT
+
+VISUAL_TAG_PREFERRED      AUDIO_TAG_PREFERRED     AUDIO_CHANNELS_PREFERRED
+VISUAL_TAG_EXCLUDED       AUDIO_TAG_EXCLUDED      AUDIO_CHANNELS_EXCLUDED
+VISUAL_TAG_REQUIRED       AUDIO_TAG_REQUIRED      AUDIO_CHANNELS_REQUIRED
+VISUAL_TAG_INCLUDED       AUDIO_TAG_INCLUDED      AUDIO_CHANNELS_INCLUDED
+VISUAL_TAG_STRICT         AUDIO_TAG_STRICT        AUDIO_CHANNELS_STRICT
+
+LANGUAGE_PREFERRED   LANGUAGE_EXCLUDED   LANGUAGE_REQUIRED
+LANGUAGE_INCLUDED    LANGUAGE_STRICT
+```
+
+Eleven settings are retired by the migration: `QUALITY_PREFERENCE`, `ALLOW_4K`,
+`EXCLUDE_REMUX`, `EXCLUDE_BLURAY`, `EXCLUDE_CAM`, `STRICT_NO_CAM`,
+`EXCLUDE_DV_P5`, `PREFER_WEBDL`, `PREFER_HEVC`, `AUDIO_LANGUAGE_PREFERENCE`,
+`EXCLUDE_LANGUAGES`. Three are untouched because they are not categories:
+`MIN_SEEDERS`, `MAX_SIZE_GB`, `EXCLUDE_UNDERSIZED_RELEASES`.
+
+### Why the source category is not called `quality`
+
+`QUALITY_PREFERENCE` already exists and holds a **resolution**. A new
+`QUALITY_PREFERRED` would sit two characters away from it while meaning
+something entirely different, which is a defect waiting to be filed. The
+category is named `SOURCE_*`, and the migration deletes the misnomer.
+
+`LANGUAGE_*` is likewise distinct from the retired `AUDIO_LANGUAGE_PREFERENCE`.
+
+### Stale values left in .env
+
+A retired key sitting in a user's `.env` becomes silently inert after upgrade.
+Startup must log a warning naming each retired key it still finds, and what
+replaced it. Without this, a user who set `QUALITY_PREFERENCE` in `.env` sees
+their preference stop working with no message anywhere.
+
 ## C2, recorded
 
-A per-category grid of values against the four states, replacing the CSV boxes,
-plus an explicit warning on `included`. Needs a new input kind in `ui.html`. C1
-is robust; C2 is what makes it intuitive. C2 must not begin before C1's data
+A per-category editor replacing the text boxes. Each category renders every
+possible value as a row with a single control offering five choices: **No rule**,
+Preferred, Excluded, Required, Included. That is the dropdown that makes the
+thirty-five text fields disappear from view: the user picks from a fixed list
+and can no longer type a value that does not exist.
+
+Two requirements a plain dropdown does **not** satisfy, and which C2 must
+handle:
+
+- **Order matters for Preferred.** `1080p` before `2160p` is a different
+  preference from the reverse. State alone does not capture it, so preferred
+  values need drag-to-reorder or an explicit priority number.
+- **Included needs a visible warning.** It overrides every other rule across
+  every category, so marking `atmos` as Included will keep a cam rip that
+  happens to carry Atmos. The control must say so at the point of choosing.
+
+C1 is robust, C2 is what makes it intuitive. C2 must not begin before C1's data
 model is settled.
