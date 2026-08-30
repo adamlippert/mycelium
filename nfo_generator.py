@@ -82,33 +82,55 @@ _BAD_TITLE_RE = re.compile(r'^Season\s+\d+$', re.IGNORECASE)
 
 
 def repair_tvshow_titles() -> dict:
-    """Rewrite tvshow.nfo files whose title is 'Season XX' instead of the real show name.
+    """Rewrite NFO files whose title is 'Season XX' instead of the real title.
+
+    Covers series (tvshow.nfo) and movies. The bug that produced these titles
+    could only reach tvshow.nfo - a movie's NFO sits in the movie's own folder,
+    so its title was always derived correctly - but a repair that inspects half
+    the library cannot report the other half is clean.
 
     Uses (in order of preference):
       1. Canonical title from monitored_series table (by imdb_id)
       2. Folder name stripped of trailing region codes like (IN) or (ZA)
     """
     media = Path(MEDIA_PATH)
-    series_dir = media / "series"
-    if not series_dir.is_dir():
-        return {"fixed": 0, "skipped": 0}
-
     monitored_by_imdb = {s["imdb_id"]: s["title"] for s in db.get_all_monitored_series()}
 
+    # Series first, then movies. The bug that produced these titles could only
+    # ever hit tvshow.nfo - a movie's NFO sits in the movie's own folder, so its
+    # title was always right - but a repair that only inspects half the library
+    # cannot tell you the other half is clean, so it checks both.
+    targets: list[tuple[Path, Path]] = []   # (title folder, nfo path)
+    series_dir = media / "series"
+    if series_dir.is_dir():
+        for folder in sorted(series_dir.iterdir()):
+            if folder.is_dir() and (folder / "tvshow.nfo").exists():
+                targets.append((folder, folder / "tvshow.nfo"))
+    movies_dir = media / "movies"
+    if movies_dir.is_dir():
+        for folder in sorted(movies_dir.iterdir()):
+            if not folder.is_dir():
+                continue
+            # Movie NFOs are named after the file, not "movie.nfo".
+            targets.extend((folder, n) for n in sorted(folder.glob("*.nfo")))
+
+    if not targets:
+        return {"fixed": 0, "skipped": 0}
+
     fixed = skipped = 0
-    for folder in sorted(series_dir.iterdir()):
-        if not folder.is_dir():
-            continue
-        nfo_path = folder / "tvshow.nfo"
-        if not nfo_path.exists():
-            continue
+    for folder, nfo_path in targets:
+        is_movie = nfo_path.parent.parent.name == "movies"
         try:
             root = ET.parse(nfo_path).getroot()
         except Exception:
             continue
 
         title_el = root.find("title")
-        if not title_el or not title_el.text:
+        # `is None`, not truthiness: an Element's truth value is its CHILD
+        # count, so <title>Season 01</title> (no children) is falsy and this
+        # guard silently skipped every file, which is why this function never
+        # repaired anything.
+        if title_el is None or not title_el.text:
             continue
         if not _BAD_TITLE_RE.match(title_el.text.strip()):
             continue  # title already looks correct
@@ -124,7 +146,14 @@ def repair_tvshow_titles() -> dict:
             correct_title = re.sub(r'\s+\([A-Z]{2}\)$', '', folder.name).strip() or folder.name
 
         try:
-            nfo_path.write_text(_tvshow_nfo(correct_title, imdb_id), encoding="utf-8")
+            if is_movie:
+                m_yr = _YEAR_RE.search(folder.name)
+                content = _movie_nfo(correct_title,
+                                     int(m_yr.group(1)) if m_yr else None,
+                                     imdb_id)
+            else:
+                content = _tvshow_nfo(correct_title, imdb_id)
+            nfo_path.write_text(content, encoding="utf-8")
             log.info("NFO repair: '%s' -> '%s' (%s)", title_el.text.strip(), correct_title, nfo_path)
             fixed += 1
         except Exception as exc:
