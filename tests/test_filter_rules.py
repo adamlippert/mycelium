@@ -102,25 +102,39 @@ def test_a_drop_names_the_rule_and_the_value():
 
 
 def test_evaluation_is_order_independent(monkeypatch):
-    """Each category sees the full pool, so no category can shrink the pool
-    another category then evaluates against."""
+    """Two candidates, each condemned by a different category.
+
+    Under a sequential chain the category that runs second sees a pool of one,
+    drops it, relaxes against that shrunken pool, and the survivor depends
+    entirely on category order: forward keeps the first candidate, reversed
+    keeps the second. Evaluating every category against the FULL pool and
+    unioning the votes gives the same answer either way, and here that answer
+    is to relax both rules and keep both candidates.
+
+    A fixture where no category empties its own local pool cannot detect the
+    difference, because relaxation is the only pool-dependent behaviour in the
+    engine.
+    """
     tagged = [
-        _tag("Movie.2160p.BluRay.REMUX.x265"),
-        _tag("Movie.1080p.WEB-DL.x264"),
-        _tag("Movie.720p.HDCAM.x264"),
+        _tag("Movie.1080p.HDCAM.x264"),   # condemned by SOURCE_EXCLUDED
+        _tag("Movie.720p.WEB-DL.x264"),   # condemned by RESOLUTION_EXCLUDED
     ]
-    rules = _rules(source={"excluded": ["remux", "cam"]},
+    rules = _rules(source={"excluded": ["cam"]},
                    resolution={"excluded": ["720p"]})
+
     forward = fr.evaluate(tagged, rules)
 
     # evaluate() iterates rt.CATEGORIES, so the evaluation order lives THERE,
-    # not in the rules dict. Reversing the dict would change nothing and the
-    # test would pass against a sequential implementation too.
+    # not in the rules dict. Reversing the dict would change nothing.
     monkeypatch.setattr(fr.rt, "CATEGORIES", tuple(reversed(rt.CATEGORIES)))
     backward = fr.evaluate(tagged, rules)
 
-    assert [v.kept for v in forward] == [v.kept for v in backward]
-    assert [v.kept for v in forward] == [False, True, False]
+    assert [v.kept for v in forward] == [v.kept for v in backward], (
+        "category order changed the outcome: "
+        f"forward={[v.kept for v in forward]} backward={[v.kept for v in backward]}")
+    assert [v.kept for v in forward] == [True, True], (
+        "the union of votes covers the whole pool, so both non-strict rules "
+        "relax and both candidates survive")
 
 
 def test_required_does_not_drop_unknown():
