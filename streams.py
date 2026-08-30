@@ -4,6 +4,7 @@ Zilean, Torrentio and Debridio all produce Stream objects and are ranked by
 the same function. That function used to live in torrentio.py, which made it
 look Torrentio-specific; it never was.
 """
+import copy
 import logging
 import re
 from dataclasses import dataclass
@@ -366,3 +367,35 @@ def rank_streams(
 
     candidates.sort(key=sort_key)
     return candidates
+
+
+def _apply_show_override(rules: dict, override: dict) -> dict:
+    """Translate the three show_quality_override fields into the rule model.
+
+    Returns a deep copy so a per-show override never leaks into the next call.
+    runtime_minutes is not a filter category and is handled elsewhere.
+    """
+    if not override:
+        return rules
+    out = copy.deepcopy(rules)
+
+    raw = override.get("quality_preference")
+    if raw:
+        out["resolution"]["preferred"] = [
+            v.strip().lower() for v in str(raw).split(",") if v.strip()
+        ]
+
+    allow_4k = override.get("allow_4k")
+    if allow_4k is not None and not allow_4k:
+        if "2160p" not in out["resolution"]["excluded"]:
+            out["resolution"]["excluded"].append("2160p")
+
+    prefer_hevc = override.get("prefer_hevc")
+    if prefer_hevc is not None:
+        preferred = out["encode"]["preferred"]
+        if prefer_hevc and "hevc" not in preferred:
+            preferred.insert(0, "hevc")
+        elif not prefer_hevc and "hevc" in preferred:
+            preferred.remove("hevc")
+
+    return out

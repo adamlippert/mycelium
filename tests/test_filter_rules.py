@@ -70,6 +70,7 @@ def test_language_vocabulary_is_never_reachable_as_an_empty_value():
 
 
 import filter_rules as fr
+import streams
 
 
 def _rules(**kw):
@@ -216,3 +217,33 @@ def test_relaxed_is_not_set_on_survivors_of_an_unrelaxed_run(monkeypatch):
     verdicts = fr.evaluate(tagged, _rules(source={"excluded": ["cam"]}))
     assert verdicts[0].kept is True and verdicts[0].relaxed is False
     assert verdicts[1].kept is False
+
+
+def test_show_override_replaces_resolution_preference():
+    rules = _rules(resolution={"preferred": ["1080p"]})
+    out = streams._apply_show_override(rules, {"quality_preference": "2160p,1080p"})
+    assert out["resolution"]["preferred"] == ["2160p", "1080p"]
+
+
+def test_show_override_allow_4k_false_excludes_2160p():
+    out = streams._apply_show_override(_rules(), {"allow_4k": False})
+    assert "2160p" in out["resolution"]["excluded"]
+
+
+def test_show_override_prefer_hevc_adds_and_removes():
+    on = streams._apply_show_override(_rules(), {"prefer_hevc": True})
+    assert "hevc" in on["encode"]["preferred"]
+    off = streams._apply_show_override(
+        _rules(encode={"preferred": ["hevc"]}), {"prefer_hevc": False})
+    assert "hevc" not in off["encode"]["preferred"]
+
+
+def test_show_override_does_not_mutate_the_global_rules():
+    base = _rules(resolution={"preferred": ["1080p"]})
+    streams._apply_show_override(base, {"quality_preference": "720p"})
+    assert base["resolution"]["preferred"] == ["1080p"], "global rules were mutated"
+
+
+def test_empty_override_changes_nothing():
+    base = _rules(resolution={"preferred": ["1080p"]})
+    assert streams._apply_show_override(base, {}) == base
