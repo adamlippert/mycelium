@@ -2,6 +2,19 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.7.5] - 2026-08-30
+
+### Fixed
+
+- **The retry queue never drained.** Three separate paths let it grow without limit. `processor.process()` re-queued on a mutex miss by calling `db.enqueue_retry` directly instead of going through `retry_queue`, which skipped `schedule()`'s give-up check and passed the attempt count unchanged rather than `+1` - so a title that kept colliding re-queued every 60 seconds indefinitely with its progress toward being abandoned frozen at zero. `run_due()` bails when the TorBox createtorrent budget is nearly spent, leaving rows due but unprocessed, and a row that is never processed never increments its attempt either, so under sustained budget pressure the queue only grew. And `retry_queue` had no `UNIQUE` on `imdb_id` and appeared in no prune target, so a single title could hold many rows and nothing ever removed them. Observed on a live instance as 8 rows for 2 titles, 7 of them the same title - more than `schedule()` alone can produce, which is the signature of the collision path specifically.
+- A mutex miss now goes through `requeue_after_collision()`, capped at `MAX_COLLISION_REQUEUES` and deliberately not raising `attempt`, because a scheduling collision is not a failed attempt. The count is held in memory rather than on the row: the row is deleted the moment the retry fires, so a column would reset every cycle and never reach the cap, and the locks it guards are in-process too, so a restart legitimately clears both.
+- `enqueue_retry()` is now an upsert against a unique `imdb_id`, taking `MAX(attempt)` so a collision re-queue cannot reset a title's progress. The migration collapses existing duplicates first, keeping the furthest-along attempt, since the unique index cannot be created while duplicates exist and a failed migration means the container does not boot.
+- Rows older than a week are pruned twice daily.
+
+### Added
+
+- **A "Clear retry queue" button** in Maintenance. The dashboard already displayed the pending retries but offered no way to act on them.
+
 ## [0.7.4] - 2026-08-30
 
 ### Fixed

@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.7.5",
+    "date": "2026-08-30",
+    "notes": [
+      "Fix: the retry queue never drained - a scheduling collision re-queued a title every 60 seconds forever, bypassing the give-up cap, and nothing enforced one row per title or pruned old rows",
+      "Upgrading collapses any duplicate rows you already have, keeping the furthest-along attempt; one row per title is enforced from then on",
+      "Rows still queued after a week are now pruned twice daily",
+      "New: a 'Clear retry queue' button in Maintenance, since the dashboard showed the queue but gave you no way to empty it"
+    ]
+  },
+  {
     "version": "0.7.4",
     "date": "2026-08-30",
     "notes": [
