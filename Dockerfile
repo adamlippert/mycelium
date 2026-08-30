@@ -49,6 +49,8 @@ RUN echo "deb http://deb.debian.org/debian bookworm contrib non-free non-free-fi
         ffmpeg \
         libva2 \
         libva-drm2 \
+        gosu \
+        libcap2-bin \
     && if [ "$TARGETARCH" = "amd64" ]; then \
         apt-get install -y --no-install-recommends intel-media-va-driver; \
     fi \
@@ -69,6 +71,16 @@ COPY static/ ./static/
 COPY --from=spore-nfs /spore-nfs /usr/local/bin/spore-nfs
 COPY --from=spore-smb /spore-smb /usr/local/bin/spore-smb
 
+# SMB's port 445 is below 1024, so opening it normally requires root. Marking
+# the binary itself lets it bind that port at any user id, which keeps the
+# share working when PUID is set. Capabilities live in the file's extended
+# attributes, so this has to happen after the COPY, not in the build stage.
+RUN setcap cap_net_bind_service=+ep /usr/local/bin/spore-smb
+
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["docker-entrypoint.sh"]
+
 ENV MYCELIUM_BASE=http://127.0.0.1:8088
 
 EXPOSE 8088 2049 445
@@ -79,4 +91,7 @@ port=os.environ.get('LISTEN_PORT','8088'); \
 r=urllib.request.urlopen(f'http://127.0.0.1:{port}/health',timeout=5); \
 sys.exit(0 if r.status==200 else 1)" || exit 1
 
-CMD ["sh", "-c", "LISTEN_ADDR=:2049 spore-nfs & LISTEN_ADDR=0.0.0.0:445 spore-smb & exec gunicorn --bind ${LISTEN_HOST}:${LISTEN_PORT} --workers 1 --threads 16 --access-logfile - app:app"]
+CMD ["sh", "-c", "\
+( LISTEN_ADDR=:2049 spore-nfs; echo \"[mycelium] spore-nfs exited (status $?); the NFS share is now unavailable\" >&2 ) & \
+( LISTEN_ADDR=0.0.0.0:445 spore-smb; echo \"[mycelium] spore-smb exited (status $?); the SMB share is now unavailable\" >&2 ) & \
+exec gunicorn --bind ${LISTEN_HOST}:${LISTEN_PORT} --workers 1 --threads 16 --access-logfile - app:app"]

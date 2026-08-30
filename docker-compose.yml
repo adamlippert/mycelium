@@ -7,6 +7,10 @@ services:
     ports:
       - "8088:8088"
       - "8089:8089"
+      # NFS and SMB shares. These are the virtual library exposed read-only and
+      # anonymously - fine on a home LAN, but do NOT leave them reachable from
+      # the internet. On a public host prefix both with 127.0.0.1: to bind them
+      # to loopback, or delete them if you only use Jellyfin/Plex directly.
       - "2049:2049"
       - "4450:445"
     env_file:
@@ -14,6 +18,10 @@ services:
     environment:
       - LISTEN_HOST=0.0.0.0
       - LISTEN_PORT=8088
+      # Match your Jellyfin/Plex user so all three can delete each other's
+      # files. `docker exec jellyfin id` prints the numbers. See .env.example.
+      - PUID=${PUID:-0}
+      - PGID=${PGID:-0}
     devices:
       - /dev/dri:/dev/dri
     group_add:
