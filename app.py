@@ -1118,6 +1118,18 @@ def ui_api_activity():
     return jsonify(events=db.get_activity(50))
 
 
+@app.get("/ui/api/repair")
+def ui_api_repair():
+    """Repair history for the Maintenance tab, so it can refresh in place.
+
+    Admin-only: repair items carry filesystem paths, and the tab that renders
+    them is behind the admin gate already.
+    """
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    return jsonify(stats.get_repair_overview())
+
+
 @app.get("/ui/api/torbox-list")
 def ui_api_torbox_list():
     try:

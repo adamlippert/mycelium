@@ -625,6 +625,9 @@
       </div>
     </div>
 
+    <!-- refreshRepair() replaces the contents of this container, so it must be
+         present whether or not a cleanup has run yet. -->
+    <div id="repair-summary">
     {% if last_cleanup %}
     <div class="stats" style="margin-bottom:16px">
       <div class="stat"><div class="stat-val">{{ last_cleanup.scanned }}</div><div class="stat-lbl">Scanned</div></div>
@@ -636,6 +639,7 @@
     {% else %}
     <p class="dim" style="margin-bottom:16px;font-size:13px">No cleanup run yet.</p>
     {% endif %}
+    </div>
     <input type="text" class="search-bar" placeholder="Search repairs..." data-filter="repair-table">
     <div class="table-wrap">
       <table id="repair-table">
@@ -1014,6 +1018,68 @@
         list.appendChild(pill);
       });
     } catch(e) {}
+  }
+
+  // ── Maintenance: repair history ──
+  // The repair summary and table are server-rendered, so for a long time the
+  // only way to refresh them was location.reload() on a two-minute timer -
+  // which threw away scroll position, the open tab and any half-typed input
+  // across the entire dashboard. These patch the two blocks in place instead.
+
+  // Jinja auto-escapes; hand-built HTML does not. Titles, paths and reasons
+  // come from torrent names and the filesystem, so they get escaped here.
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function _repairSummaryHtml(c) {
+    if (!c) return '<p class="dim" style="margin-bottom:16px;font-size:13px">No cleanup run yet.</p>';
+    return `<div class="stats" style="margin-bottom:16px">
+      <div class="stat"><div class="stat-val">${esc(c.scanned)}</div><div class="stat-lbl">Scanned</div></div>
+      <div class="stat"><div class="stat-val" style="color:var(--green)">${esc(c.repaired)}</div><div class="stat-lbl">Repaired</div></div>
+      <div class="stat"><div class="stat-val">${esc(c.deleted)}</div><div class="stat-lbl">Deleted</div></div>
+      <div class="stat"><div class="stat-val" style="color:var(--red)">${esc(c.unfixable)}</div><div class="stat-lbl">Unfixable</div></div>
+      <div class="stat" style="min-width:160px"><div class="stat-val" style="font-size:13px;margin-top:4px">${esc((c.ran_at || '').slice(0, 16))}</div><div class="stat-lbl">Last Run</div></div>
+    </div>`;
+  }
+
+  function _repairRowHtml(i) {
+    const hash = i.new_info_hash ? esc(i.new_info_hash.slice(0, 16)) + '...' : '---';
+    return `<tr>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(i.path)}">${esc(i.title || i.path)}</td>
+      <td class="dim">${esc(i.media_type || '---')}</td>
+      <td><span class="badge badge-${esc(i.status)}">${esc(i.status)}</span></td>
+      <td class="mono dim">${esc(i.old_torrent_id || '---')}</td>
+      <td class="mono dim" style="font-size:10px">${hash}</td>
+      <td class="dim" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.reason || '---')}</td>
+      <td class="dim">${esc((i.created_at || '').slice(0, 16))}</td>
+    </tr>`;
+  }
+
+  async function refreshRepair() {
+    try {
+      const r = await fetch('/ui/api/repair');
+      if (!r.ok) return;
+      const d = await r.json();
+      const summary = document.getElementById('repair-summary');
+      if (summary) summary.innerHTML = _repairSummaryHtml(d.last_cleanup);
+      const body = document.getElementById('repair-body');
+      if (!body) return;
+      const rows = (d.items || []).map(_repairRowHtml);
+      body.innerHTML = rows.length
+        ? rows.join('')
+        : '<tr><td colspan="7" class="empty">No repair history yet</td></tr>';
+      // The rows just got replaced, which drops the display:none the search
+      // filter had set on them. Re-run the existing handler rather than
+      // duplicating its logic here.
+      const filter = document.querySelector('[data-filter="repair-table"]');
+      if (filter && filter.value) filter.dispatchEvent(new Event('input'));
+    } catch (e) {}
   }
 
   // ── Overview ──
@@ -1766,7 +1832,9 @@
   setInterval(refreshHealth, 30000);
   setInterval(pollActivity, 5000);
   setInterval(() => { if (Date.now() - userIdleSince > 10000) refreshOverview(); }, 30000);
-  setInterval(() => { if (Date.now() - userIdleSince > 10000) location.reload(); }, 120000);
+  // Was location.reload(). Same cadence, same idle gate; it now refreshes the
+  // one thing that needed it instead of destroying the page to get it.
+  setInterval(() => { if (Date.now() - userIdleSince > 10000) refreshRepair(); }, 120000);
 
   // ── Discover ──────────────────────────────────────────────────────────
   const TMDB_IMG = 'https://image.tmdb.org/t/p/w342';

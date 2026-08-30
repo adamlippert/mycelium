@@ -77,3 +77,20 @@ def get_storage_breakdown(limit: int = 20) -> list[dict]:
                     counts[f"{sub}/{entry.name}"] = n
     items = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:limit]
     return [{"path": p, "count": c} for p, c in items]
+
+
+def get_repair_overview(limit: int = 200) -> dict:
+    """Everything the repair half of the Maintenance tab renders.
+
+    That half is server-rendered, and until this existed the only way to
+    refresh it was to reload the whole dashboard, which is exactly what
+    templates/ui.html used to do every two minutes.
+
+    last_cleanup is None before the first cleanup run; the template renders
+    "No cleanup run yet." for that, so the key is always present rather than
+    omitted.
+    """
+    return {
+        "items": db.get_repair_items(limit),
+        "last_cleanup": db.get_last_cleanup_run(),
+    }

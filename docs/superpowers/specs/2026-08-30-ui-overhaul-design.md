@@ -241,7 +241,7 @@ eight React tabs, dropping nothing:
 | Filter rules | New. The C2 editor. |
 | Scrapers | New. Health panel. |
 | Logs | Jinja `logs` |
-| Maintenance | Jinja `maintenance` plus `repair` |
+| Maintenance | Jinja `maintenance`, whose lower half is the repair history |
 | Blacklist | Jinja `blacklist` |
 
 `Admin.tsx` (745 lines) becomes one file per tab under
@@ -315,6 +315,30 @@ recovered remotely, so:
 
 Rollback is therefore: unset `UI_V2`, redeploy. If even that is impossible,
 `/login/classic` still serves the working Jinja login.
+
+## Refresh policy
+
+The Jinja dashboard called `location.reload()` on a two-minute timer, gated on
+ten seconds of idleness that only `click` and `keydown` reset. Reading and
+scrolling never counted, so the reload was effectively unconditional. It threw
+away scroll position, the open tab and any half-typed input, and it existed for
+one reason: the repair half of the Maintenance tab was server-rendered and had
+no JSON endpoint behind it.
+
+That is fixed on `main` ahead of this project (`GET /ui/api/repair` plus a
+`refreshRepair()` patcher). The rule it establishes binds the React admin:
+
+1. **No route ever reloads itself.** `location.reload()` does not appear in the
+   codebase. `tests/test_admin_refresh.py` fails if it comes back.
+2. **Background refetch keeps rendered data mounted.** A refresh in flight never
+   falls back to a loading state over content that is already on screen.
+3. **Polling runs only while its panel is visible** and stops when it is not.
+4. **Anything polling faster than 10 seconds carries a reason in the code.** The
+   logs panel at 5 seconds is the only such case, and it stops when its tab is
+   hidden.
+5. **Rebuilt rows re-apply active filters.** Replacing a table body drops
+   whatever a search box had hidden. React handles this by construction; the
+   rule is recorded because the Jinja version got it wrong.
 
 ## Backend additions
 
