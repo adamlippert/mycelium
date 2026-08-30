@@ -150,41 +150,44 @@ CATEGORIES = (
     "audio_tag", "audio_channels", "language",
 )
 
-def _language_values() -> tuple[str, ...]:
-    from streams import LANGUAGE_CODES
-    return tuple(LANGUAGE_CODES) + (UNKNOWN,)
-
-
-class _CategoryValues(dict):
-    """dict whose 'language' entry resolves lazily on first access.
-
-    Plain indexing (VALUES_BY_CATEGORY["language"]) behaves exactly like
-    calling language_values() directly, without importing streams until
-    something actually asks for the language vocabulary. That keeps the
-    streams import out of this module's top level, which is what avoids the
-    settings -> release_tags -> streams cycle while streams is mid-import.
-    """
-
-    def __getitem__(self, key):
-        if key == "language" and not dict.__getitem__(self, key):
-            dict.__setitem__(self, key, _language_values())
-        return dict.__getitem__(self, key)
-
-
-VALUES_BY_CATEGORY: dict[str, tuple[str, ...]] = _CategoryValues({
+# Static per-category vocabularies. "language" is deliberately absent: it is
+# not static, it is resolved lazily by values_for() below. There is no
+# all-seven-categories mapping on this module, on purpose - a dict that looks
+# fully populated but has a permanently-empty "language" slot invites
+# .get()/.items()/.values()/dict(d)/.copy() reads that would silently return
+# an empty vocabulary instead of raising, which is exactly the silent-wrong-
+# value failure mode this whole filter model exists to remove.
+_STATIC_CATEGORY_VALUES: dict[str, tuple[str, ...]] = {
     "resolution": RESOLUTION_VALUES,
     "source": SOURCE_VALUES,
     "encode": ENCODE_VALUES,
     "visual_tag": VISUAL_TAG_VALUES,
     "audio_tag": AUDIO_TAG_VALUES,
     "audio_channels": AUDIO_CHANNELS_VALUES,
-    "language": (),   # resolved lazily on first access, see _CategoryValues
-})
+}
+
+_language_cache: tuple[str, ...] = ()
+
+
+def values_for(category: str) -> tuple[str, ...]:
+    """The vocabulary a user may type for one category.
+
+    Language is resolved on first call rather than at import, because
+    streams imports settings which imports this module, and a module-level
+    streams import here would be a cycle. Every other category is static.
+    """
+    global _language_cache
+    if category == "language":
+        if not _language_cache:
+            from streams import LANGUAGE_CODES
+            _language_cache = tuple(LANGUAGE_CODES) + (UNKNOWN,)
+        return _language_cache
+    return _STATIC_CATEGORY_VALUES[category]
 
 
 def language_values() -> tuple[str, ...]:
     """Resolved lazily because streams imports release_tags indirectly."""
-    return VALUES_BY_CATEGORY["language"]
+    return values_for("language")
 
 
 def detect_audio_tags(text: str) -> tuple[str, ...]:

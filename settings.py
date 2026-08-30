@@ -371,8 +371,7 @@ def set(key: str, value) -> None:
             )
     if key in _RULE_LIST_KEYS:
         category = _RULE_LIST_KEYS[key]
-        vocabulary = (_rt.language_values() if category == "language"
-                      else _rt.VALUES_BY_CATEGORY[category])
+        vocabulary = _rt.values_for(category)
         values = [v.strip().lower() for v in
                   (value if isinstance(value, list) else str(value).split(","))
                   if str(v).strip()]

@@ -55,4 +55,15 @@ def test_setting_a_known_value_is_accepted(monkeypatch):
 def test_unknown_is_a_settable_value_in_every_category():
     """Excluding 'unknown' is how a user asks for positively-tagged releases only."""
     for category in rt.CATEGORIES:
-        assert rt.UNKNOWN in rt.VALUES_BY_CATEGORY[category], category
+        assert rt.UNKNOWN in rt.values_for(category), category
+
+
+def test_language_vocabulary_is_never_reachable_as_an_empty_value():
+    """A half-populated mapping would let validation silently accept any
+    language string. values_for is the single accessor precisely so there is
+    no alternative path that returns an unresolved empty vocabulary."""
+    assert not hasattr(rt, "VALUES_BY_CATEGORY"), (
+        "a public all-categories mapping invites .get()/.items() access that "
+        "bypasses lazy resolution")
+    assert len(rt.values_for("language")) > 30
+    assert rt.UNKNOWN in rt.values_for("language")
