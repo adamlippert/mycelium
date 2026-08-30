@@ -144,3 +144,34 @@ def test_live_size_and_seeder_settings_survive():
     for key in ("MIN_SEEDERS", "MAX_SIZE_GB", "EXCLUDE_UNDERSIZED_RELEASES",
                 "EXCLUDE_UNDERSIZED_STRICT", "OPENSUBTITLES_LANGUAGES"):
         assert key in shown, f"{key} is live but no longer editable"
+
+
+def test_the_series_title_repair_is_reachable_from_the_ui():
+    """repair_tvshow_titles() and its endpoint existed for months with no
+    button anywhere, so the only way to run it was to call the URL by hand.
+    A repair nobody can find does not repair anything.
+    """
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parent.parent
+    ui = (root / "templates" / "ui.html").read_text()
+    app_src = (root / "app.py").read_text()
+
+    assert "/ui/api/repair-tvshow-titles" in app_src, "endpoint disappeared"
+    assert "repairTvshowTitles" in ui, "no handler wired up in the admin UI"
+    assert "/ui/api/repair-tvshow-titles" in ui, "the button does not call the endpoint"
+
+
+def test_every_maintenance_button_calls_an_endpoint_that_exists():
+    """A renamed route leaves a button that fails only when someone clicks it."""
+    import pathlib
+    import re
+    root = pathlib.Path(__file__).resolve().parent.parent
+    ui = (root / "templates" / "ui.html").read_text()
+    app_src = (root / "app.py").read_text()
+
+    # Only whole literal URLs. A trailing slash means the JS concatenated an id
+    # onto it (`'/ui/api/requests/' + id + '/delete'`), which this cannot resolve.
+    called = {u for u in re.findall(r"fetch\(['\"](/ui/[^'\"?]+)['\"]", ui)
+              if not u.endswith("/")}
+    missing = sorted(u for u in called if f'"{u}"' not in app_src and f"'{u}'" not in app_src)
+    assert not missing, f"UI calls routes that app.py does not define: {missing}"

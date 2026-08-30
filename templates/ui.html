@@ -566,6 +566,10 @@
             <button class="btn btn-secondary btn-sm" onclick="fixImdbTitles(this)">Fix IMDB titles</button>
             <span class="dim">Rename items still using tt-codes as title</span>
           </div>
+          <div class="maint-item">
+            <button class="btn btn-secondary btn-sm" onclick="repairTvshowTitles(this)">Fix series titles</button>
+            <span class="dim">Rewrite tvshow.nfo files that say "Season 01" instead of the show name</span>
+          </div>
         </div>
       </div>
       <div class="card">
@@ -1657,6 +1661,28 @@
       await fetch('/ui/strm-rescan', { method: 'POST' });
       toast('strm rescan', 'Started  -  check Logs', 'ok');
     } catch(e) { toast('Rescan failed', e.message, 'err'); }
+  }
+
+  async function repairTvshowTitles(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Running...';
+    try {
+      const r = await fetch('/ui/api/repair-tvshow-titles', { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+      if (!d.fixed && !d.skipped) {
+        toast('Fix series titles', 'Every tvshow.nfo already has the right title', 'ok');
+      } else {
+        const msg = `Fixed ${d.fixed}` + (d.skipped ? `  -  ${d.skipped} skipped (no IMDB id in the nfo)` : '');
+        toast('Fix series titles', msg + '. Run a Jellyfin scan to see the change.',
+              d.skipped ? 'warn' : 'ok');
+      }
+    } catch(e) {
+      toast('Fix series titles failed', e.message, 'err');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Fix series titles';
+    }
   }
 
   async function fixImdbTitles(btn) {
