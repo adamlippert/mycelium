@@ -881,3 +881,66 @@ def _run_cleanup_locked() -> None:
     if changed:
         strm_generator.run_and_refresh()
         jellyfin.refresh_library()
+
+
+def purge_title(imdb_id: str, row_id: int | None = None) -> dict:
+    """Remove one title from the library completely.
+
+    Deletes the .strm files it produced (plus their .nfo and Spore stubs), the
+    virtual_items rows behind them, the monitoring rows that would regenerate
+    them, and the webhook dedup keys that would otherwise swallow a later
+    re-request. Optionally deletes the request row itself.
+
+    Everything is best-effort per file: one unlink failure must not leave the
+    rest of the title half-purged. Returns a per-category count."""
+    result = {"strms": 0, "items": 0, "errors": 0}
+    dirs: set[Path] = set()
+
+    for item in db.get_virtual_items_by_imdb(imdb_id):
+        token = item.get("token")
+        strm_path = item.get("strm_path")
+        if strm_path:
+            path = Path(strm_path)
+            try:
+                if path.exists():
+                    path.unlink()
+                    result["strms"] += 1
+                path.with_suffix(".nfo").unlink(missing_ok=True)
+                strm_generator._delete_spore_stubs(path)
+                dirs.add(path.parent)
+            except Exception as exc:
+                log.warning("Purge %s: could not delete %s: %s", imdb_id, path, exc)
+                result["errors"] += 1
+        if token:
+            db.delete_virtual_item(token)
+            result["items"] += 1
+
+    # Prune the now-empty season/title folders, deepest first. rmdir() only
+    # succeeds on an empty directory, so a folder still holding another
+    # title's files is left exactly as it was.
+    media_root = Path(MEDIA_PATH)
+    for d in sorted(dirs, key=lambda p: len(p.parts), reverse=True):
+        while d != media_root and media_root in d.parents:
+            try:
+                d.rmdir()
+            except OSError:
+                break
+            d = d.parent
+
+    result["monitored"] = db.delete_monitored_series(imdb_id)
+    result["wanted_episodes"] = db.delete_wanted_episodes(imdb_id)
+    try:
+        result["wanted_movies"] = db.delete_wanted_movie(imdb_id)
+    except Exception as exc:
+        log.debug("Purge %s: wanted_movies skipped: %s", imdb_id, exc)
+    result["dedup_keys"] = db.clear_webhook_events(imdb_id)
+    result["retries"] = db.clear_retries(imdb_id)
+    if row_id is not None:
+        db.delete_request(row_id)
+
+    log.info("Purged %s from library: %s", imdb_id, result)
+    try:
+        jellyfin.refresh_library()
+    except Exception as exc:
+        log.warning("Purge %s: Jellyfin refresh failed: %s", imdb_id, exc)
+    return result

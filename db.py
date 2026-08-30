@@ -1183,6 +1183,72 @@ def webhook_seen(dedup_key: str) -> bool:
         return True
 
 
+def clear_webhook_events(imdb_id: str) -> int:
+    """Forget every webhook dedup key for one title.
+
+    The dedup key is "<imdb_id>:<media_type>:<seasons>" and normally lives for
+    24h. If a request is deleted, those keys must go with it, or re-requesting
+    the same title is silently answered "duplicate" and never processed."""
+    with _connect() as conn:
+        cur = conn.execute(
+            "DELETE FROM webhook_events WHERE dedup_key = ? OR dedup_key LIKE ?",
+            (imdb_id, imdb_id + ":%"),
+        )
+        conn.commit()
+        return cur.rowcount or 0
+
+
+def delete_request(row_id: int) -> bool:
+    """Delete a request row and the webhook dedup keys that belong to it.
+
+    Returns False if there was no such row. Leaves .strm files and
+    virtual_items alone - that is purge_request()'s job."""
+    with _connect() as conn:
+        row = conn.execute("SELECT imdb_id FROM requests WHERE id=?", (row_id,)).fetchone()
+        if row is None:
+            return False
+        imdb_id = row["imdb_id"]
+        conn.execute("DELETE FROM requests WHERE id=?", (row_id,))
+        conn.commit()
+    if imdb_id:
+        clear_webhook_events(imdb_id)
+        clear_retries(imdb_id)
+    return True
+
+
+def clear_retries(imdb_id: str) -> int:
+    """Cancel every queued retry for one title.
+
+    A failed request leaves a retry queued for up to hours. If the request is
+    deleted or the title is purged without clearing it, the retry fires later
+    and resurrects what was just removed."""
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM retry_queue WHERE imdb_id=?", (imdb_id,))
+        conn.commit()
+        return cur.rowcount or 0
+
+
+def delete_monitored_series(imdb_id: str) -> int:
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM monitored_series WHERE imdb_id=?", (imdb_id,))
+        conn.commit()
+        return cur.rowcount or 0
+
+
+def delete_wanted_episodes(imdb_id: str) -> int:
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM wanted_episodes WHERE imdb_id=?", (imdb_id,))
+        conn.commit()
+        return cur.rowcount or 0
+
+
+def delete_wanted_movie(imdb_id: str) -> int:
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM wanted_movies WHERE imdb_id=?", (imdb_id,))
+        conn.commit()
+        return cur.rowcount or 0
+
+
 def prune_webhook_events(max_age_hours: int = 24) -> int:
     with _connect() as conn:
         cur = conn.execute(

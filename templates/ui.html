@@ -1523,9 +1523,12 @@
           <td class="dim">${i.media_type||'---'}</td>
           <td style="${statusCls[st]||''};font-weight:600;text-transform:capitalize">${st.replace('_',' ')}</td>
           <td class="dim">${(i.created_at||'').slice(0,16)}</td>
-          <td>
-            <button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)"
+          <td style="white-space:nowrap">
+            <button class="btn btn-sm" title="Forget the request record. Keeps the files in your library."
                     onclick="deleteRequest(${i.id}, '${(i.title||'').replace(/'/g,"\\'")}')">Delete</button>
+            <button class="btn btn-sm" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)"
+                    title="Delete the .strm files too. Removes the title from Jellyfin/Plex."
+                    onclick="purgeRequest(${i.id}, '${(i.title||'').replace(/'/g,"\\'")}')">Remove from library</button>
           </td>
         </tr>`;
       });
@@ -1540,11 +1543,21 @@
     }
   }
   async function deleteRequest(id, title) {
-    if (!confirm('Delete request "' + title + '"?')) return;
+    if (!confirm('Forget the request "' + title + '"?\n\nThe files stay in your library.')) return;
     try {
       await fetch('/ui/api/requests/' + id + '/delete', {method:'POST', headers:{'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content}});
       refreshRequests();
     } catch(e) { alert('Delete failed: ' + e.message); }
+  }
+  async function purgeRequest(id, title) {
+    if (!confirm('Remove "' + title + '" from the library?\n\nThis deletes its .strm files and it will disappear from Jellyfin and Plex. This cannot be undone.')) return;
+    try {
+      const r = await fetch('/ui/api/requests/' + id + '/purge', {method:'POST', headers:{'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content}});
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'purge failed');
+      alert('Removed ' + title + ': ' + d.strms + ' .strm file(s) deleted.');
+      refreshRequests();
+    } catch(e) { alert('Remove failed: ' + e.message); }
   }
 
   // ── Blacklist ──

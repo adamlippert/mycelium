@@ -248,6 +248,9 @@ export const api = {
     http<{ ok: boolean; title?: string }>(`/ui/api/requests/${id}/retry`, { method: 'POST' }),
   deleteRequest: (id: number) =>
     http<{ ok: boolean }>(`/ui/api/requests/${id}/delete`, { method: 'POST' }),
+  // Admin only: also deletes the .strm files, so the title leaves Jellyfin/Plex.
+  purgeRequest: (id: number) =>
+    http<{ ok: boolean; strms: number }>(`/ui/api/requests/${id}/purge`, { method: 'POST' }),
 
   // Trakt
   traktStatus: () =>

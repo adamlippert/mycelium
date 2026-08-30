@@ -12,6 +12,12 @@ export default function Requests() {
       qc.invalidateQueries({ queryKey: ['my-requests'] });
     },
   });
+  const purgeMut = useMutation({
+    mutationFn: (id: number) => api.purgeRequest(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['my-requests'] });
+    },
+  });
   if (isLoading) return <div className="text-muted">Loading…</div>;
   const items = data?.items || [];
   return (
@@ -52,13 +58,24 @@ export default function Requests() {
                   <td className="py-2 px-3 text-right">
                     <button
                       type="button"
-                      onClick={() => { if (confirm(`Remove "${r.title}"?`)) deleteMut.mutate(r.id); }}
+                      onClick={() => { if (confirm(`Forget the request "${r.title}"?\n\nThe files stay in your library.`)) deleteMut.mutate(r.id); }}
                       disabled={deleteMut.isPending}
                       className="px-2 py-1 rounded text-xs text-red-400 hover:bg-red-500/10 disabled:opacity-50"
-                      title="Delete request"
+                      title="Forget the request. Keeps the files in your library."
                     >
                       x
                     </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => { if (confirm(`Remove "${r.title}" from the library?\n\nThis deletes its .strm files and it will disappear from Jellyfin and Plex. This cannot be undone.`)) purgeMut.mutate(r.id); }}
+                        disabled={purgeMut.isPending}
+                        className="ml-1 px-2 py-1 rounded text-xs text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                        title="Remove from library (deletes the .strm files)"
+                      >
+                        Remove
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

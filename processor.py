@@ -321,6 +321,23 @@ def _get_season_episode_count(imdb_id: str, season: int) -> int:
         return 0
 
 
+def _already_registered(imdb_id: str | None, season: int, episode: int) -> bool:
+    """True if this episode already has a virtual_item (and therefore a .strm).
+
+    create_lazy_episode_strm() returns False both when the episode is already
+    registered and when the write genuinely failed. Only the DB can tell those
+    apart, and the difference decides whether a request is success or failed.
+    """
+    if not imdb_id:
+        return False
+    try:
+        return db.get_virtual_item_by_episode(imdb_id, season, episode) is not None
+    except Exception as exc:
+        log.warning("Could not check registration for %s S%02dE%02d: %s",
+                    imdb_id, season, episode, exc)
+        return False
+
+
 def _lazy_register_season(req: MediaRequest, season: int) -> tuple[bool, Optional[TorrentioStream]]:
     """Catbox lazy mode for series. Tries a cached season pack first, then falls
     back to per-episode cached registration. Returns (any_written, first_stream)."""
@@ -355,6 +372,7 @@ def _lazy_register_season(req: MediaRequest, season: int) -> tuple[bool, Optiona
         log.info("Lazy: cached season pack for %s S%02d (%d ep), registering %d episode(s)",
                  req.title, season, ep_count, ep_count)
         written = 0
+        existing = 0
         preload_done = False
         for ep in range(1, ep_count + 1):
             if strm_generator.create_lazy_episode_strm(
@@ -367,15 +385,27 @@ def _lazy_register_season(req: MediaRequest, season: int) -> tuple[bool, Optiona
             ):
                 written += 1
                 preload_done = True
+            elif _already_registered(req.imdb_id, season, ep):
+                existing += 1
         if written:
             log.info("Lazy season pack: %d .strm(s) registered for %s S%02d", written, req.title, season)
             return True, pack
-        log.info("Lazy season pack: all strms already existed for %s S%02d", req.title, season)
+        if existing:
+            # Re-request of a season that is already in the library (the usual
+            # cause: the request row was deleted but its .strm files were not).
+            # The content is there, so this is a success - reporting "failed"
+            # here would also queue a retry that can never do anything.
+            log.info("Lazy season pack: %d episode(s) already registered for %s S%02d  -  treating as success",
+                     existing, req.title, season)
+            return True, pack
+        log.warning("Lazy season pack: nothing written and nothing registered for %s S%02d",
+                    req.title, season)
         return False, None
 
     # --- Fall back to per-episode cached registration ---
     log.info("Lazy: no cached season pack for %s S%02d  -  trying per-episode", req.title, season)
     added = 0
+    existing = 0
     first_winner: Optional[TorrentioStream] = None
     preload_done = False
     episode = 1
@@ -419,6 +449,9 @@ def _lazy_register_season(req: MediaRequest, season: int) -> tuple[bool, Optiona
             added += 1
             first_winner = first_winner or winner
             preload_done = True
+        elif _already_registered(req.imdb_id, season, episode):
+            existing += 1
+            first_winner = first_winner or winner
 
         episode += 1
         if episode > 50:
@@ -427,6 +460,13 @@ def _lazy_register_season(req: MediaRequest, season: int) -> tuple[bool, Optiona
 
     if added:
         log.info("Lazy per-episode: %d .strm(s) registered for %s S%02d", added, req.title, season)
+        return True, first_winner
+
+    if existing:
+        # Same reasoning as the season-pack branch above: already registered is
+        # a library that already has the episodes, not a season to keep wanting.
+        log.info("Lazy per-episode: %d episode(s) already registered for %s S%02d  -  treating as success",
+                 existing, req.title, season)
         return True, first_winner
 
     reason = "no cached episodes available yet  -  waiting for TorBox cache"

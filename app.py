@@ -2053,14 +2053,32 @@ def ui_api_retry_request(row_id: int):
 
 @app.post("/ui/api/requests/<int:row_id>/delete")
 def ui_api_delete_request(row_id: int):
+    """Forget the request record. Leaves the .strm files in the library.
+
+    Also drops the webhook dedup keys for this title: without that, requesting
+    it again within 24h is silently answered "duplicate" and never processed."""
     if not auth.is_admin():
         return jsonify(error="admin required"), 403
-    with db._connect() as conn:
-        cur = conn.execute("DELETE FROM requests WHERE id=?", (row_id,))
-        conn.commit()
-        if cur.rowcount == 0:
-            return jsonify(error="not found"), 404
+    if not db.delete_request(row_id):
+        return jsonify(error="not found"), 404
     return jsonify(ok=True)
+
+
+@app.post("/ui/api/requests/<int:row_id>/purge")
+def ui_api_purge_request(row_id: int):
+    """Remove the title from the library: .strm files, virtual_items, the
+    monitoring rows that would regenerate them, and the request itself."""
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    rows = [r for r in db.get_recent(1000) if r["id"] == row_id]
+    if not rows:
+        return jsonify(error="not found"), 404
+    imdb_id = rows[0]["imdb_id"]
+    import cleanup
+    result = cleanup.purge_title(imdb_id, row_id=row_id)
+    db.log_activity("purged", rows[0]["title"],
+                    f"{result['strms']} strm(s) removed ({imdb_id})", True)
+    return jsonify(ok=True, **result)
 
 
 @app.get("/ui/api/torbox-usage")
