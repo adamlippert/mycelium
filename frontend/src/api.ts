@@ -211,6 +211,7 @@ export const api = {
   libraryMovies: () => http<{ items: any[] }>('/ui/api/library/movies'),
   recent: () => http<{ items: any[] }>('/ui/api/activity'),
   myRequests: () => http<{ items: any[] }>('/ui/api/user-requests?mine=1'),
+  myQuota: () => http<QuotaInfo>('/ui/api/me/quota'),
 
   // Arr import
   arrTest: (kind: 'radarr' | 'sonarr') =>
@@ -349,6 +350,8 @@ export type ShellSummary = {
   counts: { watchlist: number; requests: number; wanted: number };
   torbox: { state: 'ok' | 'degraded' | 'down'; label: string };
 };
+
+export type QuotaInfo = { used: number; limit: number; resets_at: string; unlimited: boolean };
 
 export interface SettingItem {
   key: string;

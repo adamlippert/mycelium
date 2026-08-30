@@ -24,6 +24,7 @@ import log_buffer
 import monitor
 import notify
 import processor
+import quota
 import recovery
 import retry_queue
 import scrapers
@@ -1136,6 +1137,12 @@ def ui_api_shell_summary():
     """Sidebar counts and the topbar TorBox pill, in one call."""
     user = auth.current_user_record()
     return jsonify(shell_summary.get_shell_summary((user or {}).get("id")))
+
+
+@app.get("/ui/api/me/quota")
+def ui_api_me_quota():
+    """Monthly request quota for the current user, for the Requests page."""
+    return jsonify(quota.get_quota(auth.current_user_record()))
 
 
 @app.get("/ui/api/torbox-list")
