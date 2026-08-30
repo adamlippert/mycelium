@@ -98,6 +98,11 @@ def test_hdr10_plus_is_not_an_hdr10_fallback(text):
     ("Movie.1080p.DD5.1", {"dd"}),
     ("Movie.1080p.DDP.Atmos", {"ddp", "atmos"}),
     ("Movie.AACS.Protected", set()),
+    ("Movie.1080p.DD+5.1", {"ddp"}),
+    ("Movie.1080p.E-AC3.5.1", {"ddp"}),
+    ("Movie.1080p.E-AC-3", {"ddp"}),
+    ("Movie.1080p.EAC3", {"ddp"}),
+    ("Movie.1080p.AC-3", {"dd"}),
 ])
 def test_detect_audio_tags(text, expected):
     assert set(rt.detect_audio_tags(text)) == expected
