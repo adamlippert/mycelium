@@ -60,6 +60,7 @@ def test_detect_encode(text, expected):
 @pytest.mark.parametrize("text,expected", [
     ("Movie.2160p.HDR10.WEB-DL", {"hdr10"}),
     ("Movie.2160p.HDR10Plus.WEB-DL", {"hdr10plus"}),
+    ("Movie.2160p.HDR10+.WEB-DL", {"hdr10plus"}),
     ("Movie.2160p.DV.HDR10.WEB-DL", {"dv", "hdr10"}),
     ("Movie.2160p.DoVi.WEB-DL", {"dv", "dv_only"}),
     ("Movie.2160p.HLG.WEB-DL", {"hlg"}),
@@ -81,5 +82,6 @@ def test_hdr10_plus_is_not_an_hdr10_fallback(text):
     between '0' and '+'); the 'Plus' spelling is already rejected by the trailing
     \\b word boundary in the hdr10 pattern itself."""
     tags = rt.detect_visual_tags(text)
+    assert "hdr10plus" in tags
     assert "hdr10" not in tags
     assert "dv_only" in tags

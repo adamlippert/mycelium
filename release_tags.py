@@ -87,7 +87,7 @@ VISUAL_TAG_VALUES = (
 # lookahead, so "HDR10+" never counts as plain HDR10. HDR10+ is not a safe
 # fallback for a Dolby Vision profile 5 release.
 _VISUAL_PATTERNS = (
-    ("hdr10plus", re.compile(r"\bhdr10(\+|plus)\b", re.IGNORECASE)),
+    ("hdr10plus", re.compile(r"\bhdr10(?:\+|plus\b)", re.IGNORECASE)),
     ("hdr10", re.compile(r"\bhdr10(?!\+|plus)\b", re.IGNORECASE)),
     ("dv", re.compile(r"\b(dovi|dolby[\s.]?vision|dv)\b", re.IGNORECASE)),
     ("hlg", re.compile(r"\bhlg\b", re.IGNORECASE)),
