@@ -258,7 +258,10 @@ def _start_scheduler() -> BackgroundScheduler:
 
     if STRM_GENERATOR_INTERVAL_HOURS > 0:
         scheduler.add_job(
-            strm_generator.run_and_refresh,
+            # import_unknown=False: this is a timer, not a request. Importing
+            # the whole TorBox account is something a person asks for with the
+            # "Import TorBox library" button.
+            lambda: strm_generator.run_and_refresh(import_unknown=False),
             trigger="interval", hours=STRM_GENERATOR_INTERVAL_HOURS,
             id="strm_generator", next_run_time=None,
         )
@@ -508,7 +511,8 @@ def _delayed(seconds: float, target, name: str) -> None:
 
 _delayed(15.0, monitor.sync_movies, "movie-sync-init")
 _delayed(20.0, monitor.sync_series, "series-sync-init")
-_delayed(30.0, strm_generator.run_and_refresh, "strm-init")
+# import_unknown=False: booting is not a request to adopt the TorBox account.
+_delayed(30.0, lambda: strm_generator.run_and_refresh(import_unknown=False), "strm-init")
 _delayed(60.0, library_sync.resolve_unknowns, "resolve-unknowns-init")
 _delayed(90.0, library_sync.import_series_to_monitored, "series-monitored-init")
 _delayed(120.0, nfo_generator.generate_all, "nfo-init")

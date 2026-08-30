@@ -1594,6 +1594,37 @@ def _resolve_url(item: dict, file_id: int, file_name: str, info: dict, media_typ
     return _get_stream_url(torrent_id, file_id)
 
 
+def _ensure_request_row(imdb_id: str | None, title: str, is_series: bool,
+                        tmdb_id: int | None) -> None:
+    """Record a request for content we just materialised, if none exists yet.
+
+    Anything that puts .strm files in the library should be visible in the UI,
+    however it got there. Without a row the item plays in Jellyfin but appears
+    in neither the Requests nor the Library tab, so there is no way to see it,
+    re-resolve it or remove it.
+
+    Only fills a gap: a request that already exists keeps its status, which the
+    processor owns and may still be moving. Best-effort, because the .strm is
+    already written by the time this runs and a bookkeeping failure must not
+    turn a successful write into an error.
+    """
+    if not imdb_id:
+        # imdb_id is NOT NULL UNIQUE. An import parsed from a release name has
+        # no identity yet; library_sync.resolve_unknowns() gives it one later.
+        return
+    try:
+        if db.get_request_by_imdb(imdb_id):
+            return
+        row_id = db.insert_request(title, imdb_id,
+                                   "series" if is_series else "movie",
+                                   None, tmdb_id=tmdb_id)
+        db.update_request(row_id, "success")
+        log.info("Recorded a request row for %s (%s) so it can be managed",
+                 title, imdb_id)
+    except Exception as exc:
+        log.warning("Could not record a request row for %s: %s", imdb_id, exc)
+
+
 def process_torrent(item: dict, canonical_title: str | None = None,
                      imdb_id: str | None = None, tmdb_id: int | None = None) -> int:
     """Create .strm files for all video files in a ready torrent. Returns new file count.
@@ -1669,6 +1700,9 @@ def process_torrent(item: dict, canonical_title: str | None = None,
                     _write_nfo(path, imdb_id, tmdb_id=tmdb_id, nfo_path=tvshow_nfo, media_type="series")
                 nfo_written = True
 
+    if written:
+        _ensure_request_row(imdb_id, canonical_title or torrent_name,
+                            is_series, tmdb_id)
     return written
 
 
@@ -1863,11 +1897,23 @@ def _run_once_catbox() -> int:
     return recreated
 
 
-def run_once() -> int:
+def run_once(import_unknown: bool = True) -> int:
     """Create any missing .strm files. In catbox mode uses virtual_items DB as
-    source of truth; otherwise scans TorBox mylist."""
+    source of truth; otherwise scans TorBox mylist.
+
+    import_unknown=False skips the mylist scan entirely. The scan adopts EVERY
+    torrent in the TorBox account, including content added outside Mycelium and
+    anything left over from before it was installed, and writes .strm files
+    with no request behind them. That is the right behaviour when a person asks
+    for an import, and a bad surprise on a timer: it ran hourly and again on
+    every boot, so a library grew that the UI could neither list nor remove.
+    Unattended callers pass False; deliberate ones keep the default.
+    """
     if settings.get("CATBOX_MODE", False):
         return _run_once_catbox()
+    if not import_unknown:
+        log.debug("strm_generator: skipping the TorBox mylist scan (unattended run)")
+        return 0
     log.info("strm_generator: scanning TorBox mylist")
     try:
         torrents = torbox_mod.list_torrents()
@@ -1879,9 +1925,11 @@ def run_once() -> int:
     return total
 
 
-def run_and_refresh() -> None:
-    """Run strm generation and trigger Jellyfin scan if any new files were created."""
-    new_files = run_once()
+def run_and_refresh(import_unknown: bool = True) -> None:
+    """Run strm generation and trigger Jellyfin scan if any new files were created.
+
+    See run_once() for import_unknown."""
+    new_files = run_once(import_unknown=import_unknown)
     import nfo_generator
     nfo_generator.generate_all()
     if new_files > 0:
