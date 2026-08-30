@@ -44,6 +44,9 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
   const user = session?.user;
   const initials = (user?.username || '?').slice(0, 2).toUpperCase();
 
+  const isAdmin = user?.role === 'admin';
+  const showAdmin = isAdmin || !session?.authenticated; // bootstrap visible
+
   return (
     <aside
       className={`fixed left-0 top-0 z-40 flex h-screen w-[248px] flex-none flex-col border-r
@@ -62,17 +65,19 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
             <div className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted">
               {group.title}
             </div>
-            {group.items.map((item) => (
-              <NavItem
-                key={item.to}
-                to={item.to}
-                label={item.label}
-                icon={item.icon}
-                exact={item.exact}
-                count={item.countKey ? summary?.counts[item.countKey] : undefined}
-                onNavigate={onNavigate}
-              />
-            ))}
+            {group.items
+              .filter((item) => item.to !== '/admin' || showAdmin)
+              .map((item) => (
+                <NavItem
+                  key={item.to}
+                  to={item.to}
+                  label={item.label}
+                  icon={item.icon}
+                  exact={item.exact}
+                  count={item.countKey ? summary?.counts[item.countKey] : undefined}
+                  onNavigate={onNavigate}
+                />
+              ))}
           </div>
         ))}
       </nav>

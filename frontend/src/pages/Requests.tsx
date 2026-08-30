@@ -45,7 +45,7 @@ export default function Requests() {
             </thead>
             <tbody>
               {items.map((r: any) => (
-                <tr key={r.id} className="border-b border-border/50 hover:bg-card">
+                <tr key={r.id} className="border-b border-border hover:bg-card">
                   <td className="py-2 px-3 font-medium">{r.title}</td>
                   <td className="py-2 px-3 text-muted">{r.media_type}</td>
                   <td className="py-2 px-3">
@@ -120,7 +120,7 @@ function FailedRequestsPanel() {
         </thead>
         <tbody>
           {items.map((r: any) => (
-            <tr key={r.id} className="border-b border-border/50 hover:bg-card">
+            <tr key={r.id} className="border-b border-border hover:bg-card">
               <td className="py-2 px-3 font-medium">{r.title}</td>
               <td className="py-2 px-3 text-muted">{r.media_type}</td>
               <td className="py-2 px-3 text-red-400 text-xs max-w-xs truncate" title={r.error || ''}>
@@ -187,7 +187,7 @@ function PendingApprovalsPanel() {
         </thead>
         <tbody>
           {items.map((r: any) => (
-            <tr key={r.id} className="border-b border-border/50 hover:bg-card">
+            <tr key={r.id} className="border-b border-border hover:bg-card">
               <td className="py-2 px-3 font-medium">{r.username || `user #${r.user_id}`}</td>
               <td className="py-2 px-3">{r.title}</td>
               <td className="py-2 px-3 text-muted">{r.media_type}</td>

@@ -90,7 +90,7 @@ export default function Admin() {
             </thead>
             <tbody>
               {pending.items.map((r) => (
-                <tr key={r.id} className="border-b border-border/50">
+                <tr key={r.id} className="border-b border-border">
                   <td className="py-2 px-3 font-medium">{r.username}</td>
                   <td className="py-2 px-3">{r.title}</td>
                   <td className="py-2 px-3 text-muted">{r.media_type}</td>
@@ -139,7 +139,7 @@ export default function Admin() {
             </thead>
             <tbody>
               {users.users.map((u) => (
-                <tr key={u.id} className="border-b border-border/50">
+                <tr key={u.id} className="border-b border-border">
                   <td className="py-2 px-3 font-medium">{u.username}</td>
                   <td className="py-2 px-3 text-muted">{u.role}</td>
                   <td className="py-2 px-3">

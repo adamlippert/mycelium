@@ -53,7 +53,7 @@ export default function Search() {
         onChange={(e) => updateQuery(e.target.value)}
         placeholder="Search movies and series..."
         className="w-full max-w-xl bg-bg border border-border rounded-lg px-4 py-3 text-sm
-                   focus:outline-none focus:border-accent text-white placeholder-muted/60"
+                   focus:outline-none focus:border-accent text-white placeholder-muted"
       />
       {q.trim() && (
         <p className="text-muted text-xs">{filtered.length} results for &quot;{q}&quot;</p>

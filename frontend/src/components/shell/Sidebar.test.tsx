@@ -1,8 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Sidebar, NAV_GROUPS } from './Sidebar';
+
+const mockSession = { authenticated: true, user: { username: 'adam', role: 'admin' } };
 
 vi.mock('../../api', () => ({
   api: {
@@ -10,7 +12,7 @@ vi.mock('../../api', () => ({
       counts: { watchlist: 38, requests: 3, wanted: 11 },
       torbox: { state: 'ok', label: 'TorBox online' },
     }),
-    session: () => Promise.resolve({ authenticated: true, user: { username: 'adam', role: 'admin' } }),
+    session: () => Promise.resolve(mockSession),
   },
 }));
 
@@ -50,6 +52,11 @@ describe('NAV_GROUPS', () => {
 });
 
 describe('Sidebar', () => {
+  beforeEach(() => {
+    mockSession.authenticated = true;
+    mockSession.user = { username: 'adam', role: 'admin' };
+  });
+
   it('renders every navigation label', async () => {
     renderSidebar();
     for (const label of ['Discover', 'Library', 'Watchlist', 'Search', 'My Requests', 'Wanted']) {
@@ -67,5 +74,20 @@ describe('Sidebar', () => {
     const { container } = renderSidebar();
     expect(container.textContent).not.toContain('undefined');
     expect(container.textContent).not.toContain('NaN');
+  });
+
+  it('hides Admin for a non-admin session but still shows Manual and Settings', async () => {
+    mockSession.user = { username: 'jane', role: 'user' };
+    renderSidebar();
+    expect(await screen.findByText('Manual')).toBeInTheDocument();
+    expect(await screen.findByText('Settings')).toBeInTheDocument();
+    // Admin is bootstrap-visible until the session query resolves; wait for
+    // the non-admin session to land before asserting it is gone.
+    await waitFor(() => expect(screen.queryByText('Admin')).not.toBeInTheDocument());
+  });
+
+  it('shows Admin for an admin session', async () => {
+    renderSidebar();
+    expect(await screen.findByText('Admin')).toBeInTheDocument();
   });
 });

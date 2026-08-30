@@ -77,6 +77,19 @@ def test_the_endpoint_is_registered_and_authenticated():
     assert "shell_summary.get_shell_summary(" in src
 
 
+def test_counts_failures_never_break_the_sidebar(monkeypatch):
+    """A db hiccup while computing counts must not 500 the shell endpoint;
+    it must fall back to the stable, empty-install shape."""
+    def boom():
+        raise RuntimeError("db unreachable")
+
+    monkeypatch.setattr(db, "get_all_wanted_episodes", boom)
+    monkeypatch.setattr(shell_summary, "_torbox_state", lambda: ("ok", "TorBox online"))
+    d = shell_summary.get_shell_summary()
+    assert d["counts"] == {"watchlist": 0, "requests": 0, "wanted": 0}
+    assert d["torbox"] == {"state": "ok", "label": "TorBox online"}
+
+
 def test_per_user_counts_never_leak_across_users():
     """user_id=None must never see another user's watchlist or requests -
     those counts stay 0 unless a user is identified."""
