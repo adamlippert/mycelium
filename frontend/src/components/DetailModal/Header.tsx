@@ -1,6 +1,6 @@
 import type { UseMutationResult } from '@tanstack/react-query';
 import type { TmdbDetail } from '../../types';
-import { LibraryButton, type AddStatus } from './index';
+import { LibraryButton, type AddStatus } from './LibraryButton';
 import { StreamingOn } from './Similar';
 
 export function Header({
