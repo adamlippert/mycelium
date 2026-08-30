@@ -5,6 +5,7 @@ import type { MediaType, TmdbItem } from '../types';
 import PosterGrid from '../components/PosterGrid';
 import DetailModal from '../components/DetailModal';
 import SectionHeader from '../components/SectionHeader';
+import { Hero } from '../components/discover/Hero';
 
 type Cat =
   | { kind: 'all'; window: 'day' | 'week' }
@@ -24,6 +25,8 @@ export default function Discover() {
 
   return (
     <div className="space-y-8">
+      <Hero onRequest={open} onOpen={open} />
+
       <ProviderStrip
         onPick={(pid) => { setActiveProvider(pid); setDetail(null); }}
         onItemClick={open}
@@ -167,6 +170,7 @@ function ProviderStrip({ onPick, onItemClick }: { onPick: (pid: number | null) =
 
   return (
     <section>
+      <SectionHeader title="Streaming services" subtitle="filter Discover by what your region carries" />
       <div className="flex gap-2 overflow-x-auto scrollbar-hidden pb-2 -mx-1 px-1">
         <ProviderChip
           name="All"
