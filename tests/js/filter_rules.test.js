@@ -213,3 +213,69 @@ test("every value in the list is independently movable", () => {
   assert.deepStrictEqual(fr.reorder(s, "preferred", "c", -1).states.preferred,
                          ["a", "c", "b"]);
 });
+
+// ── chip overflow ────────────────────────────────────────────────────────────
+
+test("visibleChips shows everything when under the limit", () => {
+  const v = ["a", "b", "c"];
+  assert.deepStrictEqual(fr.visibleChips(v, false), { shown: v, hidden: 0 });
+});
+
+// Sizes derive from the limit rather than hardcoding a count, so raising or
+// lowering CHIP_VISIBLE_LIMIT cannot leave these silently testing nothing.
+const overLimit = n => Array.from({length: fr.CHIP_VISIBLE_LIMIT + n},
+                                  (_, i) => `v${i}`);
+
+test("visibleChips caps at the limit and reports how many are hidden", () => {
+  const v = overLimit(3);
+  const r = fr.visibleChips(v, false);
+  assert.strictEqual(r.shown.length, fr.CHIP_VISIBLE_LIMIT);
+  assert.strictEqual(r.hidden, 3);
+});
+
+test("visibleChips keeps order, so preferred stays meaningful when capped", () => {
+  const v = overLimit(2);
+  assert.deepStrictEqual(fr.visibleChips(v, false).shown,
+                         v.slice(0, fr.CHIP_VISIBLE_LIMIT));
+});
+
+test("visibleChips shows everything once expanded", () => {
+  const v = overLimit(4);
+  assert.deepStrictEqual(fr.visibleChips(v, true), { shown: v, hidden: 0 });
+});
+
+test("visibleChips does not mutate the caller's list", () => {
+  const v = overLimit(1);
+  const before = v.length;
+  fr.visibleChips(v, false).shown.push("zzz");
+  assert.strictEqual(v.length, before, "the caller's array was mutated");
+});
+
+test("exactly at the limit shows no overflow control", () => {
+  const v = Array.from({length: fr.CHIP_VISIBLE_LIMIT}, (_, i) => `v${i}`);
+  assert.strictEqual(fr.visibleChips(v, false).hidden, 0);
+});
+
+test("one over the limit hides exactly one", () => {
+  const v = Array.from({length: fr.CHIP_VISIBLE_LIMIT + 1}, (_, i) => `v${i}`);
+  assert.strictEqual(fr.visibleChips(v, false).hidden, 1);
+});
+
+test("the shipped default SOURCE_EXCLUDED is never truncated", () => {
+  // Eight values after migration. A cap that hides part of the out-of-the-box
+  // config would make every user click to see settings they never chose.
+  const shipped = ["remux","cam","ts","tc","scr","r5","ppvrip","workprint"];
+  const r = fr.visibleChips(shipped, false);
+  assert.strictEqual(r.hidden, 0,
+    `the shipped default must fit; limit is ${fr.CHIP_VISIBLE_LIMIT}`);
+  assert.deepStrictEqual(r.shown, shipped);
+});
+
+test("a genuinely long list is capped, which is what the control is for", () => {
+  // Excluding most of the 21 source values is the case worth collapsing.
+  const many = ["remux","bluray","bdrip","brrip","hdrip","dvdrip","dvd","hdtv",
+                "satrip","tvrip","r5","ppvrip","ts","tc","scr","cam"];
+  const r = fr.visibleChips(many, false);
+  assert.strictEqual(r.shown.length, fr.CHIP_VISIBLE_LIMIT);
+  assert.strictEqual(r.hidden, many.length - fr.CHIP_VISIBLE_LIMIT);
+});

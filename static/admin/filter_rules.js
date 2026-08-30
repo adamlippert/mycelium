@@ -98,6 +98,26 @@ function displayValue(category, code) {
   return name ? `${name} (${code})` : code;
 }
 
+
+// How many chips a state row shows before collapsing the rest behind a
+// "+N more" control. This is a COUNT, not a row count: knowing how many chips
+// fit on two rows needs getBoundingClientRect in a live browser, and this
+// project has no browser to verify that against. A count behaves identically
+// in a test, which a measurement never would.
+//
+// Ten is chosen so the SHIPPED DEFAULT shows in full: SOURCE_EXCLUDED holds
+// eight values after migration, and a cap that truncates the out-of-the-box
+// config would make every user click to see their own settings. The control
+// exists for the genuinely long case, such as excluding most of the 21 source
+// values, not for the common one.
+const CHIP_VISIBLE_LIMIT = 10;
+
+function visibleChips(values, expanded, limit) {
+  const cap = limit === undefined ? CHIP_VISIBLE_LIMIT : limit;
+  if (expanded || values.length <= cap) return { shown: values.slice(), hidden: 0 };
+  return { shown: values.slice(0, cap), hidden: values.length - cap };
+}
+
 const STATE_LABELS = {
   preferred: "Preferred", excluded: "Excluded",
   required: "Required", included: "Included",
@@ -152,7 +172,7 @@ function _chip(state, stateName, value, isInvalid, reorderable) {
   return chip;
 }
 
-function renderPanel(state, prefix) {
+function renderPanel(state, prefix, expandedRows) {
   const invalid = new Set(invalidValues(state));
   const panel = document.createElement("div");
   panel.className = "fr-panel";
@@ -193,8 +213,19 @@ function renderPanel(state, prefix) {
       none.textContent = "(none)";
       chips.appendChild(none);
     } else {
-      values.forEach(v => chips.appendChild(
+      const isExpanded = Boolean(expandedRows && expandedRows[`${prefix}_${name}`]);
+      const { shown, hidden } = visibleChips(values, isExpanded);
+      shown.forEach(v => chips.appendChild(
         _chip(state, name, v, invalid.has(v), name === "preferred")));
+      if (hidden > 0) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "fr-more";
+        more.dataset.action = "show-all";
+        more.textContent = `+${hidden} more`;
+        more.title = `Show the remaining ${hidden} ${STATE_LABELS[name].toLowerCase()} values`;
+        chips.appendChild(more);
+      }
     }
     row.appendChild(chips);
 
@@ -278,12 +309,17 @@ function initFilterRules(group, container) {
     return input;
   }
 
+  // Which state rows have had their overflow expanded, keyed PREFIX_state.
+  // Held here rather than on the container so a redraw cannot lose it.
+  const expandedRows = {};
+
   function draw() {
     container.innerHTML = "";
     Object.keys(states).forEach(prefix => {
       const state = states[prefix];
       const expanded = container.dataset[`open_${prefix}`] === "1" || !isEmpty(state);
-      const node = expanded ? renderPanel(state, prefix) : renderCollapsed(state, prefix);
+      const node = expanded ? renderPanel(state, prefix, expandedRows)
+                            : renderCollapsed(state, prefix);
       container.appendChild(node);
       // The hidden inputs live outside the redrawn node so a redraw cannot
       // destroy them mid-edit.
@@ -304,6 +340,11 @@ function initFilterRules(group, container) {
 
     if (action === "expand") {
       container.dataset[`open_${prefix}`] = "1";
+    } else if (action === "show-all") {
+      const row = ev.target.closest("[data-state]");
+      expandedRows[`${prefix}_${row.dataset.state}`] = true;
+      draw();
+      return;   // nothing about the rules changed, so no sync and no dirty form
     } else if (action === "remove") {
       const chip = ev.target.closest(".fr-chip");
       states[prefix] = assign(states[prefix], chip.dataset.value, null);
@@ -342,7 +383,7 @@ function initFilterRules(group, container) {
   draw();
 }
 
-const _api = { STATE_NAMES, parseList, serializeList, buildState, assign,
+const _api = { STATE_NAMES, CHIP_VISIBLE_LIMIT, visibleChips, parseList, serializeList, buildState, assign,
                reorder, availableFor, invalidValues, isEmpty, toFormFields,
                displayValue, LANGUAGE_NAMES, STATE_LABELS, renderPanel,
                renderCollapsed, syncHiddenInputs, initFilterRules };

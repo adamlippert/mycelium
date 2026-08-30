@@ -70,9 +70,23 @@ A category with no rules in any state collapses to a summary line. After
 migration from Mycelium's defaults, three of seven categories start empty, and
 padding them out to twelve "(none)" rows would bury the four that carry rules.
 
-Chips wrap to at most two rows, then show "+N more" which expands in place. The
-worst realistic case is `SOURCE_EXCLUDED` after a default migration, which holds
-eight values.
+Chips are capped at a COUNT, not a row count, and the remainder collapses behind
+a "+N more" control that expands in place.
+
+The distinction matters. Knowing how many chips fit on two rows requires
+`getBoundingClientRect` in a live browser, and this project has no browser to
+verify such a measurement against. A count behaves identically in a test, which
+a measurement never would, so the cap is a constant: `CHIP_VISIBLE_LIMIT = 10`.
+
+Ten is chosen so the shipped default is never truncated. `SOURCE_EXCLUDED` holds
+eight values after a default migration, and a cap that hid part of the
+out-of-the-box configuration would make every user click to see settings they
+never chose. The control exists for the genuinely long case, such as excluding
+sixteen of the twenty-one source values, where it shows ten and offers "+6 more".
+
+Expansion is per state row, held in memory rather than on the container, so a
+redraw cannot lose it. Expanding changes nothing about the rules, so it does not
+write the hidden inputs or mark the form dirty.
 
 ### Reordering
 
