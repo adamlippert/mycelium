@@ -109,6 +109,49 @@ AUDIO_LANGUAGE_PREFERENCE = [l.strip().lower() for l in _env("AUDIO_LANGUAGE_PRE
 # exclusively in a blocked language are filtered out before sorting.
 EXCLUDE_LANGUAGES = [l.strip().lower() for l in _env("EXCLUDE_LANGUAGES", "").split(",") if l.strip()]
 
+# The four-state rule model that replaces the booleans above. settings.get()
+# falls back to getattr(config, key), so these names must exist here or a
+# value set in .env is silently ignored - the retired booleans above were all
+# env-backed, and this is what keeps that true for their replacements.
+# Values from .env bypass settings.set()'s vocabulary validation, the same as
+# AUDIO_LANGUAGE_PREFERENCE always has; settings.py warns (without raising)
+# about a value not valid for its category, at import time.
+RESOLUTION_PREFERRED = [v.strip().lower() for v in _env("RESOLUTION_PREFERRED", "").split(",") if v.strip()]
+RESOLUTION_EXCLUDED  = [v.strip().lower() for v in _env("RESOLUTION_EXCLUDED", "").split(",") if v.strip()]
+RESOLUTION_REQUIRED  = [v.strip().lower() for v in _env("RESOLUTION_REQUIRED", "").split(",") if v.strip()]
+RESOLUTION_INCLUDED  = [v.strip().lower() for v in _env("RESOLUTION_INCLUDED", "").split(",") if v.strip()]
+RESOLUTION_STRICT    = _env("RESOLUTION_STRICT", "false").lower() in ("1", "true", "yes")
+SOURCE_PREFERRED = [v.strip().lower() for v in _env("SOURCE_PREFERRED", "").split(",") if v.strip()]
+SOURCE_EXCLUDED  = [v.strip().lower() for v in _env("SOURCE_EXCLUDED", "").split(",") if v.strip()]
+SOURCE_REQUIRED  = [v.strip().lower() for v in _env("SOURCE_REQUIRED", "").split(",") if v.strip()]
+SOURCE_INCLUDED  = [v.strip().lower() for v in _env("SOURCE_INCLUDED", "").split(",") if v.strip()]
+SOURCE_STRICT    = _env("SOURCE_STRICT", "false").lower() in ("1", "true", "yes")
+ENCODE_PREFERRED = [v.strip().lower() for v in _env("ENCODE_PREFERRED", "").split(",") if v.strip()]
+ENCODE_EXCLUDED  = [v.strip().lower() for v in _env("ENCODE_EXCLUDED", "").split(",") if v.strip()]
+ENCODE_REQUIRED  = [v.strip().lower() for v in _env("ENCODE_REQUIRED", "").split(",") if v.strip()]
+ENCODE_INCLUDED  = [v.strip().lower() for v in _env("ENCODE_INCLUDED", "").split(",") if v.strip()]
+ENCODE_STRICT    = _env("ENCODE_STRICT", "false").lower() in ("1", "true", "yes")
+VISUAL_TAG_PREFERRED = [v.strip().lower() for v in _env("VISUAL_TAG_PREFERRED", "").split(",") if v.strip()]
+VISUAL_TAG_EXCLUDED  = [v.strip().lower() for v in _env("VISUAL_TAG_EXCLUDED", "").split(",") if v.strip()]
+VISUAL_TAG_REQUIRED  = [v.strip().lower() for v in _env("VISUAL_TAG_REQUIRED", "").split(",") if v.strip()]
+VISUAL_TAG_INCLUDED  = [v.strip().lower() for v in _env("VISUAL_TAG_INCLUDED", "").split(",") if v.strip()]
+VISUAL_TAG_STRICT    = _env("VISUAL_TAG_STRICT", "false").lower() in ("1", "true", "yes")
+AUDIO_TAG_PREFERRED = [v.strip().lower() for v in _env("AUDIO_TAG_PREFERRED", "").split(",") if v.strip()]
+AUDIO_TAG_EXCLUDED  = [v.strip().lower() for v in _env("AUDIO_TAG_EXCLUDED", "").split(",") if v.strip()]
+AUDIO_TAG_REQUIRED  = [v.strip().lower() for v in _env("AUDIO_TAG_REQUIRED", "").split(",") if v.strip()]
+AUDIO_TAG_INCLUDED  = [v.strip().lower() for v in _env("AUDIO_TAG_INCLUDED", "").split(",") if v.strip()]
+AUDIO_TAG_STRICT    = _env("AUDIO_TAG_STRICT", "false").lower() in ("1", "true", "yes")
+AUDIO_CHANNELS_PREFERRED = [v.strip().lower() for v in _env("AUDIO_CHANNELS_PREFERRED", "").split(",") if v.strip()]
+AUDIO_CHANNELS_EXCLUDED  = [v.strip().lower() for v in _env("AUDIO_CHANNELS_EXCLUDED", "").split(",") if v.strip()]
+AUDIO_CHANNELS_REQUIRED  = [v.strip().lower() for v in _env("AUDIO_CHANNELS_REQUIRED", "").split(",") if v.strip()]
+AUDIO_CHANNELS_INCLUDED  = [v.strip().lower() for v in _env("AUDIO_CHANNELS_INCLUDED", "").split(",") if v.strip()]
+AUDIO_CHANNELS_STRICT    = _env("AUDIO_CHANNELS_STRICT", "false").lower() in ("1", "true", "yes")
+LANGUAGE_PREFERRED = [v.strip().lower() for v in _env("LANGUAGE_PREFERRED", "").split(",") if v.strip()]
+LANGUAGE_EXCLUDED  = [v.strip().lower() for v in _env("LANGUAGE_EXCLUDED", "").split(",") if v.strip()]
+LANGUAGE_REQUIRED  = [v.strip().lower() for v in _env("LANGUAGE_REQUIRED", "").split(",") if v.strip()]
+LANGUAGE_INCLUDED  = [v.strip().lower() for v in _env("LANGUAGE_INCLUDED", "").split(",") if v.strip()]
+LANGUAGE_STRICT    = _env("LANGUAGE_STRICT", "false").lower() in ("1", "true", "yes")
+
 # Order in which survivors are ranked; each named criterion breaks ties left by
 # the ones before it. This default reproduces the ranking order that shipped
 # before SORT_ORDER existed - season pack, then resolution, language, source,

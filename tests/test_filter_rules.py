@@ -36,6 +36,26 @@ def test_no_quality_prefixed_rule_key_exists():
         assert f"QUALITY_{state}" not in _s._LIST_KEYS
 
 
+def test_every_rule_key_is_env_backed():
+    """settings.get falls back to getattr(config, key), so a rule key missing
+    from config.py means a value set in .env is silently ignored. Every setting
+    these replaced was env-backed."""
+    import config
+    for prefix in ("RESOLUTION", "SOURCE", "ENCODE", "VISUAL_TAG",
+                   "AUDIO_TAG", "AUDIO_CHANNELS", "LANGUAGE"):
+        for state in ("PREFERRED", "EXCLUDED", "REQUIRED", "INCLUDED"):
+            assert hasattr(config, f"{prefix}_{state}"), f"{prefix}_{state}"
+        assert hasattr(config, f"{prefix}_STRICT"), f"{prefix}_STRICT"
+
+
+def test_settings_module_survives_a_reload():
+    """settings.py defines `def set`, so any module-scope call to the builtin
+    set() breaks on reload once that name is bound."""
+    import importlib, settings
+    importlib.reload(settings)
+    assert "SOURCE_EXCLUDED" in settings._LIST_KEYS
+
+
 def test_setting_an_unknown_value_is_rejected(monkeypatch):
     stored = {}
     monkeypatch.setattr(_s.db, "set_setting", lambda k, v: stored.__setitem__(k, v))

@@ -73,7 +73,13 @@ _RULE_LIST_KEYS: dict[str, str] = {
 }
 _RULE_STRICT_KEYS = {f"{p}_STRICT" for p in _RULE_PREFIX_BY_CATEGORY.values()}
 
-_LIST_KEYS |= set(_RULE_LIST_KEYS)
+# Not set(_RULE_LIST_KEYS): `set` is shadowed by this module's own set()
+# function below. It works at first import, since this line runs before that
+# name is bound, but importlib.reload(settings) rebinds `set` to the builtin
+# for the duration of the reload and then re-executes this line against the
+# module-level def, raising TypeError. {*_RULE_LIST_KEYS} sidesteps the name
+# entirely.
+_LIST_KEYS |= {*_RULE_LIST_KEYS}
 _BOOL_KEYS |= _RULE_STRICT_KEYS
 
 # List keys whose values must each be a code detect_languages() can actually
@@ -431,6 +437,30 @@ def _warn_unknown_env_language_codes() -> None:
 
 
 _warn_unknown_env_language_codes()
+
+
+def _warn_unknown_env_rule_values() -> None:
+    """RESOLUTION_PREFERRED and the other 27 rule-list keys set via .env
+    bypass set()'s vocabulary validation entirely, the same as
+    AUDIO_LANGUAGE_PREFERENCE always has - config.py just lowercase-splits on
+    commas and accepts anything, since it cannot import release_tags (the
+    reverse import already exists, and release_tags.values_for("language")
+    imports streams, which imports config). So check the .env-derived values
+    once, here, at import time - and only warn, never raise: a bad .env value
+    must not crash startup, a migration must never brick boot over one either.
+    """
+    for key, category in _RULE_LIST_KEYS.items():
+        values = getattr(_config, key, None) or []
+        vocabulary = _rt.values_for(category)
+        unknown = sorted({v for v in values if v not in vocabulary})
+        if unknown:
+            log.warning(
+                "%s in .env has value(s) not valid for %s: %s. Valid values "
+                "are %s", key, category, unknown, list(vocabulary),
+            )
+
+
+_warn_unknown_env_rule_values()
 
 
 def all_for_ui() -> list[dict]:
