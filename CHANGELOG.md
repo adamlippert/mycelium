@@ -2,6 +2,18 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.7.4] - 2026-08-30
+
+### Fixed
+
+- **Mycelium imported the entire TorBox account unprompted.** `strm_generator.run_once()` in non-catbox mode walked the whole TorBox mylist and wrote a `.strm` for every torrent in it. That is what the "Import TorBox library" button is for, but it also ran on a timer every hour (`STRM_GENERATOR_INTERVAL_HOURS` defaults to 1) and again 30 seconds after every boot, so an account holding content from before Mycelium was installed, or added elsewhere, grew a library nobody asked for. Worse, `process_torrent()` recorded nothing: no request row, and in fixed mode no `virtual_items` row either, so the result played in Jellyfin but appeared in neither the Requests nor the Library tab and could not be removed. `run_once()` and `run_and_refresh()` now take `import_unknown`, and the two unattended call sites pass `False`; deliberate triggers (the button, the TorBox push webhook, post-add, cleanup, recovery) are unchanged. This does not affect fixed-mode URL freshness: `_write_strm()` returns early when the path exists, so the hourly run never refreshed an expiring CDN URL - importing was its only effect. `process_torrent()` also now records a request row for what it materialises when the caller knows the imdb_id, filling a gap without disturbing a request the processor already owns.
+- **Every series was named "Season 01" in Jellyfin.** `_write_nfo()` derived the title from `strm_path.parent.name`. For a movie that is the movie's own folder and correct; for an episode it is the SEASON folder, and `tvshow.nfo` is written from an episode path, so every series got `<title>Season 01</title>` and Jellyfin displayed exactly that. The title now comes from the folder the NFO itself sits in. This had been worked around twice without being fixed - `repair_tvshow_titles()` rewrites the bad files afterwards, and `generate_missing_nfos()` refuses to write a "Season XX" string - but neither ran at write time, so every newly added series reproduced it. Existing files are untouched; the new button below repairs them.
+- **The retired filter settings were still editable in the admin UI.** 0.7.0 replaced the twelve booleans with the rule model and nothing reads the old keys, but `SETTING_GROUPS` kept listing `QUALITY_PREFERENCE`, `ALLOW_4K`, `EXCLUDE_REMUX`, `EXCLUDE_BLURAY`, `EXCLUDE_CAM`, `PREFER_WEBDL`, `PREFER_HEVC`, `STRICT_NO_CAM`, `AUDIO_LANGUAGE_PREFERENCE` and `EXCLUDE_LANGUAGES`. Toggling one saved a value no code path consults, which reads as a filter being in force when it is not. Both affected groups are renamed to what they now hold: "Quality & filtering" becomes "Size & seeders", "Languages & subtitles" becomes "Subtitles". A test ties the settings page to `migrate_filters.RETIRED` so this cannot drift again.
+
+### Added
+
+- **A "Fix series titles" button** in Maintenance. `repair_tvshow_titles()` and its endpoint already existed but nothing linked to them, so the only way to repair a library full of shows named "Season 01" was to call the URL by hand. A second test walks every literal `/ui/` URL the admin page fetches and asserts `app.py` defines it, so a renamed route fails the suite rather than leaving a button that breaks only when clicked.
+
 ## [0.7.3] - 2026-08-30
 
 ### Fixed

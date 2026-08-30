@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.7.4",
+    "date": "2026-08-30",
+    "notes": [
+      "Fix: Mycelium imported your whole TorBox account on a timer and at every boot, creating library entries with no request behind them that nothing in the UI could list or remove; importing is now only what the button does",
+      "Fix: every series showed as 'Season 01' in Jellyfin, because tvshow.nfo took its title from the season folder instead of the show folder",
+      "Fix: the retired filter settings were still editable in the admin UI, so toggling EXCLUDE_CAM or PREFER_HEVC saved a value nothing reads",
+      "New: a 'Fix series titles' button in Maintenance, which repairs tvshow.nfo files written by earlier versions",
+      "After upgrading: run Fix series titles, then Import TorBox library to adopt any orphaned auto-imports, then a Jellyfin scan"
+    ]
+  },
+  {
     "version": "0.7.3",
     "date": "2026-08-30",
     "notes": [
