@@ -39,9 +39,15 @@ def is_scanning(timeout: int = 10) -> bool:
     return any(t.get("Category") == "Library" and t.get("State") == "Running" for t in tasks)
 
 
-def refresh_library(timeout: int = 30) -> bool:
+def refresh_library(timeout: int = 30, force: bool = False) -> bool:
     """Trigger a Jellyfin library scan, unless one was already triggered in the
-    last _REFRESH_DEBOUNCE_SEC or Jellyfin reports a scan already in progress."""
+    last _REFRESH_DEBOUNCE_SEC or Jellyfin reports a scan already in progress.
+
+    force=True skips the debounce. The debounce protects Jellyfin from the burst
+    of refreshes that bulk .strm generation would otherwise produce; a scan
+    asked for by a person acting on one title must never be dropped, because
+    the visible result of dropping it is a title that looks like it was not
+    removed at all."""
     JELLYFIN_URL = settings.get("JELLYFIN_URL")
     JELLYFIN_API_KEY = settings.get("JELLYFIN_API_KEY")
     if not JELLYFIN_URL:
@@ -50,11 +56,11 @@ def refresh_library(timeout: int = 30) -> bool:
     with _refresh_lock:
         global _last_refresh_ts
         now = time.monotonic()
-        if now - _last_refresh_ts < _REFRESH_DEBOUNCE_SEC:
-            log.debug("Jellyfin refresh skipped: last triggered %.0fs ago", now - _last_refresh_ts)
+        if not force and now - _last_refresh_ts < _REFRESH_DEBOUNCE_SEC:
+            log.info("Jellyfin refresh skipped: last triggered %.0fs ago", now - _last_refresh_ts)
             return False
-        if is_scanning(timeout=min(timeout, 10)):
-            log.debug("Jellyfin refresh skipped: a scan is already running")
+        if not force and is_scanning(timeout=min(timeout, 10)):
+            log.info("Jellyfin refresh skipped: a scan is already running")
             return False
         url = f"{JELLYFIN_URL.rstrip('/')}/Library/Refresh"
         headers = {}

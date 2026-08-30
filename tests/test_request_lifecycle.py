@@ -251,3 +251,106 @@ def test_cancelling_retries_is_scoped_to_one_imdb_id():
     remaining = {r["imdb_id"] for r in db.get_due_retries()}
     assert "tt5550006" not in remaining
     assert "tt5550007" in remaining
+
+
+# ── purge must leave no trace Jellyfin can still show ─────────────────────────
+
+def _series_layout(root, title, imdb, episodes=2):
+    """Build what Mycelium actually writes for a series: strms plus the nfo and
+    artwork sidecars from nfo_generator."""
+    series = root / "series" / title
+    season = series / "Season 01"
+    season.mkdir(parents=True)
+    (series / "tvshow.nfo").write_text("<tvshow/>")
+    (series / "poster.jpg").write_bytes(b"x")
+    (series / "fanart.jpg").write_bytes(b"x")
+    (season / "poster.jpg").write_bytes(b"x")
+    for ep in range(1, episodes + 1):
+        strm = season / f"{title} S01E{ep:02d}.strm"
+        strm.write_text("http://x")
+        strm.with_suffix(".nfo").write_text("<episodedetails/>")
+        strm.with_name(f"{strm.stem}-thumb.jpg").write_bytes(b"x")
+        db.insert_virtual_item(f"tok{imdb}{ep}", "e" * 40, "magnet:?z", strm.stem,
+                               "series", strm_path=str(strm), imdb_id=imdb,
+                               season=1, episode=ep)
+    return series
+
+
+def test_purge_removes_artwork_and_show_metadata(tmp_path, monkeypatch):
+    """Leaving tvshow.nfo and posters behind keeps the show visible in Jellyfin
+    even though every .strm is gone - which is the whole point of the button."""
+    import cleanup
+    monkeypatch.setattr(cleanup, "MEDIA_PATH", str(tmp_path))
+    monkeypatch.setattr(cleanup.jellyfin, "refresh_library", lambda **k: None)
+    imdb = "tt5551001"
+    series = _series_layout(tmp_path, "Ghosted (2024)", imdb)
+
+    cleanup.purge_title(imdb, row_id=None)
+
+    assert not series.exists(), f"series folder survived: {sorted(p.name for p in series.rglob('*'))}"
+
+
+def test_purge_leaves_unrelated_files_and_their_folder_alone(tmp_path, monkeypatch):
+    """We only remove what Mycelium wrote. Anything else keeps its folder."""
+    import cleanup
+    monkeypatch.setattr(cleanup, "MEDIA_PATH", str(tmp_path))
+    monkeypatch.setattr(cleanup.jellyfin, "refresh_library", lambda **k: None)
+    imdb = "tt5551002"
+    series = _series_layout(tmp_path, "Kept (2024)", imdb)
+    stray = series / "Season 01" / "my-notes.txt"
+    stray.write_text("do not delete me")
+
+    cleanup.purge_title(imdb, row_id=None)
+
+    assert stray.exists(), "a file Mycelium did not write must survive"
+    assert not (series / "tvshow.nfo").exists()
+    assert not (series / "poster.jpg").exists()
+    assert list(series.rglob("*.strm")) == []
+
+
+def test_purge_does_not_touch_a_sibling_title(tmp_path, monkeypatch):
+    import cleanup
+    monkeypatch.setattr(cleanup, "MEDIA_PATH", str(tmp_path))
+    monkeypatch.setattr(cleanup.jellyfin, "refresh_library", lambda **k: None)
+    target = _series_layout(tmp_path, "Target (2024)", "tt5551003")
+    other = _series_layout(tmp_path, "Other (2024)", "tt5551004")
+
+    cleanup.purge_title("tt5551003", row_id=None)
+
+    assert not target.exists()
+    assert (other / "tvshow.nfo").exists()
+    assert len(list(other.rglob("*.strm"))) == 2
+
+
+def test_purge_forces_the_jellyfin_refresh(tmp_path, monkeypatch):
+    """The 60s debounce exists for bulk strm generation. A human clicking
+    Remove must not be swallowed by it."""
+    import cleanup
+    monkeypatch.setattr(cleanup, "MEDIA_PATH", str(tmp_path))
+    calls = {}
+    monkeypatch.setattr(cleanup.jellyfin, "refresh_library",
+                        lambda **kw: calls.update(kw) or True)
+
+    cleanup.purge_title("tt5551005", row_id=None)
+
+    assert calls.get("force") is True, "purge must bypass the refresh debounce"
+
+
+def test_purge_cleans_its_own_episodes_from_a_folder_it_must_keep(tmp_path, monkeypatch):
+    """A folder that still holds another title's .strm survives, and keeps its
+    artwork - but our purged episodes must not leave their stills behind."""
+    import cleanup
+    monkeypatch.setattr(cleanup, "MEDIA_PATH", str(tmp_path))
+    monkeypatch.setattr(cleanup.jellyfin, "refresh_library", lambda **k: None)
+    imdb = "tt5551006"
+    series = _series_layout(tmp_path, "Shared (2024)", imdb)
+    season = series / "Season 01"
+    foreign = season / "Someone Else S01E09.strm"
+    foreign.write_text("http://other")
+
+    cleanup.purge_title(imdb, row_id=None)
+
+    assert foreign.exists(), "another title's strm must survive"
+    assert (season / "poster.jpg").exists(), "artwork stays while media remains"
+    assert list(season.glob("*-thumb.jpg")) == [], "our episode stills must go"
+    assert list(season.glob("Shared*.strm")) == []

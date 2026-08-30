@@ -883,6 +883,65 @@ def _run_cleanup_locked() -> None:
         jellyfin.refresh_library()
 
 
+# Artwork and metadata that Mycelium (via nfo_generator) writes beside the
+# .strm files. Deleting the .strm alone leaves these behind, which keeps the
+# folder non-empty AND leaves Jellyfin a valid tvshow.nfo plus posters to scan,
+# so the title stays in the library looking like it was never removed.
+_SIDECAR_FILES = ("tvshow.nfo", "season.nfo", "movie.nfo",
+                  "poster.jpg", "fanart.jpg", "banner.jpg", "thumb.jpg", "logo.png")
+
+
+def _prune_folders(dirs: set[Path], media_root: Path) -> int:
+    """Remove our leftover sidecars from folders that no longer hold a .strm,
+    then delete the folders themselves, deepest first.
+
+    Only files this project writes are removed. Anything else - a user's own
+    file in the same folder - is left alone, and its folder with it, because
+    rmdir() refuses a directory that is not empty."""
+    removed = 0
+    candidates: set[Path] = set()
+    for d in dirs:
+        candidates.add(d)
+        # A series root holds the show-level tvshow.nfo/poster/fanart, one level
+        # above the season folder the episodes live in.
+        if d.parent != media_root and media_root in d.parent.parents:
+            candidates.add(d.parent)
+
+    for d in sorted(candidates, key=lambda p: len(p.parts), reverse=True):
+        if not d.is_dir():
+            continue
+        if media_root not in d.parents:
+            continue
+        if any(d.rglob("*.strm")):
+            continue  # still holds media we did not purge - leave it entirely
+        for name in _SIDECAR_FILES:
+            f = d / name
+            try:
+                if f.is_file():
+                    f.unlink()
+                    removed += 1
+            except Exception as exc:
+                log.warning("Purge: could not delete %s: %s", f, exc)
+        for f in list(d.glob("*-thumb.jpg")):
+            try:
+                f.unlink()
+                removed += 1
+            except Exception as exc:
+                log.warning("Purge: could not delete %s: %s", f, exc)
+
+    # Second pass: remove the folders themselves, deepest first. rmdir only
+    # succeeds on an empty directory, so anything still holding a file stays.
+    for d in sorted(candidates, key=lambda p: len(p.parts), reverse=True):
+        cur = d
+        while cur != media_root and media_root in cur.parents:
+            try:
+                cur.rmdir()
+            except OSError:
+                break
+            cur = cur.parent
+    return removed
+
+
 def purge_title(imdb_id: str, row_id: int | None = None) -> dict:
     """Remove one title from the library completely.
 
@@ -906,6 +965,9 @@ def purge_title(imdb_id: str, row_id: int | None = None) -> dict:
                     path.unlink()
                     result["strms"] += 1
                 path.with_suffix(".nfo").unlink(missing_ok=True)
+                # The episode still. Without it the season folder never empties,
+                # so the show keeps its folder and Jellyfin keeps showing it.
+                path.with_name(f"{path.stem}-thumb.jpg").unlink(missing_ok=True)
                 strm_generator._delete_spore_stubs(path)
                 dirs.add(path.parent)
             except Exception as exc:
@@ -915,17 +977,8 @@ def purge_title(imdb_id: str, row_id: int | None = None) -> dict:
             db.delete_virtual_item(token)
             result["items"] += 1
 
-    # Prune the now-empty season/title folders, deepest first. rmdir() only
-    # succeeds on an empty directory, so a folder still holding another
-    # title's files is left exactly as it was.
     media_root = Path(MEDIA_PATH)
-    for d in sorted(dirs, key=lambda p: len(p.parts), reverse=True):
-        while d != media_root and media_root in d.parents:
-            try:
-                d.rmdir()
-            except OSError:
-                break
-            d = d.parent
+    result["sidecars"] = _prune_folders(dirs, media_root)
 
     result["monitored"] = db.delete_monitored_series(imdb_id)
     result["wanted_episodes"] = db.delete_wanted_episodes(imdb_id)
@@ -940,7 +993,11 @@ def purge_title(imdb_id: str, row_id: int | None = None) -> dict:
 
     log.info("Purged %s from library: %s", imdb_id, result)
     try:
-        jellyfin.refresh_library()
+        # force: the 60s debounce exists so bulk strm generation does not hammer
+        # Jellyfin. A person clicking "Remove from library" is exactly the case
+        # that must not be swallowed by it - otherwise the files are gone and
+        # Jellyfin is never told, so the title just stays on screen.
+        jellyfin.refresh_library(force=True)
     except Exception as exc:
         log.warning("Purge %s: Jellyfin refresh failed: %s", imdb_id, exc)
     return result
