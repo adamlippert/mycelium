@@ -196,9 +196,10 @@ def warn_unsupported_requirements(rules: dict, sources: list[str]) -> list[str]:
             # Build a message naming the category, the rule, and the sources.
             category_prefix = _PREFIX_BY_CATEGORY[category]
             source_list = ", ".join(sorted(unsupported_sources))
+            subject = "that source" if len(unsupported_sources) == 1 else "these sources"
             messages.append(
                 f"{category_prefix}_REQUIRED={required} will have no effect on {source_list}: "
-                f"that source cannot populate {category}"
+                f"{subject} cannot populate {category}"
             )
 
     return messages

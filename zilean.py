@@ -49,11 +49,12 @@ def _to_stream(raw: dict, season: int | None) -> TorrentioStream | None:
 
     raw_title = raw.get("raw_title", "") or ""
     resolution = (raw.get("resolution") or "unknown").lower()
-    # Normalise to the labels used in QUALITY_PREFERENCE / _QUALITY_PATTERNS.
+    # Normalise to the labels used in RESOLUTION_PREFERRED / release_tags.detect_resolution.
     quality = resolution if resolution in ("2160p", "1080p", "720p", "480p") else "unknown"
 
     zilean_quality = raw.get("quality") or ""
-    # Embed the quality token in name so WEBDL_RE / REMUX_RE / CAM_RE etc. fire correctly.
+    # Embed the quality token in name so release_tags.detect_sources (webdl,
+    # remux, cam, etc.) fires correctly.
     source_token = _QUALITY_TOKEN_MAP.get(zilean_quality, zilean_quality)
     name = f"{raw_title} {source_token}".strip()
 

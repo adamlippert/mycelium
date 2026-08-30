@@ -189,18 +189,49 @@ ssh corveck@10.0.0.10 "cd /volume1/docker/plex && docker compose up -d"
 - `users` -- multi-user auth
 - `blacklist` -- info_hashes die niet werken
 
-## Kwaliteitsfilters (torrentio.py)
+## Kwaliteitsfilters (filter_rules.py / release_tags.py)
 
-Toegepast op Torrentio kandidaten in volgorde:
+De twaalf losse booleans (`ALLOW_4K`, `EXCLUDE_REMUX`, `EXCLUDE_BLURAY`,
+`EXCLUDE_CAM`, `STRICT_NO_CAM`, `EXCLUDE_DV_P5`, `PREFER_WEBDL`,
+`PREFER_HEVC`, `QUALITY_PREFERENCE`, `AUDIO_LANGUAGE_PREFERENCE`,
+`EXCLUDE_LANGUAGES`) zijn vervangen door een vier-staten regelmodel, een
+setting per categorie per staat. Zeven categorieen: `RESOLUTION`, `SOURCE`,
+`ENCODE`, `VISUAL_TAG`, `AUDIO_TAG`, `AUDIO_CHANNELS`, `LANGUAGE`.
 
-1. `EXCLUDE_DV_P5=true` -- blokkeert Dolby Vision Profile 5 (geen HDR10 fallback). Regex: `\bhdr10(?!\+)\b` (HDR10+ is GEEN veilige fallback)
-2. `EXCLUDE_REMUX=true` -- blokkeert remux/bluray rips
-3. `EXCLUDE_CAM=true` -- blokkeert CAM/TS/screener
-4. `QUALITY_PREFERENCE=1080p,2160p,720p`
-5. `MIN_SEEDERS=3`
-6. `PREFER_WEBDL=true`, `PREFER_HEVC=true`
+Per categorie vier staten (`{CATEGORY}_PREFERRED` / `_EXCLUDED` / `_REQUIRED`
+/ `_INCLUDED`) plus een `{CATEGORY}_STRICT` toggle:
 
-Als alle filters niets opleveren: terugval op minder strenge filtering.
+- **preferred** -- alleen tie-break bij het sorteren, redt nooit een kandidaat
+  die door een andere regel is afgevallen
+- **excluded** -- laat kandidaten met deze waarde vallen; relaxeert zichzelf
+  (met een log-regel) als dat de hele pool zou leegmaken, tenzij `_STRICT`
+  staat
+- **required** -- laat alles vallen dat niet matcht. "Onbekend" (de scraper
+  kon deze categorie niet taggen) telt nooit als mismatch en overleeft altijd
+- **included** -- redt een kandidaat van ELKE andere regel, in ELKE
+  categorie, ook `_REQUIRED`/`_EXCLUDED` op een andere categorie. De enige
+  instelling waarmee je jezelf serieus kunt verrassen; bewust gebruiken
+
+Elke categorie stemt onafhankelijk over de volledige kandidatenpool (geen
+sequentiele keten meer), dus de uitkomst hangt niet af van de volgorde
+waarin regels worden gedefinieerd. Soft-relaxatie wordt globaal beoordeeld:
+als de opgetelde drops van meerdere niet-strict categorieen samen de pool
+leeg zouden maken, relaxeren ze allemaal. Elke afgewezen kandidaat krijgt
+een reden (`filter_rules.Verdict`), zichtbaar in de logs en in de
+per-kandidaat verdicts.
+
+`SORT_ORDER` (default `season_pack,resolution,language,source,encode,seeders,size`)
+bepaalt de sorteervolgorde van overlevers; `cached`, `visual_tag` en
+`audio_tag` bestaan ook maar staan standaard uit.
+
+Migratie van de oude booleans naar de nieuwe settings draait eenmalig bij
+startup, bewaakt door `FILTER_RULES_MIGRATED` (zie `migrate_filters.py`).
+Een retired sleutel die nog in `.env` staat wordt bij startup gerapporteerd
+(`migrate_filters.warn_stale_env`), maar niet meer gelezen.
+
+Let op bij een handgeschreven `.env`: `QUALITY_PREFERENCE` bevatte ondanks
+zijn naam een RESOLUTIE (1080p/2160p/720p); de nieuwe `RESOLUTION_*` sleutels
+maken dat expliciet.
 
 ## Commando's
 

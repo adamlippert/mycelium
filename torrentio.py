@@ -3,6 +3,7 @@ import re
 
 import requests
 
+import release_tags
 from config import (
     TORRENTIO_BASE_URL,
     TORRENTIO_OPTS,
@@ -13,7 +14,6 @@ from streams import (
     rank_streams,
     parse_seeders,
     parse_size_gb,
-    _QUALITY_PATTERNS,
 )
 
 log = logging.getLogger(__name__)
@@ -35,10 +35,7 @@ _HTTP_HEADERS = {
 # Language / audio markers in release titles
 def _classify_quality(stream: dict) -> str:
     blob = f"{stream.get('name', '')} {stream.get('title', '')}"
-    for label, pattern in _QUALITY_PATTERNS.items():
-        if pattern.search(blob):
-            return label
-    return "unknown"
+    return release_tags.detect_resolution(blob)
 
 
 def _looks_like_season_pack(title: str, season: int | None) -> bool:

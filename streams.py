@@ -10,43 +10,22 @@ import re
 from dataclasses import dataclass
 
 from config import (
-    ALLOW_4K,
-    AUDIO_LANGUAGE_PREFERENCE,
-    EXCLUDE_BLURAY,
-    EXCLUDE_CAM,
-    EXCLUDE_DV_P5,
-    EXCLUDE_LANGUAGES,
-    EXCLUDE_REMUX,
     EXCLUDE_UNDERSIZED_RELEASES,
     MAX_SIZE_GB,
     MIN_SEEDERS,
-    PREFER_HEVC,
-    PREFER_WEBDL,
-    QUALITY_PREFERENCE,
     SORT_ORDER,
 )
 
 log = logging.getLogger(__name__)
 
-_QUALITY_PATTERNS = {
-    "2160p": re.compile(r"\b(2160p|4k|uhd)\b", re.IGNORECASE),
-    "1080p": re.compile(r"\b1080p\b", re.IGNORECASE),
-    "720p": re.compile(r"\b720p\b", re.IGNORECASE),
-    "480p": re.compile(r"\b480p\b", re.IGNORECASE),
-}
+# Messages already logged by rank_streams_explained's
+# warn_unsupported_requirements loop, so a busy instance does not repeat the
+# same warning on every single call. Resets on restart, which is the desired
+# behaviour: a settings change should re-warn.
+_warned_unsupported_requirements: set[str] = set()
+
 _SEEDERS_RE = re.compile(r"👤\s*(\d+)")
 _SIZE_RE = re.compile(r"💾\s*([\d.]+)\s*(GB|MB)", re.IGNORECASE)
-
-_REMUX_RE = re.compile(r"\b(remux|bdremux)\b", re.IGNORECASE)
-_BLURAY_RE = re.compile(r"\b(bluray|blu-ray|bdrip|brrip)\b", re.IGNORECASE)
-_CAM_RE = re.compile(r"\b(cam|camrip|hdcam|ts|telesync|hdts|scr|screener|dvdscr|workprint|r5)\b", re.IGNORECASE)
-_WEBDL_RE = re.compile(r"\b(web-?dl|webrip|web)\b", re.IGNORECASE)
-_HEVC_RE  = re.compile(r"\b(hevc|x265|h\.?265)\b", re.IGNORECASE)
-# Dolby Vision without an HDR10 base layer (Profile 5). The release name has
-# DV/DoVi but no HDR10 keyword alongside it. Profile 8 (DV + HDR10) is safe
-# and is NOT matched here.
-_DV_RE    = re.compile(r"\b(dovi|dolby[\s.]?vision|\.dv\.)\b", re.IGNORECASE)
-_HDR10_RE = re.compile(r"\bhdr10(?!\+)\b", re.IGNORECASE)
 
 # Some release groups mislabel a cam/trailer/junk file as a much higher
 # quality than it really is (title says "2160p" or doesn't mention "CAM" at
@@ -172,11 +151,11 @@ def parse_quality(text: str) -> str:
     'unknown' rather than '': the label lands in the quality_added metric, and
     two spellings of the same thing split the dashboard's Quality card in two.
     Zilean and Torrentio already said 'unknown', so that is the spelling.
+    Delegates to release_tags.detect_resolution, which returns the same
+    'unknown' sentinel for a no-match.
     """
-    for quality, pattern in _QUALITY_PATTERNS.items():
-        if pattern.search(text or ""):
-            return quality
-    return "unknown"
+    import release_tags
+    return release_tags.detect_resolution(text)
 
 
 def parse_size_gb(text: str) -> float:
@@ -412,7 +391,9 @@ def rank_streams_explained(
 
     for message in filter_rules.warn_unsupported_requirements(
             rules, sorted({s.source for s in streams})):
-        log.warning("%s", message)
+        if message not in _warned_unsupported_requirements:
+            _warned_unsupported_requirements.add(message)
+            log.warning("%s", message)
 
     tagged = [release_tags.detect_all(f"{s.name} {s.title}", s.languages)
               for s in streams]
@@ -448,8 +429,11 @@ def rank_streams(
 def _apply_show_override(rules: dict, override: dict) -> dict:
     """Translate the three show_quality_override fields into the rule model.
 
-    Returns a deep copy so a per-show override never leaks into the next call.
-    runtime_minutes is not a filter category and is handled elsewhere.
+    An empty override returns rules unchanged (nothing to translate, so
+    nothing to copy). Otherwise returns a deep copy with the override folded
+    in, so a per-show override never mutates the caller's rules or leaks into
+    the next call. runtime_minutes is not a filter category and is handled
+    elsewhere.
     """
     if not override:
         return rules

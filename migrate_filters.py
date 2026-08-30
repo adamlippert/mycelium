@@ -30,6 +30,10 @@ _VALUE_ALIASES = {
 # Retired key -> the key that replaces it, for the stale-.env warning.
 RETIRED = {
     "QUALITY_PREFERENCE": "RESOLUTION_PREFERRED",
+    # ALLOW_4K=true had no rule equivalent (it was the absence of an
+    # exclusion); only ALLOW_4K=false produces a row, in RESOLUTION_EXCLUDED.
+    # A true value maps here too because this dict only tells warn_stale_env()
+    # what to point a user at if the retired key is still in their .env.
     "ALLOW_4K": "RESOLUTION_EXCLUDED",
     "EXCLUDE_REMUX": "SOURCE_EXCLUDED",
     "EXCLUDE_BLURAY": "SOURCE_EXCLUDED",
