@@ -5,8 +5,8 @@
 **Branch:** `feat/ui-overhaul`, off `main`
 **Mockup:** claude.ai design project `6cde5310-be34-459c-a3b0-9d8f36c38763`,
 file `Mycelium Redesign.dc.html` (1,196 lines, read via DesignSync)
-**Supersedes:** `docs/superpowers/plans/2026-08-30-filter-rules-editor.md` (C2,
-written but never executed; its interaction design is absorbed here, see
+**Builds on:** `docs/superpowers/plans/2026-08-30-filter-rules-editor.md` (C2,
+executed; the editor it produced is ported rather than rebuilt, see
 "Filter rules")
 
 ## Problem
@@ -25,9 +25,11 @@ vocabulary. The SPA uses emoji for navigation. `AdminTabs.tsx` carries a
 comment admitting that neither the React nor the Jinja admin fully replaces the
 other, so it renders both behind a tab switcher rather than choosing.
 
-Separately, C1 replaced twelve filter booleans with 35 settings, and those 35
-still render as comma-separated text boxes over a vocabulary the page never
-displays. C2 was designed and planned to fix that, and never ran.
+Separately, C2 built a chip editor for the 35 filter settings C1 introduced,
+and it lives in the Jinja admin: `static/admin/filter_rules.js`, loaded by
+`templates/ui.html` and covered by 34 tests. It works. It is also the single
+largest piece of interaction logic tied to the surface being replaced, so the
+port has to carry it across without losing it.
 
 ## Goals
 
@@ -54,7 +56,7 @@ that panel is built once rather than twice.
 | Question | Decision |
 |---|---|
 | How much of the mockup? | Everything, one project. All eleven screens including the three Jinja ports. |
-| C2 overlap | Fold C2 into the redesign. Build the chip editor natively in React as an Admin tab. The existing C2 plan is superseded and deleted; its spec remains as design input. |
+| C2 overlap | Fold C2 into the redesign as a single Admin tab, built once. Taken on the belief that C2 was unbuilt; it is in fact shipped, so the tab ports the existing editor and reuses its pure state model instead of rebuilding it. The decision stands and gets cheaper. |
 | Panels with no backend | Build all three: request quota, live log, scraper health. |
 | Migration strategy | Convert in place for the eight React screens. Flagged parallel cutover for Admin, Manual, Setup and Login. |
 
@@ -258,21 +260,32 @@ functionality silently.
 
 ### Filter rules
 
-Follows the C2 spec (`2026-08-30-filter-rules-editor-design.md`) unchanged in
-interaction design, rebuilt in React rather than Jinja:
+A port of the shipped C2 editor, not a rebuild. `static/admin/filter_rules.js`
+exports a pure state model (`parseList`, `serializeList`, `buildState`,
+`assign`, `reorder`, `availableFor`, `invalidValues`, `isEmpty`,
+`toFormFields`, `visibleChips`, `displayValue`) alongside its DOM renderers.
+The state model is framework-agnostic and moves to the React tab unchanged;
+only `renderPanel`, `renderCollapsed`, `syncHiddenInputs` and
+`initFilterRules`, which are DOM-specific, are replaced by React components.
+Behaviour is preserved exactly:
 
 - One panel per category, seven panels: RESOLUTION, SOURCE, ENCODE, VISUAL_TAG,
   AUDIO_TAG, AUDIO_CHANNELS, LANGUAGE.
 - Four chip rows per panel: Preferred, Excluded, Required, Included.
 - A `strict` toggle per panel.
 - Values added from a dropdown of that category's vocabulary, not typed. This
-  is the point of C2: `settings.set()` currently rejects a typo only after
-  saving.
+  is the point of C2: typing a value blind meant `settings.set()` rejected a
+  typo only after saving.
+- Long chip lists collapse behind a `+N more` control at `CHIP_VISIBLE_LIMIT`.
+- Preferred chips carry their own reorder arrows, since order is the tie-break.
 - The Included row carries a standing warning that it overrides every other
   rule in every category.
 - Panel header shows the category's total value count.
 
-`tests/js/filter_rules.test.js` already exists and extends to cover the editor.
+`tests/js/filter_rules.test.js` (34 tests) covers the state model. Those tests
+must keep passing against the ported module unchanged: if the port needs them
+edited, the state model was altered and the port is no longer behaviour
+preserving.
 
 ### Manual
 
@@ -483,6 +496,14 @@ across a month boundary and with `quota_monthly = 0`. New file
 per state, the strict toggle, the vocabulary dropdown offering only valid values
 for its category, and the Included warning rendering. Extends the existing
 `filter_rules.test.js`.
+
+**React components (Vitest):** the repo has no way to test a component today,
+and none of the 4,950 existing frontend lines are covered. This project adds
+`vitest`, `jsdom`, `@testing-library/react` and `@testing-library/jest-dom` as
+devDependencies, configured in the existing `frontend/vite.config.ts`. Every
+primitive is tested for its variants; every ported admin tab is tested for the
+controls it renders, which is what stops a control disappearing silently during
+the port.
 
 **Manual verification on the VPS**, in order, because these cannot be tested
 locally against real data: `/login/classic` still works with `UI_V2` on; the
