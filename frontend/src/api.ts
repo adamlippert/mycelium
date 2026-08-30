@@ -340,6 +340,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(values),
     }),
+
+  // Application shell (nav counts + TorBox pill)
+  shellSummary: () => http<ShellSummary>('/ui/api/shell-summary'),
+};
+
+export type ShellSummary = {
+  counts: { watchlist: number; requests: number; wanted: number };
+  torbox: { state: 'ok' | 'degraded' | 'down'; label: string };
 };
 
 export interface SettingItem {

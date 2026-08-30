@@ -27,6 +27,7 @@ import processor
 import recovery
 import retry_queue
 import scrapers
+import shell_summary
 import stats
 import strm_generator
 import tmdb
@@ -1128,6 +1129,13 @@ def ui_api_repair():
     if not auth.is_admin():
         return jsonify(error="admin required"), 403
     return jsonify(stats.get_repair_overview())
+
+
+@app.get("/ui/api/shell-summary")
+def ui_api_shell_summary():
+    """Sidebar counts and the topbar TorBox pill, in one call."""
+    user = auth.current_user_record()
+    return jsonify(shell_summary.get_shell_summary((user or {}).get("id")))
 
 
 @app.get("/ui/api/torbox-list")
