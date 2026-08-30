@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.7.7",
+    "date": "2026-08-30",
+    "notes": [
+      "Fix: the admin dashboard reloaded itself every two minutes, throwing away your scroll position, the open tab and anything half-typed",
+      "The repair history on the Maintenance tab now refreshes in place on the same schedule, so nothing gets staler",
+      "Your search text in the repair table now survives a refresh instead of silently ceasing to filter"
+    ]
+  },
+  {
     "version": "0.7.6",
     "date": "2026-08-30",
     "notes": [

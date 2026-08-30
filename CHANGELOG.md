@@ -2,6 +2,15 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.7.7] - 2026-08-30
+
+### Fixed
+
+- **The admin dashboard reloaded itself every two minutes.** `templates/ui.html` ran `setInterval(() => location.reload(), 120000)`, gated on ten seconds of idleness that only `click` and `keydown` reset. Scrolling and reading never counted as activity, so ten seconds after your last click you were permanently idle and the reload was effectively unconditional. It destroyed scroll position, the open tab, expanded sections and any half-typed input across the whole page. Three of the four timers on that page already patch the DOM in place; the reload existed for one thing only, the repair half of the Maintenance tab, which is server-rendered and had no JSON endpoint behind it. Everything else the reload kept current is either already patched (`refreshHealth`, `refreshOverview`, `pollActivity`) or cannot change without a redeploy (`releases`, `config`, `app_version`).
+- The new `GET /ui/api/repair` returns the last cleanup run and the repair items, and `refreshRepair()` patches both blocks in place on the same two-minute timer and the same idle gate. The cadence is unchanged, so no data goes staler; only the page-destroying part is gone.
+- The patcher re-applies whatever is typed in the repair search box, because replacing the table rows drops the `display:none` the filter had set on them; without that, searching would silently stop working after the first refresh. It also escapes what it interpolates, which Jinja had been doing for free and hand-built HTML does not: titles, paths and reasons come from torrent names and the filesystem.
+- The endpoint is admin-only, since repair items carry filesystem paths and the tab that renders them is behind the admin gate already.
+
 ## [0.7.6] - 2026-08-30
 
 ### Fixed
