@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.7.6",
+    "date": "2026-08-30",
+    "notes": [
+      "Fix: the NFO title repair never repaired anything - an ElementTree element's truth value is its child count, so the guard skipped every file and the button silently did nothing in every version that had it",
+      "The repair now covers movies as well as series, rewriting a movie as a movie document keeping its year rather than as a tvshow",
+      "The Maintenance button is now called 'Fix library titles'",
+      "If you are on 0.7.5 or earlier, that button did nothing; run it again after upgrading"
+    ]
+  },
+  {
     "version": "0.7.5",
     "date": "2026-08-30",
     "notes": [

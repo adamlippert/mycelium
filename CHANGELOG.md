@@ -2,6 +2,13 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.7.6] - 2026-08-30
+
+### Fixed
+
+- **The NFO title repair never repaired anything.** `repair_tvshow_titles()` guarded with `if not title_el`, but an ElementTree Element's truth value is its *child count*, not whether the find succeeded. `<title>Season 01</title>` has no child elements, so the guard was true for every file and the loop skipped all of them; the function returned `{"fixed": 0}` regardless of what the library contained. Python emits a `DeprecationWarning` about precisely this. `is None` is the correct check. This means the repair has never worked in any version, which is also why the underlying "Season 01" bug survived long enough to be worked around twice.
+- **The repair now covers movies as well as series.** The write bug could not reach them - a movie's NFO sits in the movie's own folder, so `_write_nfo` derived its title from the right directory, and a test pins that - but a repair that inspects only half the library cannot report the other half is clean. A movie is rewritten as a `<movie>` document keeping its `<year>`, never as a `<tvshow>`, which would break Jellyfin matching. The Maintenance button is relabelled "Fix library titles" accordingly.
+
 ## [0.7.5] - 2026-08-30
 
 ### Fixed
