@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import type { WantedMovie, WantedEpisode } from '../types';
+import { Pill } from '../components/primitives';
+import type { PillState } from '../components/primitives';
 
 export default function Wanted() {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<'movies' | 'episodes'>('movies');
 
   const { data: moviesData, isLoading: moviesLoading } = useQuery({
     queryKey: ['wanted-movies'],
@@ -38,91 +39,107 @@ export default function Wanted() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex gap-1 bg-card rounded-lg p-1">
-          <TabBtn active={tab === 'movies'} onClick={() => setTab('movies')}>
-            Movies {movies.length > 0 && <Pill>{movies.length}</Pill>}
-          </TabBtn>
-          <TabBtn active={tab === 'episodes'} onClick={() => setTab('episodes')}>
-            Episodes {wantedEps.length > 0 && <Pill>{wantedEps.length}</Pill>}
-          </TabBtn>
-        </div>
+      <div className="mb-5 flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3">
+        <span className="text-sm text-body">{movies.length + episodes.length} items unresolved</span>
         <button
           type="button"
           onClick={() => recheckMutation.mutate()}
-          disabled={recheckMutation.isPending || recheckMutation.isSuccess}
-          className="px-4 py-2 rounded-lg bg-accent hover:bg-accent/80 disabled:opacity-60
-                     disabled:cursor-not-allowed text-sm font-semibold"
+          disabled={recheckMutation.isPending}
+          className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-light disabled:opacity-50"
         >
-          {recheckMutation.isPending
-            ? 'Starting…'
-            : recheckMutation.isSuccess
-            ? '✓ Recheck running'
-            : '↺ Recheck now'}
+          {recheckMutation.isPending ? 'Retrying...' : 'Retry all now'}
         </button>
       </div>
 
-      {tab === 'movies' && (
-        <section>
-          {moviesLoading ? (
-            <Spinner />
-          ) : movies.length === 0 ? (
-            <Empty>No movies on the wanted list.</Empty>
-          ) : (
-            <div className="rounded-xl border border-border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-card text-muted text-xs uppercase tracking-wider">
-                    <Th>Title</Th>
-                    <Th>Reason</Th>
-                    <Th>Attempts</Th>
-                    <Th>Added</Th>
-                    <Th>Last checked</Th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {movies.map((m) => (
-                    <MovieRow key={m.imdb_id} movie={m} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
+      <section>
+        <div className="mb-2 flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-body">Movies</h2>
+          <span
+            className="rounded px-1.5 py-0.5 font-mono text-[10px] text-muted"
+            style={{ background: 'var(--surface-subtle)' }}
+          >
+            {movies.length}
+          </span>
+        </div>
+        {moviesLoading ? (
+          <Spinner />
+        ) : movies.length === 0 ? (
+          <Empty>No movies on the wanted list.</Empty>
+        ) : (
+          <div className="rounded-xl border border-border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-card text-muted text-xs uppercase tracking-wider">
+                  <Th>Title</Th>
+                  <Th>Reason</Th>
+                  <Th>Attempts</Th>
+                  <Th>Added</Th>
+                  <Th>Last checked</Th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {movies.map((m) => (
+                  <MovieRow key={m.imdb_id} movie={m} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
-      {tab === 'episodes' && (
-        <section className="space-y-6">
-          {epsLoading ? (
-            <Spinner />
-          ) : (
-            <>
-              <EpisodesTable
-                title="Searching"
-                badge={wantedEps.length}
-                rows={wantedEps}
-                emptyMsg="No episodes being searched."
-              />
-              <EpisodesTable
-                title="Not yet aired"
-                badge={notAiredEps.length}
-                rows={notAiredEps}
-                emptyMsg="No upcoming episodes tracked."
-                dimmed
-              />
-              <EpisodesTable
-                title="Found"
-                badge={foundEps.length}
-                rows={foundEps}
-                emptyMsg=""
-                dimmed
-                collapsed
-              />
-            </>
-          )}
-        </section>
-      )}
+      <section className="space-y-6">
+        <div className="mb-2 flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-body">Episodes</h2>
+          <span
+            className="rounded px-1.5 py-0.5 font-mono text-[10px] text-muted"
+            style={{ background: 'var(--surface-subtle)' }}
+          >
+            {episodes.length}
+          </span>
+        </div>
+        {epsLoading ? (
+          <Spinner />
+        ) : (
+          <div className="space-y-6">
+            <EpisodesTable
+              title="Searching"
+              rows={wantedEps}
+              pillState="queued"
+              emptyMsg="No episodes being searched."
+            />
+            <EpisodesTable
+              title="Not yet aired"
+              rows={notAiredEps}
+              pillState="lazy"
+              emptyMsg="No upcoming episodes tracked."
+              dimmed
+            />
+            <EpisodesTable
+              title="Found"
+              rows={foundEps}
+              pillState="ready"
+              emptyMsg=""
+              dimmed
+              collapsed
+            />
+          </div>
+        )}
+      </section>
     </div>
+  );
+}
+
+function attemptStyle(n: number): React.CSSProperties {
+  if (n >= 10) return { background: 'rgba(209,71,71,0.14)', color: '#e48181' };
+  if (n >= 5) return { background: 'rgba(198,178,83,0.13)', color: '#dacd8a' };
+  return { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.45)' };
+}
+
+function AttemptBadge({ n }: { n: number }) {
+  return (
+    <span data-attempts={n} className="rounded-md px-1.5 py-1 font-mono text-[10px]" style={attemptStyle(n)}>
+      {n}
+    </span>
   );
 }
 
@@ -135,7 +152,7 @@ function MovieRow({ movie }: { movie: WantedMovie }) {
       </td>
       <td className="px-4 py-3 text-muted text-xs">{movie.reason || ' - '}</td>
       <td className="px-4 py-3 text-center">
-        <span className="text-xs px-2 py-0.5 rounded bg-bg">{movie.attempts}</span>
+        <AttemptBadge n={movie.attempts} />
       </td>
       <td className="px-4 py-3 text-xs text-muted">{fmtDate(movie.added_at)}</td>
       <td className="px-4 py-3 text-xs text-muted">{movie.last_checked ? fmtDate(movie.last_checked) : ' - '}</td>
@@ -145,15 +162,15 @@ function MovieRow({ movie }: { movie: WantedMovie }) {
 
 function EpisodesTable({
   title,
-  badge,
   rows,
+  pillState,
   emptyMsg,
   dimmed = false,
   collapsed = false,
 }: {
   title: string;
-  badge: number;
   rows: WantedEpisode[];
+  pillState: PillState;
   emptyMsg: string;
   dimmed?: boolean;
   collapsed?: boolean;
@@ -172,7 +189,7 @@ function EpisodesTable({
         <span className="text-xs uppercase tracking-wider text-muted font-semibold group-hover:text-white transition">
           {title}
         </span>
-        {badge > 0 && <Pill>{badge}</Pill>}
+        {rows.length > 0 && <Pill state={pillState}>{rows.length}</Pill>}
         <span className="text-muted text-xs ml-auto">{open ? '▲' : '▼'}</span>
       </button>
       {open && (
@@ -203,7 +220,7 @@ function EpisodesTable({
                       </td>
                       <td className="px-4 py-3 text-xs text-muted">{ep.air_date || ' - '}</td>
                       <td className="px-4 py-3 text-center">
-                        <span className="text-xs px-2 py-0.5 rounded bg-bg">{ep.attempt_count}</span>
+                        <AttemptBadge n={ep.attempt_count} />
                       </td>
                       <td className="px-4 py-3 text-xs text-muted">
                         {ep.last_attempted ? fmtDate(ep.last_attempted) : ' - '}
@@ -217,35 +234,6 @@ function EpisodesTable({
         </>
       )}
     </div>
-  );
-}
-
-function TabBtn({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`px-4 py-1.5 rounded text-sm font-medium flex items-center gap-1.5 transition
-        ${active ? 'bg-accent text-white' : 'text-muted hover:text-white'}`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Pill({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="bg-accent/20 text-accent text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-      {children}
-    </span>
   );
 }
 
