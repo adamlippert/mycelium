@@ -7,6 +7,16 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PluginMeta, PluginSettingsUi } from '../hooks/usePlugins'
 import { api, csrfToken } from '../api'
+import { Card, Pill } from './primitives'
+
+// Short mono badge for a plugin's icon tile: initials of a multi-word label,
+// otherwise the first two characters. Mirrors the abbr convention already
+// used for watchlist sources (SourceCard: "TR" for Trakt, "MD" for MDBList).
+function pluginAbbr(label: string): string {
+  const words = label.trim().split(/\s+/).filter(Boolean)
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
+  return label.slice(0, 2).toUpperCase()
+}
 
 export default function PluginSettingsCard({ plugin, embedded }: { plugin: PluginMeta; embedded?: boolean }) {
   const ui = plugin.settings_ui!
@@ -81,15 +91,28 @@ export default function PluginSettingsCard({ plugin, embedded }: { plugin: Plugi
   if (embedded) return inner
 
   return (
-    <div className="bg-card rounded-lg border border-border p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <div>
-          <h2 className="text-base font-bold leading-tight">{plugin.label}</h2>
-          <p className="text-muted text-xs">{plugin.description}</p>
+    <Card className="space-y-4">
+      <div className="flex items-center gap-3">
+        <span
+          className="flex h-9 w-9 flex-none items-center justify-center rounded-lg border font-mono text-[11px] font-bold"
+          style={{
+            background: 'rgba(97,82,223,0.15)',
+            borderColor: 'rgba(159,146,255,0.3)',
+            color: '#c7c2ff',
+          }}
+        >
+          {pluginAbbr(plugin.label)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <h2 className="text-sm font-medium text-body">{plugin.label}</h2>
+            {oAuth && <Pill state={connected ? 'ready' : 'lazy'}>{connected ? 'Connected' : 'Not connected'}</Pill>}
+          </span>
+          <p className="mt-0.5 text-xs text-muted">{plugin.description}</p>
         </div>
       </div>
       {inner}
-    </div>
+    </Card>
   )
 }
 
@@ -196,9 +219,12 @@ function OAuthDeviceSection({ spec, configured, connected, username, syncedAt, o
   if (connected) {
     return (
       <div className="space-y-2 mb-4">
-        <p className="text-sm">
-          Connected as <span className="font-semibold text-white">{username}</span>
-        </p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Pill state="ready">Connected</Pill>
+          <span className="text-sm text-body">
+            as <span className="font-semibold">{username}</span>
+          </span>
+        </div>
         {syncedAt && <p className="text-xs text-muted">Last synced: {syncedAt}</p>}
         <button
           onClick={revokeAuth}
@@ -237,6 +263,7 @@ function OAuthDeviceSection({ spec, configured, connected, username, syncedAt, o
 
   return (
     <div className="space-y-2 mb-4">
+      <Pill state="lazy">Not connected</Pill>
       {error && <p className="text-xs text-red-400">{error}</p>}
       <button
         onClick={startAuth}

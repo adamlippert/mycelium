@@ -3,6 +3,16 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { usePlugins } from '../hooks/usePlugins';
 import PluginSettingsCard from '../components/PluginSettingsCard';
+import { Card, Toggle } from '../components/primitives';
+
+// Short mono badge for a plugin's icon tile: initials of a multi-word label,
+// otherwise the first two characters. Mirrors the abbr convention already
+// used for watchlist sources (SourceCard: "TR" for Trakt, "MD" for MDBList).
+function pluginAbbr(label: string): string {
+  const words = label.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return label.slice(0, 2).toUpperCase();
+}
 
 export default function Settings() {
   const { plugins } = usePlugins();
@@ -17,21 +27,34 @@ export default function Settings() {
   return (
     <div className="space-y-6">
       <ChangePasswordCard />
-      <PreferencesCard />
       <MDBListCard />
-      {isAdmin && <NotificationsCard />}
 
-      {visiblePlugins.length > 0 && (
-        <>
-          <div>
-            <h1 className="text-xl font-bold mb-1">Plugins</h1>
-            <p className="text-muted text-sm">Enable features and connect accounts for your profile.</p>
+      <section className="mb-8">
+        <div className="mb-3">
+          <h2 className="text-sm font-semibold text-body">Integrations</h2>
+          <p className="text-xs text-muted">Watchlist sources and playback targets</p>
+        </div>
+        {visiblePlugins.length > 0 ? (
+          <div className="space-y-4">
+            {visiblePlugins.map(plugin => (
+              <PluginCard key={plugin.name} plugin={plugin} session={session} />
+            ))}
           </div>
-          {visiblePlugins.map(plugin => (
-            <PluginCard key={plugin.name} plugin={plugin} session={session} />
-          ))}
-        </>
-      )}
+        ) : (
+          <p className="text-xs text-muted">No integrations connected yet.</p>
+        )}
+      </section>
+
+      <section>
+        <div className="mb-3">
+          <h2 className="text-sm font-semibold text-body">Preferences</h2>
+          <p className="text-xs text-muted">Applies to your account only</p>
+        </div>
+        <div className="space-y-4">
+          <PreferencesCard />
+          {isAdmin && <NotificationsCard />}
+        </div>
+      </section>
     </div>
   );
 }
@@ -52,17 +75,29 @@ function PluginCard({ plugin, session }: {
   if (!anyFieldEnabled && !hasUi) return null;
 
   return (
-    <div className="bg-card rounded-lg border border-border p-6 space-y-4">
-      <div>
-        <h2 className="text-base font-bold leading-tight">{plugin.label}</h2>
-        {plugin.description && (
-          <p className="text-muted text-xs mt-0.5">{plugin.description}</p>
-        )}
+    <Card className="space-y-4">
+      <div className="flex items-center gap-3">
+        <span
+          className="flex h-9 w-9 flex-none items-center justify-center rounded-lg border font-mono text-[11px] font-bold"
+          style={{
+            background: 'rgba(97,82,223,0.15)',
+            borderColor: 'rgba(159,146,255,0.3)',
+            color: '#c7c2ff',
+          }}
+        >
+          {pluginAbbr(plugin.label)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-medium text-body">{plugin.label}</h2>
+          {plugin.description && (
+            <p className="mt-0.5 text-xs text-muted">{plugin.description}</p>
+          )}
+        </div>
       </div>
 
       {anyFieldEnabled && <PluginUserFieldsSection plugin={plugin} />}
       {hasUi && <PluginSettingsCard plugin={plugin} embedded />}
-    </div>
+    </Card>
   );
 }
 
@@ -80,25 +115,17 @@ function PluginUserFieldsSection({ plugin }: { plugin: ReturnType<typeof usePlug
         const label = plugin.user_field_labels?.[field] || field;
         const value = !!(session?.user as any)?.[field];
         return (
-          <label key={field} className="flex items-center gap-2 cursor-pointer select-none">
+          <div
+            key={field}
+            className={`flex items-center gap-2 ${mutation.isPending ? 'pointer-events-none opacity-50' : ''}`}
+          >
             <span className="text-sm text-muted">{label}</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={value}
-              onClick={() => mutation.mutate({ [field]: !value })}
-              disabled={mutation.isPending}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors
-                ${value ? 'bg-accent' : 'bg-zinc-600'}
-                ${mutation.isPending ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-            >
-              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform
-                ${value ? 'translate-x-4' : 'translate-x-1'}`} />
-            </button>
-            <span className={`text-xs font-medium ${value ? 'text-accent' : 'text-muted'}`}>
-              {value ? 'On' : 'Off'}
-            </span>
-          </label>
+            <Toggle
+              checked={value}
+              onChange={(next) => mutation.mutate({ [field]: next })}
+              label={label}
+            />
+          </div>
         );
       })}
     </div>
@@ -145,8 +172,6 @@ function PreferencesCard() {
 
   return (
     <div className="bg-card rounded-lg border border-border p-6">
-      <h2 className="text-base font-bold mb-1">Preferences</h2>
-      <p className="text-muted text-xs mb-4">Personalise how the app behaves for your account.</p>
       <div className="space-y-3">
         <label className="flex items-start gap-3 cursor-pointer select-none" onClick={toggle}>
           <div className="mt-0.5 flex-shrink-0">
