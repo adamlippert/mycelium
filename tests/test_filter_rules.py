@@ -292,3 +292,50 @@ def test_rank_streams_explained_returns_a_verdict_per_input(monkeypatch):
     dropped = [v for v in verdicts if not v.kept]
     assert dropped[0].rule == "SOURCE_EXCLUDED"
     assert dropped[0].value == "cam"
+
+
+def test_each_scraper_declares_its_capabilities():
+    import debridio, torrentio, zilean
+    for module in (debridio, torrentio, zilean):
+        assert isinstance(module.CAPABILITIES, frozenset), module.__name__
+        assert module.CAPABILITIES <= set(rt.CATEGORIES), module.__name__
+
+
+def test_zilean_supplies_every_text_derived_category_but_not_language():
+    """Zilean's asymmetry is not arbitrary. rank_streams tags a candidate with
+    detect_all(name + title, s.languages), so every category except language is
+    read off the release title and Zilean supplies it like any other scraper.
+    Only language comes from Stream.languages, which zilean.py never sets."""
+    import zilean
+    assert "language" not in zilean.CAPABILITIES
+    assert {"resolution", "source", "encode", "visual_tag",
+            "audio_tag", "audio_channels"} <= zilean.CAPABILITIES
+    assert zilean.LANGUAGES_AVAILABLE is False
+
+
+def test_required_rule_on_an_unsupported_category_is_warned_about():
+    warnings = fr.warn_unsupported_requirements(
+        _rules(language={"required": ["en"]}), ["zilean", "torrentio"])
+    assert len(warnings) == 1
+    assert "zilean" in warnings[0]
+    assert "language" in warnings[0]
+
+
+def test_no_warning_when_every_source_supports_the_category():
+    warnings = fr.warn_unsupported_requirements(
+        _rules(language={"required": ["en"]}), ["torrentio", "debridio"])
+    assert warnings == []
+
+
+def test_no_warning_without_a_required_rule():
+    """preferred and excluded rules degrade gracefully on a source that cannot
+    supply the category, because unknown always survives them. Only required
+    is worth warning about."""
+    assert fr.warn_unsupported_requirements(
+        _rules(language={"preferred": ["en"], "excluded": ["ru"]}),
+        ["zilean"]) == []
+
+
+def test_an_unimportable_source_name_does_not_raise():
+    assert fr.warn_unsupported_requirements(
+        _rules(language={"required": ["en"]}), ["not_a_real_module"]) == []

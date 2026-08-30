@@ -19,8 +19,12 @@ log = logging.getLogger(__name__)
 LANGUAGES_AVAILABLE = False
 
 # Categories this scraper can populate. Zilean does not provide language data,
-# only the six categories that come from release name parsing.
-CAPABILITIES = ("resolution", "source", "encode", "visual_tag", "audio_tag", "audio_channels")
+# only the six categories that come from release name parsing. The distinction:
+# resolution, source, encode, visual_tag, audio_tag, audio_channels are
+# text-derived (parsed from the release name at rank time); language is
+# field-derived (read from Stream.languages, which zilean.py never populates).
+# All other scrapers populate language; only Zilean omits it.
+CAPABILITIES = frozenset(("resolution", "source", "encode", "visual_tag", "audio_tag", "audio_channels"))
 
 _BYTES_PER_GB = 1024 ** 3
 
