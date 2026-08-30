@@ -10,7 +10,7 @@ export function Cast({
 }) {
   return (
     <div className="mt-7">
-      <h3 className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-3">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted mb-2">
         Cast
       </h3>
       <div className="flex gap-3 overflow-x-auto scrollbar-hidden">

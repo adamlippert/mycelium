@@ -61,7 +61,7 @@ export function Header({
         )}
         <div className="flex flex-wrap gap-2 mt-3 text-xs">
           {isWatched && (
-            <span className="px-2 py-0.5 rounded bg-green-600 text-white font-semibold">✓ Watched</span>
+            <span className="px-2 py-0.5 rounded bg-ok/20 text-ok font-semibold">✓ Watched</span>
           )}
           {detail.rating > 0 && (
             <Badge>★ {detail.rating} ({detail.votes} votes)</Badge>
@@ -151,8 +151,7 @@ export function Header({
             <button
               type="button"
               onClick={() => setShowPlayer(true)}
-              className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500
-                         text-white font-semibold text-sm transition-colors"
+              className="bg-accent hover:bg-accent-light text-white rounded-lg px-4 py-2 text-sm font-medium"
             >
               ▶ Play
             </button>
@@ -161,8 +160,8 @@ export function Header({
             type="button"
             onClick={() => watchlistMutation.mutate()}
             disabled={!detail.imdb_id || watchlistMutation.isPending}
-            className="px-4 py-2 rounded-lg border border-border hover:bg-bg text-sm
-                        disabled:opacity-50"
+            className="bg-transparent border border-border text-body hover:border-accent-light/50
+                       rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {inWatchlist ? '★ In watchlist' : '☆ Watchlist'}
           </button>
@@ -170,7 +169,8 @@ export function Header({
             <button
               type="button"
               onClick={() => setShowTrailer(true)}
-              className="px-4 py-2 rounded-lg border border-border hover:bg-bg text-sm"
+              className="bg-transparent border border-border text-body hover:border-accent-light/50
+                         rounded-lg px-4 py-2 text-sm font-medium"
             >
               ▶ Trailer
             </button>
@@ -180,7 +180,8 @@ export function Header({
               href={`https://www.imdb.com/title/${detail.imdb_id}/`}
               target="_blank"
               rel="noopener"
-              className="px-4 py-2 rounded-lg border border-border hover:bg-bg text-sm"
+              className="bg-transparent border border-border text-body hover:border-accent-light/50
+                         rounded-lg px-4 py-2 text-sm font-medium"
             >
               IMDB
             </a>
@@ -194,5 +195,5 @@ export function Header({
 }
 
 function Badge({ children }: { children: React.ReactNode }) {
-  return <span className="bg-bg px-2 py-0.5 rounded text-xs">{children}</span>;
+  return <span className="bg-card-raised border border-border text-body px-2 py-0.5 rounded text-xs">{children}</span>;
 }

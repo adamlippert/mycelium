@@ -10,7 +10,7 @@ export function Similar({
 }) {
   return (
     <div className="mt-7">
-      <h3 className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-3">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted mb-2">
         You might also like
       </h3>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
@@ -42,7 +42,7 @@ export function StreamingOn({ providers }: { providers: TmdbDetail['providers'] 
   if (!providers?.flatrate || providers.flatrate.length === 0) return null;
   return (
     <div className="mt-5">
-      <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted mb-2">
         Streaming on
       </div>
       <div className="flex flex-wrap gap-2">

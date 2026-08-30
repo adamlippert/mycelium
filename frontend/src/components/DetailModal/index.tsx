@@ -176,10 +176,10 @@ export default function DetailModal({
   return createPortal(
     <>
     <div
-      className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-sm overflow-y-auto p-4 sm:p-8"
+      className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm overflow-y-auto p-4 sm:p-8"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="relative max-w-5xl mx-auto bg-card rounded-2xl overflow-hidden shadow-2xl">
+      <div className="relative max-w-5xl mx-auto bg-card border border-border rounded-xl overflow-hidden shadow-2xl">
         {/* Backdrop hero */}
         {backdrop && (
           <div
@@ -277,21 +277,21 @@ export function LibraryButton({
 }) {
   if (libStatus === 'available' || libStatus === 'success') {
     return (
-      <button type="button" disabled className="px-4 py-2 rounded-lg bg-green-600 text-white font-semibold text-sm cursor-default">
+      <button type="button" disabled className="px-4 py-2 rounded-lg bg-ok/20 text-ok font-medium text-sm cursor-default">
         In library
       </button>
     );
   }
   if (libStatus === 'wanted' || libStatus === 'upcoming' || libStatus === 'pending' || libStatus === 'failed') {
     return (
-      <button type="button" disabled className="px-4 py-2 rounded-lg bg-yellow-600 text-white font-semibold text-sm cursor-default">
+      <button type="button" disabled className="px-4 py-2 rounded-lg bg-warn/20 text-warn font-medium text-sm cursor-default">
         Wanted
       </button>
     );
   }
   if (addStatus === 'wanted' || addStatus === 'upcoming') {
     return (
-      <button type="button" disabled className="px-4 py-2 rounded-lg bg-yellow-600 text-white font-semibold text-sm cursor-default">
+      <button type="button" disabled className="px-4 py-2 rounded-lg bg-warn/20 text-warn font-medium text-sm cursor-default">
         {addStatus === 'upcoming' ? 'Upcoming' : 'Wanted'}
       </button>
     );
@@ -302,7 +302,8 @@ export function LibraryButton({
       type="button"
       onClick={onAdd}
       disabled={isbusy || disabled}
-      className="px-4 py-2 rounded-lg bg-accent hover:bg-accent/90 disabled:opacity-60 disabled:cursor-not-allowed font-semibold text-sm"
+      className="bg-accent hover:bg-accent-light text-white rounded-lg px-4 py-2 text-sm font-medium
+                 disabled:opacity-60 disabled:cursor-not-allowed"
     >
       {addStatus === 'adding'
         ? 'Processing...'
