@@ -76,6 +76,9 @@ with open(_path.join(_path.dirname(__file__), "releases.json"), encoding="utf-8"
 db.init()
 
 import settings as _settings_mod
+import migrate_filters
+migrate_filters.migrate()
+migrate_filters.warn_stale_env()
 import os as _os
 LITE_MODE: bool = (
     _settings_mod.get("LITE_MODE", False)
