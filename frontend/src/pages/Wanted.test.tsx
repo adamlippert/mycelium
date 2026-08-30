@@ -16,6 +16,7 @@ vi.mock('../api', async () => {
       ] }),
       wantedEpisodes: () => Promise.resolve({ items: [
         { imdb_id: 'tt3', title: 'Show C', season: 1, episode: 2, status: 'wanted', air_date: '2026-08-01' },
+        { imdb_id: 'tt4', title: 'Show D', season: 2, episode: 5, status: 'give_up', air_date: '2026-07-01' },
       ] }),
     },
   };
@@ -43,6 +44,14 @@ describe('Wanted', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('3 items unresolved')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Retry all now' })).toBeInTheDocument();
+  });
+
+  it('excludes given-up episodes from the unresolved count but still shows the subgroup', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Movie A')).toBeInTheDocument());
+    // 2 movies + 1 wanted episode = 3; the give_up episode does not add to the count.
+    expect(screen.getByText('3 items unresolved')).toBeInTheDocument();
+    expect(screen.getByText('Given up')).toBeInTheDocument();
   });
 
   it('colour-ramps attempt counts at 5 and 10', async () => {

@@ -36,11 +36,12 @@ export default function Wanted() {
   const wantedEps = episodes.filter((e) => e.status === 'wanted');
   const notAiredEps = episodes.filter((e) => e.status === 'not_aired');
   const foundEps = episodes.filter((e) => e.status === 'found');
+  const giveUpEps = episodes.filter((e) => e.status === 'give_up');
 
   return (
     <div className="space-y-6">
       <div className="mb-5 flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3">
-        <span className="text-sm text-body">{movies.length + episodes.length} items unresolved</span>
+        <span className="text-sm text-body">{movies.length + wantedEps.length} items unresolved</span>
         <button
           type="button"
           onClick={() => recheckMutation.mutate()}
@@ -118,6 +119,14 @@ export default function Wanted() {
               title="Found"
               rows={foundEps}
               pillState="ready"
+              emptyMsg=""
+              dimmed
+              collapsed
+            />
+            <EpisodesTable
+              title="Given up"
+              rows={giveUpEps}
+              pillState="failed"
               emptyMsg=""
               dimmed
               collapsed
