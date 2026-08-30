@@ -94,6 +94,9 @@ STRICT_NO_CAM = _env("STRICT_NO_CAM", "false").lower() in ("1", "true", "yes")
 # about their quality (a cam mislabeled as "2160p") or aren't the full title
 # at all (a trailer standing in for the movie).
 EXCLUDE_UNDERSIZED_RELEASES = _env("EXCLUDE_UNDERSIZED_RELEASES", "true").lower() in ("1", "true", "yes")
+# When true, hard-fail the undersized size check (reject all if only undersized
+# candidates remain). When false, allow them as a soft fallback.
+EXCLUDE_UNDERSIZED_STRICT = _env("EXCLUDE_UNDERSIZED_STRICT", "false").lower() in ("1", "true", "yes")
 PREFER_WEBDL = _env("PREFER_WEBDL", "true").lower() in ("1", "true", "yes")
 PREFER_HEVC = _env("PREFER_HEVC", "true").lower() in ("1", "true", "yes")
 # Minimum seeders to include a candidate (0 = no filter; unknown seeders always pass).
@@ -105,6 +108,75 @@ AUDIO_LANGUAGE_PREFERENCE = [l.strip().lower() for l in _env("AUDIO_LANGUAGE_PRE
 # Languages to hard-block (comma-separated codes, e.g. ru). Torrents detected as
 # exclusively in a blocked language are filtered out before sorting.
 EXCLUDE_LANGUAGES = [l.strip().lower() for l in _env("EXCLUDE_LANGUAGES", "").split(",") if l.strip()]
+
+# The four-state rule model that replaces the booleans above. settings.get()
+# falls back to getattr(config, key), so these names must exist here or a
+# value set in .env is silently ignored - the retired booleans above were all
+# env-backed, and this is what keeps that true for their replacements.
+# Values from .env bypass settings.set()'s vocabulary validation, the same as
+# AUDIO_LANGUAGE_PREFERENCE always has; settings.py warns (without raising)
+# about a value not valid for its category, at import time.
+# Five of these carry non-empty defaults so a fresh install with no .env
+# behaves exactly as Mycelium did before the rule model replaced the
+# booleans: cam rips and remuxes excluded, WEB sources and HEVC preferred,
+# Dolby Vision without an HDR10 base layer excluded. The retired settings
+# they replace (EXCLUDE_CAM, EXCLUDE_REMUX, PREFER_WEBDL, PREFER_HEVC,
+# EXCLUDE_DV_P5, QUALITY_PREFERENCE) all defaulted to on, so shipping these
+# empty would silently drop filtering for anyone starting fresh.
+RESOLUTION_PREFERRED = [v.strip().lower() for v in _env("RESOLUTION_PREFERRED", "1080p,2160p,720p").split(",") if v.strip()]
+RESOLUTION_EXCLUDED  = [v.strip().lower() for v in _env("RESOLUTION_EXCLUDED", "").split(",") if v.strip()]
+RESOLUTION_REQUIRED  = [v.strip().lower() for v in _env("RESOLUTION_REQUIRED", "").split(",") if v.strip()]
+RESOLUTION_INCLUDED  = [v.strip().lower() for v in _env("RESOLUTION_INCLUDED", "").split(",") if v.strip()]
+RESOLUTION_STRICT    = _env("RESOLUTION_STRICT", "false").lower() in ("1", "true", "yes")
+SOURCE_PREFERRED = [v.strip().lower() for v in _env("SOURCE_PREFERRED", "webdl,webrip,web").split(",") if v.strip()]
+SOURCE_EXCLUDED  = [v.strip().lower() for v in _env("SOURCE_EXCLUDED", "remux,cam,ts,tc,scr,r5,ppvrip,workprint").split(",") if v.strip()]
+SOURCE_REQUIRED  = [v.strip().lower() for v in _env("SOURCE_REQUIRED", "").split(",") if v.strip()]
+SOURCE_INCLUDED  = [v.strip().lower() for v in _env("SOURCE_INCLUDED", "").split(",") if v.strip()]
+SOURCE_STRICT    = _env("SOURCE_STRICT", "false").lower() in ("1", "true", "yes")
+ENCODE_PREFERRED = [v.strip().lower() for v in _env("ENCODE_PREFERRED", "hevc").split(",") if v.strip()]
+ENCODE_EXCLUDED  = [v.strip().lower() for v in _env("ENCODE_EXCLUDED", "").split(",") if v.strip()]
+ENCODE_REQUIRED  = [v.strip().lower() for v in _env("ENCODE_REQUIRED", "").split(",") if v.strip()]
+ENCODE_INCLUDED  = [v.strip().lower() for v in _env("ENCODE_INCLUDED", "").split(",") if v.strip()]
+ENCODE_STRICT    = _env("ENCODE_STRICT", "false").lower() in ("1", "true", "yes")
+VISUAL_TAG_PREFERRED = [v.strip().lower() for v in _env("VISUAL_TAG_PREFERRED", "").split(",") if v.strip()]
+VISUAL_TAG_EXCLUDED  = [v.strip().lower() for v in _env("VISUAL_TAG_EXCLUDED", "dv_only").split(",") if v.strip()]
+VISUAL_TAG_REQUIRED  = [v.strip().lower() for v in _env("VISUAL_TAG_REQUIRED", "").split(",") if v.strip()]
+VISUAL_TAG_INCLUDED  = [v.strip().lower() for v in _env("VISUAL_TAG_INCLUDED", "").split(",") if v.strip()]
+VISUAL_TAG_STRICT    = _env("VISUAL_TAG_STRICT", "false").lower() in ("1", "true", "yes")
+AUDIO_TAG_PREFERRED = [v.strip().lower() for v in _env("AUDIO_TAG_PREFERRED", "").split(",") if v.strip()]
+AUDIO_TAG_EXCLUDED  = [v.strip().lower() for v in _env("AUDIO_TAG_EXCLUDED", "").split(",") if v.strip()]
+AUDIO_TAG_REQUIRED  = [v.strip().lower() for v in _env("AUDIO_TAG_REQUIRED", "").split(",") if v.strip()]
+AUDIO_TAG_INCLUDED  = [v.strip().lower() for v in _env("AUDIO_TAG_INCLUDED", "").split(",") if v.strip()]
+AUDIO_TAG_STRICT    = _env("AUDIO_TAG_STRICT", "false").lower() in ("1", "true", "yes")
+AUDIO_CHANNELS_PREFERRED = [v.strip().lower() for v in _env("AUDIO_CHANNELS_PREFERRED", "").split(",") if v.strip()]
+AUDIO_CHANNELS_EXCLUDED  = [v.strip().lower() for v in _env("AUDIO_CHANNELS_EXCLUDED", "").split(",") if v.strip()]
+AUDIO_CHANNELS_REQUIRED  = [v.strip().lower() for v in _env("AUDIO_CHANNELS_REQUIRED", "").split(",") if v.strip()]
+AUDIO_CHANNELS_INCLUDED  = [v.strip().lower() for v in _env("AUDIO_CHANNELS_INCLUDED", "").split(",") if v.strip()]
+AUDIO_CHANNELS_STRICT    = _env("AUDIO_CHANNELS_STRICT", "false").lower() in ("1", "true", "yes")
+LANGUAGE_PREFERRED = [v.strip().lower() for v in _env("LANGUAGE_PREFERRED", "").split(",") if v.strip()]
+LANGUAGE_EXCLUDED  = [v.strip().lower() for v in _env("LANGUAGE_EXCLUDED", "").split(",") if v.strip()]
+LANGUAGE_REQUIRED  = [v.strip().lower() for v in _env("LANGUAGE_REQUIRED", "").split(",") if v.strip()]
+LANGUAGE_INCLUDED  = [v.strip().lower() for v in _env("LANGUAGE_INCLUDED", "").split(",") if v.strip()]
+LANGUAGE_STRICT    = _env("LANGUAGE_STRICT", "false").lower() in ("1", "true", "yes")
+
+# The shipped sort order, kept as a literal tuple so a broken SORT_ORDER in
+# .env cannot take ranking down with it (see streams._resolve_sort_order,
+# which falls back to streams.DEFAULT_SORT_ORDER - the same tuple, imported
+# from here - rather than to SORT_ORDER below). season pack, then resolution,
+# language, source, encode, seeders, size. cached, visual_tag and audio_tag
+# are real criteria (see streams.SORT_CRITERIA) but are deliberately absent
+# from this default: they are new capabilities, and turning them on by
+# default would change which release every user downloads without their
+# asking.
+DEFAULT_SORT_ORDER = ("season_pack", "resolution", "language", "source",
+                      "encode", "seeders", "size")
+
+# Order in which survivors are ranked; each named criterion breaks ties left by
+# the ones before it. This is the user's raw .env value and may be anything at
+# all - streams._resolve_sort_order is what makes it safe to use.
+SORT_ORDER = [c.strip().lower() for c in _env(
+    "SORT_ORDER", ",".join(DEFAULT_SORT_ORDER)
+).split(",") if c.strip()]
 
 # How long to wait for Torbox to make the torrent available before triggering Jellyfin scan.
 TORBOX_POLL_INTERVAL_SEC = _env_int("TORBOX_POLL_INTERVAL_SEC", 2)

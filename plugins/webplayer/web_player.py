@@ -14,6 +14,7 @@ import requests as req_lib
 import requests.exceptions as _req_exc
 
 import db
+import release_tags
 import scrapers
 import settings as _settings
 import streams
@@ -99,7 +100,8 @@ def _web_score(stream: streams.Stream,
                caps: dict | None = None) -> int:
     caps = caps or {}
     blob = f"{stream.name} {stream.title}"
-    if streams._DV_RE.search(blob):        return -1  # Dolby Vision: browser-incompatible
+    if "dv" in release_tags.detect_visual_tags(blob):
+        return -1  # Dolby Vision: browser-incompatible
     if _NO_BROWSER_VIDEO_RE.search(blob):  return -1  # AV1/VP9/VP8: no browser HLS support
     if _HDR_NAME_RE.search(blob):          return -1  # HDR: browsers can't tone-map
 
@@ -112,7 +114,9 @@ def _web_score(stream: streams.Stream,
     elif stream.quality == "2160p": return -1   # 4K = altijd HEVC + groot, niet geschikt voor web
     elif stream.quality == "720p":  score += 50
 
-    if streams._WEBDL_RE.search(blob):   score += 40
+    sources = release_tags.detect_sources(blob)
+    if sources and sources[0] in ("webdl", "webrip", "web"):
+        score += 40
 
     is_h264 = bool(_H264_RE.search(blob))
     is_aac  = bool(_AAC_NAME_RE.search(blob))

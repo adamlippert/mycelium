@@ -105,12 +105,15 @@ def test_zilean_reports_unknown_rather_than_pretending():
 # ── the regression this fixes ─────────────────────────────────────────────────
 
 _RANK_SETTINGS = {
-    "QUALITY_PREFERENCE": ["1080p"], "AUDIO_LANGUAGE_PREFERENCE": ["en", "multi"],
-    "PREFER_WEBDL": False, "PREFER_HEVC": False, "ALLOW_4K": True,
-    "EXCLUDE_REMUX": False, "EXCLUDE_BLURAY": False, "EXCLUDE_CAM": False,
-    "EXCLUDE_DV_P5": False, "EXCLUDE_UNDERSIZED_RELEASES": False,
-    "STRICT_NO_CAM": False, "MIN_SEEDERS": 0, "MAX_SIZE_GB": 0,
-    "EXCLUDE_LANGUAGES": [],
+    "RESOLUTION_PREFERRED": ["1080p"],
+    "LANGUAGE_PREFERRED": ["en", "multi"],
+    "LANGUAGE_EXCLUDED": [],
+    "SOURCE_PREFERRED": [], "SOURCE_EXCLUDED": [], "SOURCE_STRICT": False,
+    "ENCODE_PREFERRED": [],
+    "VISUAL_TAG_EXCLUDED": [],
+    "RESOLUTION_EXCLUDED": [],
+    "EXCLUDE_UNDERSIZED_RELEASES": False,
+    "MIN_SEEDERS": 0, "MAX_SIZE_GB": 0,
 }
 
 

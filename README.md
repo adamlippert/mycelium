@@ -384,20 +384,30 @@ Most settings are hot-reloadable via the Settings tab. Only scheduler intervals 
 
 Full reference: [`.env.example`](.env.example). Key variables:
 
+Release filtering is a four-state rule model. Every one of seven categories -
+`RESOLUTION`, `SOURCE`, `ENCODE`, `VISUAL_TAG`, `AUDIO_TAG`, `AUDIO_CHANNELS`,
+`LANGUAGE` - has its own `{CATEGORY}_PREFERRED` / `_EXCLUDED` / `_REQUIRED` /
+`_INCLUDED` / `_STRICT` settings (35 keys total, edited via Settings >
+Filtering rules or set directly in `.env`). Every category is evaluated
+against the full candidate pool independently, so the result never depends on
+which rule happens to run first, and a dropped candidate always carries its
+reason (visible in the logs and the per-candidate verdicts). `preferred`
+never rescues - it only breaks ties among survivors. `included` overrides
+every other rule in every category, so use it deliberately.
+
 | Variable | Default | Purpose |
 |---|---|---|
 | `TORBOX_API_KEY` | *(wizard)* | From [torbox.app](https://torbox.app) > Settings > API |
 | `CATBOX_MODE` | `false` | Lazy materialization via proxy URLs (recommended) |
 | `CATBOX_HOST` | *(wizard)* | Externally reachable URL for proxy strm URLs |
 | `CATBOX_IDLE_MINUTES` | `43200` | Idle time before torrent is released (30 days) |
-| `QUALITY_PREFERENCE` | `1080p,2160p,720p` | Comma-separated preference order |
-| `ALLOW_4K` | `true` | Allow 2160p releases |
-| `EXCLUDE_REMUX` | `true` | Skip remux releases unless no alternatives |
-| `EXCLUDE_CAM` | `true` | Skip CAM/TS/screener |
-| `PREFER_WEBDL` | `true` | Prefer WEB-DL sources |
-| `PREFER_HEVC` | `true` | Prefer HEVC encodes |
+| `{CATEGORY}_PREFERRED` | *(empty)* | Tie-break only, ranks a matching value ahead of others. Never rescues a value another rule dropped. |
+| `{CATEGORY}_EXCLUDED` | *(empty)* | Drops a matching candidate. Self-relaxes (with a log line) if it would empty the whole candidate pool, unless `{CATEGORY}_STRICT` is set. |
+| `{CATEGORY}_REQUIRED` | *(empty)* | Drops every candidate that does not match. A release the scraper could not tag for this category ("unknown") always survives - it never counts as a mismatch. |
+| `{CATEGORY}_INCLUDED` | *(empty)* | Rescues a matching candidate from every other rule, in every category - even `_REQUIRED`/`_EXCLUDED` on an unrelated category. The one setting that can seriously surprise you; use it deliberately. |
+| `{CATEGORY}_STRICT` | `false` | Hard-fail `{CATEGORY}_EXCLUDED`/`_REQUIRED` instead of self-relaxing when they would empty the pool |
 | `MIN_SEEDERS` | `3` | Minimum seeder count |
-| `AUDIO_LANGUAGE_PREFERENCE` | *(empty)* | e.g. `nl,en` |
+| `SORT_ORDER` | `season_pack,resolution,language,source,encode,seeders,size` | Tie-break order for survivors. `cached`, `visual_tag`, `audio_tag` also exist but are off by default so they don't silently change what you download |
 | `AUTO_UPGRADE_ENABLED` | `true` | Periodic upgrade scan |
 | `MULTI_DEBRID_ENABLED` | `false` | RealDebrid fallback when TorBox misses |
 | `WEBDAV_ENABLED` | `false` | Serve library as virtual .mkv files (Plex) |
@@ -407,7 +417,7 @@ Full reference: [`.env.example`](.env.example). Key variables:
 | `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` | *(empty)* | Trakt app credentials, from [trakt.tv/oauth/applications](https://trakt.tv/oauth/applications) |
 | `TRAKT_AUTO_REQUEST_CAP` / `MDBLIST_AUTO_REQUEST_CAP` | `10` | Max new items auto-requested per sync run |
 | `AUTO_APPROVE_DAILY_LIMIT` / `AUTO_APPROVE_ACTOR_DAILY_LIMIT` | `5` | Daily budget for genre-rule fill / favorite-actor fill |
-| `EXCLUDE_UNDERSIZED_RELEASES` | `true` | Reject releases too small to be real for their claimed quality + runtime |
+| `EXCLUDE_UNDERSIZED_RELEASES` / `EXCLUDE_UNDERSIZED_STRICT` | `true` / `false` | Reject releases too small to be real for their claimed quality + runtime; `_STRICT` hard-fails instead of falling back when only undersized candidates remain |
 | `METRICS_TOKEN` | *(empty)* | Bearer token for `/metrics` scraping |
 
 ---

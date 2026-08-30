@@ -4,47 +4,29 @@ Zilean, Torrentio and Debridio all produce Stream objects and are ranked by
 the same function. That function used to live in torrentio.py, which made it
 look Torrentio-specific; it never was.
 """
+import copy
 import logging
 import re
 from dataclasses import dataclass
 
 from config import (
-    ALLOW_4K,
-    AUDIO_LANGUAGE_PREFERENCE,
-    EXCLUDE_BLURAY,
-    EXCLUDE_CAM,
-    EXCLUDE_DV_P5,
-    EXCLUDE_LANGUAGES,
-    EXCLUDE_REMUX,
+    DEFAULT_SORT_ORDER,
     EXCLUDE_UNDERSIZED_RELEASES,
     MAX_SIZE_GB,
     MIN_SEEDERS,
-    PREFER_HEVC,
-    PREFER_WEBDL,
-    QUALITY_PREFERENCE,
+    SORT_ORDER,
 )
 
 log = logging.getLogger(__name__)
 
-_QUALITY_PATTERNS = {
-    "2160p": re.compile(r"\b(2160p|4k|uhd)\b", re.IGNORECASE),
-    "1080p": re.compile(r"\b1080p\b", re.IGNORECASE),
-    "720p": re.compile(r"\b720p\b", re.IGNORECASE),
-    "480p": re.compile(r"\b480p\b", re.IGNORECASE),
-}
+# Messages already logged by rank_streams_explained's
+# warn_unsupported_requirements loop, so a busy instance does not repeat the
+# same warning on every single call. Resets on restart, which is the desired
+# behaviour: a settings change should re-warn.
+_warned_unsupported_requirements: set[str] = set()
+
 _SEEDERS_RE = re.compile(r"👤\s*(\d+)")
 _SIZE_RE = re.compile(r"💾\s*([\d.]+)\s*(GB|MB)", re.IGNORECASE)
-
-_REMUX_RE = re.compile(r"\b(remux|bdremux)\b", re.IGNORECASE)
-_BLURAY_RE = re.compile(r"\b(bluray|blu-ray|bdrip|brrip)\b", re.IGNORECASE)
-_CAM_RE = re.compile(r"\b(cam|camrip|hdcam|ts|telesync|hdts|scr|screener|dvdscr|workprint|r5)\b", re.IGNORECASE)
-_WEBDL_RE = re.compile(r"\b(web-?dl|webrip|web)\b", re.IGNORECASE)
-_HEVC_RE  = re.compile(r"\b(hevc|x265|h\.?265)\b", re.IGNORECASE)
-# Dolby Vision without an HDR10 base layer (Profile 5). The release name has
-# DV/DoVi but no HDR10 keyword alongside it. Profile 8 (DV + HDR10) is safe
-# and is NOT matched here.
-_DV_RE    = re.compile(r"\b(dovi|dolby[\s.]?vision|\.dv\.)\b", re.IGNORECASE)
-_HDR10_RE = re.compile(r"\bhdr10(?!\+)\b", re.IGNORECASE)
 
 # Some release groups mislabel a cam/trailer/junk file as a much higher
 # quality than it really is (title says "2160p" or doesn't mention "CAM" at
@@ -170,11 +152,11 @@ def parse_quality(text: str) -> str:
     'unknown' rather than '': the label lands in the quality_added metric, and
     two spellings of the same thing split the dashboard's Quality card in two.
     Zilean and Torrentio already said 'unknown', so that is the spelling.
+    Delegates to release_tags.detect_resolution, which returns the same
+    'unknown' sentinel for a no-match.
     """
-    for quality, pattern in _QUALITY_PATTERNS.items():
-        if pattern.search(text or ""):
-            return quality
-    return "unknown"
+    import release_tags
+    return release_tags.detect_resolution(text)
 
 
 def parse_size_gb(text: str) -> float:
@@ -228,73 +210,21 @@ def _quality_rank(stream: Stream, quality_pref: list[str]) -> int:
         return len(quality_pref) + 1
 
 
-def rank_streams(
-    streams: list[Stream],
-    prefer_season_pack: bool = False,
-    override: dict | None = None,
-) -> list[Stream]:
-    """Return streams sorted by preference. Per-show override (dict from DB) can replace
-    quality_preference, allow_4k, prefer_hevc on a case-by-case basis. Global filters
-    are pulled live from the settings overlay so the UI can toggle them at runtime."""
-    if not streams:
-        return []
+def _apply_non_category_filters(candidates: list[Stream], override: dict) -> list[Stream]:
+    """MIN_SEEDERS, MAX_SIZE_GB and the undersized-release check.
+
+    These three are not filter-rule categories (release_tags.CATEGORIES), so
+    filter_rules never evaluates them; they run here exactly as they did in the
+    old sequential rank_streams body. Same "unknown passes" semantics (a
+    seeders of 0 or a size_gb of 0.0 always survives, because that means the
+    scraper did not report a value, not that the value is zero), and each
+    filter still self-disables with the same log message when it would empty
+    the pool.
+    """
+    if not candidates:
+        return candidates
 
     import settings as _settings
-    override = override or {}
-    quality_pref = (
-        [q.strip() for q in (override.get("quality_preference") or "").split(",") if q.strip()]
-        or _settings.get("QUALITY_PREFERENCE", QUALITY_PREFERENCE)
-    )
-    allow_4k = _settings.get("ALLOW_4K", ALLOW_4K) if override.get("allow_4k") is None else bool(override["allow_4k"])
-    prefer_hevc = _settings.get("PREFER_HEVC", PREFER_HEVC) if override.get("prefer_hevc") is None else bool(override["prefer_hevc"])
-    exclude_remux = _settings.get("EXCLUDE_REMUX", EXCLUDE_REMUX)
-    exclude_bluray = _settings.get("EXCLUDE_BLURAY", EXCLUDE_BLURAY)
-    exclude_dv_p5 = _settings.get("EXCLUDE_DV_P5", EXCLUDE_DV_P5)
-    exclude_cam = _settings.get("EXCLUDE_CAM", EXCLUDE_CAM)
-    strict_cam = _settings.get("STRICT_NO_CAM", False)
-    prefer_webdl = _settings.get("PREFER_WEBDL", PREFER_WEBDL)
-    min_seeders = _settings.get("MIN_SEEDERS", MIN_SEEDERS)
-    max_size_gb = _settings.get("MAX_SIZE_GB", MAX_SIZE_GB)
-    audio_pref = _settings.get("AUDIO_LANGUAGE_PREFERENCE", AUDIO_LANGUAGE_PREFERENCE)
-
-    candidates = streams if allow_4k else [s for s in streams if s.quality != "2160p"]
-    if not candidates:
-        log.warning("No non-4K candidates; falling back to full list")
-        candidates = list(streams)
-
-    if exclude_dv_p5:
-        def _is_dv_p5(s: Stream) -> bool:
-            blob = f"{s.name} {s.title}"
-            return bool(_DV_RE.search(blob)) and not bool(_HDR10_RE.search(blob))
-        filtered = [s for s in candidates if not _is_dv_p5(s)]
-        if filtered:
-            candidates = filtered
-        else:
-            log.warning("Only DV Profile 5 candidates available; allowing them")
-
-    if exclude_remux:
-        filtered = [s for s in candidates if not _REMUX_RE.search(f"{s.name} {s.title}")]
-        if filtered:
-            candidates = filtered
-        else:
-            log.warning("Only remux candidates available; allowing them")
-
-    if exclude_bluray:
-        filtered = [s for s in candidates if not _BLURAY_RE.search(f"{s.name} {s.title}")]
-        if filtered:
-            candidates = filtered
-        else:
-            log.warning("Only BluRay candidates available; allowing them")
-
-    if exclude_cam:
-        filtered = [s for s in candidates if not _CAM_RE.search(f"{s.name} {s.title}")]
-        if filtered:
-            candidates = filtered
-        elif strict_cam:
-            log.warning("Only cam/telesync candidates available and STRICT_NO_CAM is on  -  rejecting all")
-            return []
-        else:
-            log.warning("Only cam/telesync candidates available; allowing them")
 
     exclude_undersized = _settings.get("EXCLUDE_UNDERSIZED_RELEASES", EXCLUDE_UNDERSIZED_RELEASES)
     runtime_minutes = override.get("runtime_minutes")
@@ -306,13 +236,16 @@ def rank_streams(
         filtered = [s for s in candidates if not _is_undersized(s)]
         if filtered:
             candidates = filtered
-        elif strict_cam:
-            log.warning("Only implausibly small (likely fake/cam/trailer) candidates available "
-                        "and STRICT_NO_CAM is on  -  rejecting all")
+        # Previously governed by STRICT_NO_CAM, which had nothing to do with
+        # release size. Now it has its own toggle.
+        elif _settings.get("EXCLUDE_UNDERSIZED_STRICT", False):
+            log.warning("Only implausibly small candidates available and "
+                        "EXCLUDE_UNDERSIZED_STRICT is on; rejecting all")
             return []
         else:
             log.warning("Only implausibly small (likely fake/cam/trailer) candidates available; allowing them")
 
+    min_seeders = _settings.get("MIN_SEEDERS", MIN_SEEDERS)
     if min_seeders > 0:
         filtered = [s for s in candidates if s.seeders == 0 or s.seeders >= min_seeders]
         if filtered:
@@ -320,6 +253,7 @@ def rank_streams(
         else:
             log.warning("No candidates meet MIN_SEEDERS=%d; allowing all", min_seeders)
 
+    max_size_gb = _settings.get("MAX_SIZE_GB", MAX_SIZE_GB)
     if max_size_gb > 0:
         filtered = [s for s in candidates if s.size_gb == 0.0 or s.size_gb <= max_size_gb]
         if filtered:
@@ -327,42 +261,210 @@ def rank_streams(
         else:
             log.warning("No candidates within MAX_SIZE_GB=%d; allowing all", max_size_gb)
 
-    exclude_langs = set(_settings.get("EXCLUDE_LANGUAGES", EXCLUDE_LANGUAGES) or [])
-    if exclude_langs:
-        pref_langs = set(audio_pref) | {"multi"}
-        filtered = [
-            s for s in candidates
-            if not (
-                any(lang in s.languages for lang in exclude_langs)
-                and not any(lang in s.languages for lang in pref_langs)
-            )
-        ]
-        if filtered:
-            candidates = filtered
-        else:
-            log.warning("All candidates match EXCLUDE_LANGUAGES; allowing all")
+    return candidates
+
+
+# Every name SORT_ORDER may contain, in the order _sort_candidates would use
+# them if a setting listed all ten. settings.py validates against this tuple
+# the same way a rule-list key is validated against release_tags.values_for().
+SORT_CRITERIA = (
+    "season_pack", "resolution", "cached", "language", "source",
+    "encode", "visual_tag", "audio_tag", "seeders", "size",
+)
+
+
+def _resolve_sort_order(raw) -> list[str]:
+    """Normalise a SORT_ORDER value: lowercase, drop unknown names (warning),
+    dedupe keeping the first occurrence, and fall back to the default when
+    nothing usable survives.
+
+    This is the one place that has to tolerate a value settings.set() never
+    validated - one that arrived via .env, which parses SORT_ORDER as a plain
+    comma-split list with no access to SORT_CRITERIA (config.py cannot import
+    streams.py; the reverse import already exists). A DB-stored value already
+    passed set()'s validation, but running it through here too is harmless and
+    keeps this function the single source of truth for what actually sorts.
+
+    Falls back to DEFAULT_SORT_ORDER, never to SORT_ORDER: SORT_ORDER is
+    exactly the unvalidated config.SORT_ORDER value this function exists to
+    tolerate, so falling back to it would mean a SORT_ORDER=bogus in .env gets
+    rejected here and then handed straight back as the "default" - every
+    rank_streams call would raise a KeyError in sort_key on the very name this
+    function just dropped. DEFAULT_SORT_ORDER is a plain literal that cannot
+    be broken by any env value.
+    """
+    names = raw if isinstance(raw, (list, tuple)) else []
+    seen: set[str] = set()
+    resolved: list[str] = []
+    for name in names:
+        name = str(name).strip().lower()
+        if not name or name in seen:
+            continue
+        if name not in SORT_CRITERIA:
+            log.warning(
+                "SORT_ORDER has unknown criterion %r; dropping it. Valid "
+                "names are %s", name, ", ".join(SORT_CRITERIA))
+            continue
+        seen.add(name)
+        resolved.append(name)
+    return resolved or list(DEFAULT_SORT_ORDER)
+
+
+def _sort_candidates(
+    candidates: list[Stream],
+    rules: dict,
+    prefer_season_pack: bool,
+    override: dict,
+) -> list[Stream]:
+    """Sort survivors by preference, in the order SORT_ORDER names.
+
+    The default order reproduces the old hardcoded tuple exactly: season pack,
+    resolution, language, source, encode, seeders, size. cached, visual_tag
+    and audio_tag are real criteria a user can add, but are deliberately absent
+    from that default - see config.SORT_ORDER.
+
+    override is accepted for signature symmetry with _apply_non_category_filters;
+    a per-show quality_preference/prefer_hevc override is already folded into
+    rules by the caller (_apply_show_override), so nothing here reads it again.
+    """
+    import release_tags
+    import settings as _settings
+
+    resolution_preferred = rules["resolution"]["preferred"]
+    language_preferred = rules["language"]["preferred"]
+    source_preferred = rules["source"]["preferred"]
+    encode_preferred = rules["encode"]["preferred"]
+    visual_tag_preferred = rules["visual_tag"]["preferred"]
+    audio_tag_preferred = rules["audio_tag"]["preferred"]
 
     def _lang_score(s: Stream) -> int:
-        if not audio_pref:
+        if not language_preferred:          # no preference: everything ties
             return 0
-        if not s.languages:
-            return len(audio_pref)
-        for idx, want in enumerate(audio_pref):
+        if not s.languages:                 # "did not say": second worst
+            return len(language_preferred)
+        for idx, want in enumerate(language_preferred):
             if want in s.languages or "multi" in s.languages:
-                return idx
-        return len(audio_pref) + 1
+                return idx                  # matched: by preference position
+        return len(language_preferred) + 1  # positively non-matching: worst
+
+    # Reward any source/encode/visual tag/audio tag the user listed as
+    # preferred, not one hardcoded value. The old _WEBDL_RE matched web-dl,
+    # webrip and web alike, so hardcoding webdl here silently demoted the
+    # other two.
+    scorers = {
+        "season_pack": lambda s, blob: 0 if prefer_season_pack and s.is_season_pack else 1,
+        "resolution": lambda s, blob: _quality_rank(s, resolution_preferred),
+        "cached": lambda s, blob: 0 if s.cached else 1,
+        "language": lambda s, blob: _lang_score(s),
+        "source": lambda s, blob: 0 if any(
+            v in source_preferred for v in release_tags.detect_sources(blob)) else 1,
+        "encode": lambda s, blob: 0 if any(
+            v in encode_preferred for v in release_tags.detect_encode(blob)) else 1,
+        "visual_tag": lambda s, blob: 0 if any(
+            v in visual_tag_preferred for v in release_tags.detect_visual_tags(blob)) else 1,
+        "audio_tag": lambda s, blob: 0 if any(
+            v in audio_tag_preferred for v in release_tags.detect_audio_tags(blob)) else 1,
+        "seeders": lambda s, blob: -s.seeders,
+        "size": lambda s, blob: s.size_gb,
+    }
+
+    order = _resolve_sort_order(_settings.get("SORT_ORDER", SORT_ORDER))
 
     def sort_key(s: Stream) -> tuple:
         blob = f"{s.name} {s.title}"
-        return (
-            0 if prefer_season_pack and s.is_season_pack else 1,
-            _quality_rank(s, quality_pref),
-            _lang_score(s),
-            0 if prefer_webdl and _WEBDL_RE.search(blob) else 1,
-            0 if prefer_hevc and _HEVC_RE.search(blob) else 1,
-            -s.seeders,
-            s.size_gb,
-        )
+        return tuple(scorers[name](s, blob) for name in order)
 
     candidates.sort(key=sort_key)
     return candidates
+
+
+def rank_streams_explained(
+    streams: list["Stream"],
+    prefer_season_pack: bool = False,
+    override: dict | None = None,
+) -> tuple[list["Stream"], list["filter_rules.Verdict"]]:
+    """Rank candidates and return the verdict for every input, kept or dropped.
+
+    Nothing is discarded silently: each rejected candidate carries the rule and
+    value that removed it, and whether that rule later relaxed itself.
+    """
+    import filter_rules
+    import release_tags
+
+    if not streams:
+        return [], []
+
+    override = override or {}
+    rules = filter_rules.load_rules()
+    rules = _apply_show_override(rules, override)
+
+    for message in filter_rules.warn_unsupported_requirements(
+            rules, sorted({s.source for s in streams})):
+        if message not in _warned_unsupported_requirements:
+            _warned_unsupported_requirements.add(message)
+            log.warning("%s", message)
+
+    tagged = [release_tags.detect_all(f"{s.name} {s.title}", s.languages)
+              for s in streams]
+    verdicts = filter_rules.evaluate(tagged, rules)
+    kept = [s for s, v in zip(streams, verdicts) if v.kept]
+
+    dropped = len(streams) - len(kept)
+    if dropped:
+        by_rule: dict[str, int] = {}
+        for v in verdicts:
+            if not v.kept and v.rule:
+                by_rule[v.rule] = by_rule.get(v.rule, 0) + 1
+        log.info("kept %d of %d; %s", len(kept), len(streams),
+                 ", ".join(f"{r} dropped {n}" for r, n in sorted(by_rule.items())))
+
+    kept = _apply_non_category_filters(kept, override)
+    kept = _sort_candidates(kept, rules, prefer_season_pack, override)
+    return kept, verdicts
+
+
+def rank_streams(
+    streams: list[Stream],
+    prefer_season_pack: bool = False,
+    override: dict | None = None,
+) -> list[Stream]:
+    """Return streams sorted by preference. Thin wrapper over
+    rank_streams_explained that discards the verdicts, so the two existing
+    call sites (torrentio.py, scrapers.py) keep working unchanged."""
+    kept, _ = rank_streams_explained(streams, prefer_season_pack, override)
+    return kept
+
+
+def _apply_show_override(rules: dict, override: dict) -> dict:
+    """Translate the three show_quality_override fields into the rule model.
+
+    An empty override returns rules unchanged (nothing to translate, so
+    nothing to copy). Otherwise returns a deep copy with the override folded
+    in, so a per-show override never mutates the caller's rules or leaks into
+    the next call. runtime_minutes is not a filter category and is handled
+    elsewhere.
+    """
+    if not override:
+        return rules
+    out = copy.deepcopy(rules)
+
+    raw = override.get("quality_preference")
+    if raw:
+        out["resolution"]["preferred"] = [
+            v.strip().lower() for v in str(raw).split(",") if v.strip()
+        ]
+
+    allow_4k = override.get("allow_4k")
+    if allow_4k is not None and not allow_4k:
+        if "2160p" not in out["resolution"]["excluded"]:
+            out["resolution"]["excluded"].append("2160p")
+
+    prefer_hevc = override.get("prefer_hevc")
+    if prefer_hevc is not None:
+        preferred = out["encode"]["preferred"]
+        if prefer_hevc and "hevc" not in preferred:
+            preferred.insert(0, "hevc")
+        elif not prefer_hevc and "hevc" in preferred:
+            preferred.remove("hevc")
+
+    return out

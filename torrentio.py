@@ -3,6 +3,7 @@ import re
 
 import requests
 
+import release_tags
 from config import (
     TORRENTIO_BASE_URL,
     TORRENTIO_OPTS,
@@ -13,7 +14,6 @@ from streams import (
     rank_streams,
     parse_seeders,
     parse_size_gb,
-    _QUALITY_PATTERNS,
 )
 
 log = logging.getLogger(__name__)
@@ -21,6 +21,10 @@ log = logging.getLogger(__name__)
 # Historical name. Six call sites and several tests import TorrentioStream
 # from here; keep it working.
 TorrentioStream = Stream
+
+# Categories this scraper can populate. Torrentio parses every category from
+# the release name, including language via detect_languages.
+CAPABILITIES = frozenset(("resolution", "source", "encode", "visual_tag", "audio_tag", "audio_channels", "language"))
 
 _HTTP_HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -31,10 +35,7 @@ _HTTP_HEADERS = {
 # Language / audio markers in release titles
 def _classify_quality(stream: dict) -> str:
     blob = f"{stream.get('name', '')} {stream.get('title', '')}"
-    for label, pattern in _QUALITY_PATTERNS.items():
-        if pattern.search(blob):
-            return label
-    return "unknown"
+    return release_tags.detect_resolution(blob)
 
 
 def _looks_like_season_pack(title: str, season: int | None) -> bool:

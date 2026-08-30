@@ -12,6 +12,7 @@ import logging
 
 import config as _config
 import db
+import release_tags as _rt
 import streams as _streams
 
 log = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ log = logging.getLogger(__name__)
 # Type hints per key  -  drives parsing of stored strings.
 _BOOL_KEYS = {
     "EXCLUDE_UNDERSIZED_RELEASES",
+    "EXCLUDE_UNDERSIZED_STRICT",
     "CATBOX_MODE",
     "CATBOX_PRELOAD",
     "ALLOW_4K",
@@ -42,13 +44,44 @@ _BOOL_KEYS = {
     "TRUSTED_PROXY_AUTH",
     "LITE_MODE",
     "DEBRIDIO_ENABLED",
+    "FILTER_RULES_MIGRATED",
 }
 _LIST_KEYS = {
     "QUALITY_PREFERENCE",
     "AUDIO_LANGUAGE_PREFERENCE",
     "EXCLUDE_LANGUAGES",
     "OPENSUBTITLES_LANGUAGES",
+    "SORT_ORDER",
 }
+_RULE_PREFIX_BY_CATEGORY = {
+    "resolution": "RESOLUTION",
+    "source": "SOURCE",
+    "encode": "ENCODE",
+    "visual_tag": "VISUAL_TAG",
+    "audio_tag": "AUDIO_TAG",
+    "audio_channels": "AUDIO_CHANNELS",
+    "language": "LANGUAGE",
+}
+_RULE_STATES = ("PREFERRED", "EXCLUDED", "REQUIRED", "INCLUDED")
+
+# key -> category, used by set() to validate each value against that
+# category's vocabulary, the same way _LANGUAGE_LIST_KEYS works.
+_RULE_LIST_KEYS: dict[str, str] = {
+    f"{prefix}_{state}": category
+    for category, prefix in _RULE_PREFIX_BY_CATEGORY.items()
+    for state in _RULE_STATES
+}
+_RULE_STRICT_KEYS = {f"{p}_STRICT" for p in _RULE_PREFIX_BY_CATEGORY.values()}
+
+# Not set(_RULE_LIST_KEYS): `set` is shadowed by this module's own set()
+# function below. It works at first import, since this line runs before that
+# name is bound, but importlib.reload(settings) rebinds `set` to the builtin
+# for the duration of the reload and then re-executes this line against the
+# module-level def, raising TypeError. {*_RULE_LIST_KEYS} sidesteps the name
+# entirely.
+_LIST_KEYS |= {*_RULE_LIST_KEYS}
+_BOOL_KEYS |= _RULE_STRICT_KEYS
+
 # List keys whose values must each be a code detect_languages() can actually
 # produce (streams.LANGUAGE_CODES). Checked in set() below, the same way
 # _ENUM_KEYS is checked, so a typo like AUDIO_LANGUAGE_PREFERENCE=english
@@ -130,12 +163,14 @@ HOT_RELOAD = {
     "EXCLUDE_CAM",
     "STRICT_NO_CAM",
     "EXCLUDE_UNDERSIZED_RELEASES",
+    "EXCLUDE_UNDERSIZED_STRICT",
     "PREFER_WEBDL",
     "PREFER_HEVC",
     "MIN_SEEDERS",
     "MAX_SIZE_GB",
     "AUDIO_LANGUAGE_PREFERENCE",
     "EXCLUDE_LANGUAGES",
+    "SORT_ORDER",
     "OPENSUBTITLES_LANGUAGES",
     "OPENSUBTITLES_API_KEY",
     "OPENSUBTITLES_USER_AGENT",
@@ -169,6 +204,14 @@ HOT_RELOAD = {
     "DEBRIDIO_ENABLED", "DEBRIDIO_API_KEY", "DEBRIDIO_BASE_URL",
     "DEBRIDIO_MAX_RESULTS", "DEBRIDIO_CONFIG_TOKEN",
 }
+
+# The 35 rule keys from Task 4 (_RULE_LIST_KEYS' 28 + _RULE_STRICT_KEYS' 7)
+# are hot-reloadable: filter_rules.load_rules() reads every one of them live
+# on every rank_streams call, the same as EXCLUDE_UNDERSIZED_STRICT and
+# SORT_ORDER above. Only EXCLUDE_UNDERSIZED_STRICT and SORT_ORDER were added
+# when those two shipped; the 35 were never added, which left the admin UI
+# telling users to restart after every filter edit when nothing needed one.
+HOT_RELOAD |= {*_RULE_LIST_KEYS} | _RULE_STRICT_KEYS
 
 # Logical groups for the Settings UI tab.
 SETTING_GROUPS = [
@@ -212,9 +255,19 @@ SETTING_GROUPS = [
         "keys": [
             "QUALITY_PREFERENCE", "ALLOW_4K", "EXCLUDE_REMUX", "EXCLUDE_BLURAY", "EXCLUDE_CAM",
             "PREFER_WEBDL", "PREFER_HEVC", "MIN_SEEDERS", "MAX_SIZE_GB", "STRICT_NO_CAM",
-            "EXCLUDE_UNDERSIZED_RELEASES",
+            "EXCLUDE_UNDERSIZED_RELEASES", "EXCLUDE_UNDERSIZED_STRICT",
             "WEB_PLAYER_MAX_SIZE_GB",
         ],
+    },
+    {
+        "id": "filter_rules",
+        "title": "Filtering rules",
+        "keys": [k for k in _RULE_LIST_KEYS] + sorted(_RULE_STRICT_KEYS),
+    },
+    {
+        "id": "sort_order",
+        "title": "Sort order",
+        "keys": ["SORT_ORDER"],
     },
     {
         "id": "languages",
@@ -340,6 +393,30 @@ def set(key: str, value) -> None:
                 f"{key} has unknown language code(s) {unknown}; valid codes "
                 f"are {', '.join(_streams.LANGUAGE_CODES)}"
             )
+    if key in _RULE_LIST_KEYS:
+        category = _RULE_LIST_KEYS[key]
+        vocabulary = _rt.values_for(category)
+        values = [v.strip().lower() for v in
+                  (value if isinstance(value, list) else str(value).split(","))
+                  if str(v).strip()]
+        unknown = [v for v in values if v not in vocabulary]
+        if unknown:
+            raise ValueError(
+                f"{key} has value(s) not valid for {category}: {unknown}. "
+                f"Valid values are {list(vocabulary)}"
+            )
+        value = values
+    if key == "SORT_ORDER":
+        names = [v.strip().lower() for v in
+                 (value if isinstance(value, list) else str(value).split(","))
+                 if str(v).strip()]
+        unknown = [n for n in names if n not in _streams.SORT_CRITERIA]
+        if unknown:
+            raise ValueError(
+                f"{key} has unknown criteria {unknown}. Valid names are "
+                f"{list(_streams.SORT_CRITERIA)}"
+            )
+        value = names
     if isinstance(value, bool):
         stored = "true" if value else "false"
     elif isinstance(value, (list, tuple)):
@@ -370,6 +447,30 @@ def _warn_unknown_env_language_codes() -> None:
 _warn_unknown_env_language_codes()
 
 
+def _warn_unknown_env_rule_values() -> None:
+    """RESOLUTION_PREFERRED and the other 27 rule-list keys set via .env
+    bypass set()'s vocabulary validation entirely, the same as
+    AUDIO_LANGUAGE_PREFERENCE always has - config.py just lowercase-splits on
+    commas and accepts anything, since it cannot import release_tags (the
+    reverse import already exists, and release_tags.values_for("language")
+    imports streams, which imports config). So check the .env-derived values
+    once, here, at import time - and only warn, never raise: a bad .env value
+    must not crash startup, a migration must never brick boot over one either.
+    """
+    for key, category in _RULE_LIST_KEYS.items():
+        values = getattr(_config, key, None) or []
+        vocabulary = _rt.values_for(category)
+        unknown = sorted({v for v in values if v not in vocabulary})
+        if unknown:
+            log.warning(
+                "%s in .env has value(s) not valid for %s: %s. Valid values "
+                "are %s", key, category, unknown, list(vocabulary),
+            )
+
+
+_warn_unknown_env_rule_values()
+
+
 def all_for_ui() -> list[dict]:
     """Return groups with each key's current value + type for the UI."""
     overrides = db.get_all_settings()
@@ -387,11 +488,21 @@ def all_for_ui() -> list[dict]:
                 else "enum" if key in _ENUM_KEYS
                 else "str"
             )
+            # options is None for a free-text key; a key with a fixed
+            # vocabulary gets it listed here so the UI can render a <select>
+            # or multi-select instead of free text that set() would reject.
+            options = _ENUM_KEYS.get(key)
+            if options is None and key in _RULE_LIST_KEYS:
+                options = list(_rt.values_for(_RULE_LIST_KEYS[key]))
+            elif options is None and key in _LANGUAGE_LIST_KEYS:
+                options = list(_streams.LANGUAGE_CODES)
+            elif options is None and key == "SORT_ORDER":
+                options = list(_streams.SORT_CRITERIA)
             items.append({
                 "key": key,
                 "value": current,
                 "kind": kind,
-                "options": _ENUM_KEYS.get(key),
+                "options": options,
                 "overridden": override_raw is not None,
                 "hot_reload": key in HOT_RELOAD,
             })
