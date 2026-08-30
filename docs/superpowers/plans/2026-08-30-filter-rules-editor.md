@@ -18,7 +18,7 @@
 - The repository is **public**. No API keys, tokens, passwords, or IP addresses.
 - Work on branch `feat/filter-rules-editor`, cut from `feat/inclusive-filter-model` (NOT from `main`; C1 is not merged).
 - Python tests: `TORBOX_API_KEY=test ./.venv-sdd/bin/python -m pytest tests/ -q`
-- JavaScript tests: `node --test tests/js/`
+- JavaScript tests: `node --test tests/js/*.test.js`
 - No new runtime dependencies, and no build step. The admin UI is served as a plain Jinja template.
 
 ## Key facts, verified against the running code
@@ -205,7 +205,7 @@ test("toFormFields keeps an invalid value rather than silently dropping it", () 
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `node --test tests/js/`
+Run: `node --test tests/js/*.test.js`
 Expected: FAIL, `Cannot find module '../../static/admin/filter_rules.js'`
 
 - [ ] **Step 3: Write the minimal implementation**
@@ -303,7 +303,7 @@ if (typeof window !== "undefined") window.FilterRules = _api;
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `node --test tests/js/`
+Run: `node --test tests/js/*.test.js`
 Expected: PASS, 17 tests
 
 - [ ] **Step 5: Verify the move semantics test has teeth**
@@ -377,7 +377,7 @@ test("every language code the backend can emit has a name", () => {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `node --test tests/js/`
+Run: `node --test tests/js/*.test.js`
 Expected: FAIL, `fr.displayValue is not a function`
 
 - [ ] **Step 3: Write the minimal implementation**
@@ -408,7 +408,7 @@ Add `displayValue` and `LANGUAGE_NAMES` to the `_api` object.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `node --test tests/js/`
+Run: `node --test tests/js/*.test.js`
 Expected: PASS, 21 tests
 
 - [ ] **Step 5: Cross-check the map against the real backend vocabulary**
@@ -656,7 +656,7 @@ test("syncHiddenInputs clears a state that has been emptied", () => {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `node --test tests/js/`
+Run: `node --test tests/js/*.test.js`
 Expected: FAIL, `fr.syncHiddenInputs is not a function`
 
 - [ ] **Step 3: Write the implementation**
@@ -785,7 +785,7 @@ in your report if you think it should be done now instead.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `node --test tests/js/`
+Run: `node --test tests/js/*.test.js`
 Expected: PASS, 23 tests
 
 - [ ] **Step 5: Verify the emptied-field test has teeth**
