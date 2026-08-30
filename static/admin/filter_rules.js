@@ -103,17 +103,46 @@ const STATE_LABELS = {
   required: "Required", included: "Included",
 };
 
-function _chip(state, stateName, value, isInvalid) {
+function _chip(state, stateName, value, isInvalid, reorderable) {
   const chip = document.createElement("span");
   chip.className = "fr-chip" + (isInvalid ? " fr-chip-invalid" : "");
   chip.dataset.value = value;
   chip.dataset.state = stateName;
-  chip.textContent = displayValue(state.category, value);
+
+  if (reorderable) {
+    // Arrows live on the chip itself. A single control acting on "the last
+    // chip" cannot reach an arbitrary order: repeated clicks just swap the
+    // final pair, because "last" is recomputed after every redraw.
+    const left = document.createElement("button");
+    left.type = "button";
+    left.className = "fr-move";
+    left.dataset.action = "move-left";
+    left.textContent = "<";
+    left.title = `Move ${value} earlier in the preference order`;
+    chip.appendChild(left);
+  }
+
+  const label = document.createElement("span");
+  label.className = "fr-chip-label";
+  label.textContent = displayValue(state.category, value);
+  chip.appendChild(label);
+
+  if (reorderable) {
+    const right = document.createElement("button");
+    right.type = "button";
+    right.className = "fr-move";
+    right.dataset.action = "move-right";
+    right.textContent = ">";
+    right.title = `Move ${value} later in the preference order`;
+    chip.appendChild(right);
+  }
+
   if (isInvalid) {
     chip.title = `${value} is not a valid ${state.category} value. It was ` +
                  `probably set in .env before the vocabulary changed. ` +
                  `It matches nothing. Remove it.`;
   }
+
   const x = document.createElement("button");
   x.type = "button";
   x.className = "fr-chip-remove";
@@ -164,7 +193,8 @@ function renderPanel(state, prefix) {
       none.textContent = "(none)";
       chips.appendChild(none);
     } else {
-      values.forEach(v => chips.appendChild(_chip(state, name, v, invalid.has(v))));
+      values.forEach(v => chips.appendChild(
+        _chip(state, name, v, invalid.has(v), name === "preferred")));
     }
     row.appendChild(chips);
 
@@ -175,18 +205,6 @@ function renderPanel(state, prefix) {
       availableFor(state).map(v =>
         `<option value="${v}">${displayValue(state.category, v)}</option>`).join("");
     row.appendChild(add);
-
-    // Order is load-bearing only for preferred. Offering reorder on a
-    // membership test would imply a semantics that does not exist.
-    if (name === "preferred") {
-      const up = document.createElement("button");
-      up.type = "button"; up.textContent = "up";
-      up.className = "fr-move"; up.dataset.action = "up";
-      const down = document.createElement("button");
-      down.type = "button"; down.textContent = "down";
-      down.className = "fr-move"; down.dataset.action = "down";
-      row.appendChild(up); row.appendChild(down);
-    }
 
     if (name === "included") {
       const warn = document.createElement("span");
@@ -283,20 +301,16 @@ function initFilterRules(group, container) {
     const holder = ev.target.closest("[data-prefix]");
     if (!holder) return;
     const prefix = holder.dataset.prefix;
-    const row = ev.target.closest("[data-state]");
 
     if (action === "expand") {
       container.dataset[`open_${prefix}`] = "1";
     } else if (action === "remove") {
       const chip = ev.target.closest(".fr-chip");
       states[prefix] = assign(states[prefix], chip.dataset.value, null);
-    } else if (action === "up" || action === "down") {
-      const chips = row.querySelectorAll(".fr-chip");
-      const last = chips.length ? chips[chips.length - 1].dataset.value : null;
-      if (last) {
-        states[prefix] = reorder(states[prefix], "preferred", last,
-                                 action === "up" ? -1 : 1);
-      }
+    } else if (action === "move-left" || action === "move-right") {
+      const chip = ev.target.closest(".fr-chip");
+      states[prefix] = reorder(states[prefix], "preferred", chip.dataset.value,
+                               action === "move-left" ? -1 : 1);
     } else {
       return;
     }

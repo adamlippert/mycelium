@@ -189,3 +189,27 @@ test("syncHiddenInputs clears a state that has been emptied", () => {
   assert.strictEqual(written.setting_RESOLUTION_PREFERRED, "",
     "an emptied state must clear its field, not leave the old value behind");
 });
+
+test("reorder can reach an arbitrary order", () => {
+  // The defect this replaces: a control acting on "the last chip" oscillates
+  // between two arrangements and can never move the first value at all.
+  let s = state({ states: { preferred: ["1080p", "2160p", "720p"],
+                            excluded: [], required: [], included: [] } });
+  s = fr.reorder(s, "preferred", "720p", -1);
+  s = fr.reorder(s, "preferred", "720p", -1);
+  assert.deepStrictEqual(s.states.preferred, ["720p", "1080p", "2160p"],
+    "a value must be movable all the way to the front");
+});
+
+test("every value in the list is independently movable", () => {
+  const start = ["a", "b", "c"];
+  const s = state({ options: start,
+                    states: { preferred: start.slice(),
+                              excluded: [], required: [], included: [] } });
+  assert.deepStrictEqual(fr.reorder(s, "preferred", "a", 1).states.preferred,
+                         ["b", "a", "c"]);
+  assert.deepStrictEqual(fr.reorder(s, "preferred", "b", -1).states.preferred,
+                         ["b", "a", "c"]);
+  assert.deepStrictEqual(fr.reorder(s, "preferred", "c", -1).states.preferred,
+                         ["a", "c", "b"]);
+});
