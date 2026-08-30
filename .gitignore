@@ -20,3 +20,6 @@ mycelium-design-system/
 spore-nfs/spore-nfs
 .superpowers/
 .venv-sdd/
+
+# Local architecture notes for Claude Code (kept out of the public repo)
+CLAUDE.md
