@@ -42,3 +42,38 @@ def test_remux_and_bluray_no_longer_collide():
     _BLURAY_RE matched the same names as _REMUX_RE."""
     assert set(rt.detect_sources("Dune.2160p.UHD.BluRay.REMUX.HEVC")) == {"remux"}
     assert "bluray" not in rt.detect_sources("Dune.2160p.UHD.BluRay.REMUX.HEVC")
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Movie.2024.1080p.x265.HEVC", {"hevc"}),
+    ("Movie.2024.1080p.H.265", {"hevc"}),
+    ("Movie.2024.1080p.x264", {"avc"}),
+    ("Movie.2024.1080p.H.264.AVC", {"avc"}),
+    ("Movie.2024.2160p.AV1", {"av1"}),
+    ("Movie.2024.XviD", {"xvid"}),
+    ("Movie.2024.1080p", set()),
+])
+def test_detect_encode(text, expected):
+    assert set(rt.detect_encode(text)) == expected
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Movie.2160p.HDR10.WEB-DL", {"hdr10"}),
+    ("Movie.2160p.HDR10Plus.WEB-DL", {"hdr10plus"}),
+    ("Movie.2160p.DV.HDR10.WEB-DL", {"dv", "hdr10"}),
+    ("Movie.2160p.DoVi.WEB-DL", {"dv", "dv_only"}),
+    ("Movie.2160p.HLG.WEB-DL", {"hlg"}),
+    ("Movie.2160p.10bit.WEB-DL", {"10bit"}),
+    ("Movie.2160p.IMAX.WEB-DL", {"imax"}),
+    ("Movie.1080p.WEB-DL", set()),
+])
+def test_detect_visual_tags(text, expected):
+    assert set(rt.detect_visual_tags(text)) == expected
+
+
+def test_hdr10_plus_is_not_an_hdr10_fallback():
+    """HDR10+ does not give a DV-only release a safe base layer, so it must not
+    satisfy the hdr10 tag."""
+    tags = rt.detect_visual_tags("Movie.2160p.DV.HDR10Plus.WEB-DL")
+    assert "hdr10" not in tags
+    assert "dv_only" in tags

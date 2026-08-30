@@ -67,3 +67,49 @@ def detect_sources(text: str) -> tuple[str, ...]:
         if pattern.search(blob):
             return (value,)
     return ()
+
+
+ENCODE_VALUES = ("hevc", "avc", "av1", "xvid", "divx", UNKNOWN)
+
+_ENCODE_PATTERNS = (
+    ("hevc", re.compile(r"\b(hevc|x265|h\.?265)\b", re.IGNORECASE)),
+    ("avc", re.compile(r"\b(avc|x264|h\.?264)\b", re.IGNORECASE)),
+    ("av1", re.compile(r"\bav1\b", re.IGNORECASE)),
+    ("xvid", re.compile(r"\bxvid\b", re.IGNORECASE)),
+    ("divx", re.compile(r"\bdivx\b", re.IGNORECASE)),
+)
+
+VISUAL_TAG_VALUES = (
+    "hdr10", "hdr10plus", "dv", "dv_only", "hlg", "10bit", "sdr", "imax", UNKNOWN,
+)
+
+# hdr10plus is matched before hdr10, and the hdr10 pattern uses a negative
+# lookahead, so "HDR10+" never counts as plain HDR10. HDR10+ is not a safe
+# fallback for a Dolby Vision profile 5 release.
+_VISUAL_PATTERNS = (
+    ("hdr10plus", re.compile(r"\bhdr10(\+|plus)\b", re.IGNORECASE)),
+    ("hdr10", re.compile(r"\bhdr10(?!\+|plus)\b", re.IGNORECASE)),
+    ("dv", re.compile(r"\b(dovi|dolby[\s.]?vision|dv)\b", re.IGNORECASE)),
+    ("hlg", re.compile(r"\bhlg\b", re.IGNORECASE)),
+    ("10bit", re.compile(r"\b10-?bit\b", re.IGNORECASE)),
+    ("sdr", re.compile(r"\bsdr\b", re.IGNORECASE)),
+    ("imax", re.compile(r"\bimax\b", re.IGNORECASE)),
+)
+
+
+def detect_encode(text: str) -> tuple[str, ...]:
+    blob = text or ""
+    return tuple(v for v, p in _ENCODE_PATTERNS if p.search(blob))
+
+
+def detect_visual_tags(text: str) -> tuple[str, ...]:
+    """Adds the synthetic dv_only when Dolby Vision has no HDR10 base layer.
+
+    That combination is Dolby Vision profile 5, which clients without DV support
+    render with washed-out colour because there is no fallback layer.
+    """
+    blob = text or ""
+    found = [v for v, p in _VISUAL_PATTERNS if p.search(blob)]
+    if "dv" in found and "hdr10" not in found:
+        found.append("dv_only")
+    return tuple(found)
