@@ -205,6 +205,14 @@ HOT_RELOAD = {
     "DEBRIDIO_MAX_RESULTS", "DEBRIDIO_CONFIG_TOKEN",
 }
 
+# The 35 rule keys from Task 4 (_RULE_LIST_KEYS' 28 + _RULE_STRICT_KEYS' 7)
+# are hot-reloadable: filter_rules.load_rules() reads every one of them live
+# on every rank_streams call, the same as EXCLUDE_UNDERSIZED_STRICT and
+# SORT_ORDER above. Only EXCLUDE_UNDERSIZED_STRICT and SORT_ORDER were added
+# when those two shipped; the 35 were never added, which left the admin UI
+# telling users to restart after every filter edit when nothing needed one.
+HOT_RELOAD |= {*_RULE_LIST_KEYS} | _RULE_STRICT_KEYS
+
 # Logical groups for the Settings UI tab.
 SETTING_GROUPS = [
     {
@@ -480,11 +488,21 @@ def all_for_ui() -> list[dict]:
                 else "enum" if key in _ENUM_KEYS
                 else "str"
             )
+            # options is None for a free-text key; a key with a fixed
+            # vocabulary gets it listed here so the UI can render a <select>
+            # or multi-select instead of free text that set() would reject.
+            options = _ENUM_KEYS.get(key)
+            if options is None and key in _RULE_LIST_KEYS:
+                options = list(_rt.values_for(_RULE_LIST_KEYS[key]))
+            elif options is None and key in _LANGUAGE_LIST_KEYS:
+                options = list(_streams.LANGUAGE_CODES)
+            elif options is None and key == "SORT_ORDER":
+                options = list(_streams.SORT_CRITERIA)
             items.append({
                 "key": key,
                 "value": current,
                 "kind": kind,
-                "options": _ENUM_KEYS.get(key),
+                "options": options,
                 "overridden": override_raw is not None,
                 "hot_reload": key in HOT_RELOAD,
             })

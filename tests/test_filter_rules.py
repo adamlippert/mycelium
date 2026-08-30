@@ -29,6 +29,29 @@ def test_every_registered_key_appears_in_a_settings_group():
         assert f"{prefix}_STRICT" in grouped
 
 
+def test_every_rule_key_is_hot_reloadable():
+    """filter_rules.load_rules() reads every one of the 35 rule keys live on
+    every rank_streams call, so none of them should ever tell the admin UI a
+    restart is needed. Asserted against _RULE_LIST_KEYS/_RULE_STRICT_KEYS
+    directly (not the PREFIXES/STATES literals above) so the two lists cannot
+    drift apart again."""
+    for key in _s._RULE_LIST_KEYS:
+        assert key in _s.HOT_RELOAD, f"{key} missing from HOT_RELOAD"
+    for key in _s._RULE_STRICT_KEYS:
+        assert key in _s.HOT_RELOAD, f"{key} missing from HOT_RELOAD"
+
+
+def test_all_for_ui_exposes_the_vocabulary_for_rule_and_sort_keys():
+    """options was null for every rule key even though set() validates each
+    one against a fixed vocabulary - the UI offered free text where a typo
+    would raise. Rule keys, the language lists and SORT_ORDER should all now
+    carry their valid values."""
+    groups = {item["key"]: item for g in _s.all_for_ui() for item in g["items"]}
+    assert groups["SOURCE_EXCLUDED"]["options"] == list(rt.values_for("source"))
+    assert groups["SORT_ORDER"]["options"] == list(_s._streams.SORT_CRITERIA)
+    assert groups["AUDIO_LANGUAGE_PREFERENCE"]["options"] == list(_s._streams.LANGUAGE_CODES)
+
+
 def test_no_quality_prefixed_rule_key_exists():
     """QUALITY_PREFERENCE already exists and means resolution. A QUALITY_PREFERRED
     two characters away from it, meaning source type, is a trap."""
@@ -576,6 +599,36 @@ def test_settings_set_accepts_a_known_sort_order(monkeypatch):
 
 def test_empty_sort_order_falls_back_to_the_default():
     assert streams._resolve_sort_order([]) == list(streams.SORT_ORDER)
+
+
+def test_all_bogus_sort_order_falls_back_to_the_default_literal_not_the_rejected_value():
+    """The regression this guards: a SORT_ORDER=bogus in .env must not fall
+    back to the raw, already-rejected config value it just dropped - that
+    would reintroduce "bogus" into sort_key() and raise KeyError on every
+    single rank_streams call. It must fall back to DEFAULT_SORT_ORDER, a
+    plain literal no .env value can corrupt."""
+    assert streams._resolve_sort_order(["bogus"]) == list(streams.DEFAULT_SORT_ORDER)
+
+
+def test_empty_sort_order_falls_back_to_the_default_literal():
+    assert streams._resolve_sort_order([]) == list(streams.DEFAULT_SORT_ORDER)
+
+
+def test_partially_bogus_sort_order_keeps_only_the_valid_entries():
+    assert streams._resolve_sort_order(["bogus", "seeders"]) == ["seeders"]
+
+
+def test_bogus_sort_order_ranks_without_raising(monkeypatch):
+    """End-to-end version of the KeyError regression: SORT_ORDER=bogus must
+    not brick every rank_streams call."""
+    _patch_sort_order(monkeypatch, ["bogus"])
+    rules = _rules(resolution={"preferred": ["1080p"]})
+    better = _mk("A", "a" * 40, quality="1080p", seeders=1, size_gb=5.0)
+    worse = _mk("B", "b" * 40, quality="2160p", seeders=100, size_gb=5.0)
+    ranked = streams._sort_candidates([worse, better], rules, False, {})
+    assert ranked[0].info_hash == better.info_hash, (
+        "SORT_ORDER=bogus must behave exactly like the default order, not "
+        "raise and not leave candidates unsorted")
 
 
 def test_empty_sort_order_setting_does_not_leave_candidates_unsorted(monkeypatch):

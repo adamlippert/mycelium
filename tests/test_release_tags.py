@@ -32,10 +32,18 @@ def test_detect_resolution(text, expected):
     ("Movie.2024.HDCAM.x264", {"cam"}),
     ("Movie.2024.TELESYNC.x264", {"ts"}),
     ("Movie.2024.DVDSCR.x264", {"scr"}),
+    ("Movie.2024.1080p.WORKPRINT.x264", {"workprint"}),
     ("Movie.2024.x264", set()),
 ])
 def test_detect_sources_are_mutually_exclusive(text, expected):
     assert set(rt.detect_sources(text)) == expected
+
+
+def test_workprint_is_detected():
+    """The retired _CAM_RE matched workprint too; release_tags must keep
+    catching it or EXCLUDE_CAM=true silently starts letting workprint leaks
+    through."""
+    assert rt.detect_sources("Movie.2024.1080p.WORKPRINT.x264") == ("workprint",)
 
 
 def test_remux_and_bluray_no_longer_collide():
@@ -71,6 +79,18 @@ def test_detect_encode(text, expected):
 ])
 def test_detect_visual_tags(text, expected):
     assert set(rt.detect_visual_tags(text)) == expected
+
+
+def test_trailing_dv_marker_is_detected():
+    """The retired _DV_RE was \\b(dovi|dolby[\\s.]?vision|\\.dv\\.)\\b, which
+    required dots on both sides of a bare "dv" and so missed a release name
+    ending in ".DV" with nothing after it. Deliberately broader: catching more
+    DV-only releases is the correct direction for EXCLUDE_DV_P5. See the
+    CHANGELOG Unreleased entry - this is a documented behaviour change, not a
+    regression."""
+    tags = rt.detect_visual_tags("Movie.2024.1080p.BluRay.x264.DV")
+    assert "dv" in tags
+    assert "dv_only" in tags
 
 
 @pytest.mark.parametrize("text", [

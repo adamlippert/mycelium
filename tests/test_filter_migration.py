@@ -53,6 +53,15 @@ def test_exclude_cam_maps_to_every_cam_family_value(monkeypatch, store):
     assert {"cam", "ts", "tc", "scr", "r5"} <= set(store["SOURCE_EXCLUDED"])
 
 
+def test_exclude_cam_includes_workprint(monkeypatch, store):
+    """The retired _CAM_RE matched workprint. Without workprint in CAM_FAMILY,
+    an upgrading user with EXCLUDE_CAM=true silently starts accepting the
+    exact low-quality leaks that setting exists to block."""
+    _old(monkeypatch, EXCLUDE_CAM=True)
+    migrate_filters.migrate()
+    assert "workprint" in store["SOURCE_EXCLUDED"]
+
+
 def test_strict_no_cam_maps_only_to_source_strict(monkeypatch, store):
     """It must not also make the undersized check hard; that coupling was a bug."""
     _old(monkeypatch, STRICT_NO_CAM=True)
@@ -141,6 +150,25 @@ def test_retired_resolution_spellings_are_aliased(monkeypatch, store):
 def test_uhd_and_4k_do_not_produce_a_duplicate(monkeypatch, store):
     _old(monkeypatch, QUALITY_PREFERENCE=["4k", "uhd", "1080p"])
     assert migrate_filters.migrate()["RESOLUTION_PREFERRED"] == ["2160p", "1080p"]
+
+
+def test_uppercase_env_values_are_not_dropped(monkeypatch, store):
+    """config.py never lowercases QUALITY_PREFERENCE (unlike the language
+    lists), so an uppercase .env value such as "1080P,UHD" reached _sanitise
+    unmodified and failed the vocabulary check case-sensitively, silently
+    discarding the user's entire resolution preference."""
+    _old(monkeypatch, QUALITY_PREFERENCE=["1080P", "UHD"])
+    assert migrate_filters.migrate()["RESOLUTION_PREFERRED"] == ["1080p", "2160p"]
+
+
+def test_mixed_case_env_value_is_normalised(monkeypatch, store):
+    _old(monkeypatch, QUALITY_PREFERENCE=["1080P", "2160p", "720P"])
+    assert migrate_filters.migrate()["RESOLUTION_PREFERRED"] == ["1080p", "2160p", "720p"]
+
+
+def test_surrounding_whitespace_is_stripped(monkeypatch, store):
+    _old(monkeypatch, QUALITY_PREFERENCE=[" 1080p ", "  UHD"])
+    assert migrate_filters.migrate()["RESOLUTION_PREFERRED"] == ["1080p", "2160p"]
 
 
 def test_warn_stale_env_is_silent_for_a_clean_environment(monkeypatch):

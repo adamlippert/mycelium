@@ -10,7 +10,7 @@ import logging
 
 log = logging.getLogger(__name__)
 
-CAM_FAMILY = ["cam", "ts", "tc", "scr", "r5", "ppvrip"]
+CAM_FAMILY = ["cam", "ts", "tc", "scr", "r5", "ppvrip", "workprint"]
 BLURAY_FAMILY = ["bluray", "bdrip", "brrip"]
 
 # The retired _WEBDL_RE matched web-dl, webrip and web alike, so PREFER_WEBDL
@@ -64,6 +64,13 @@ def _sanitise(key: str, values: list[str]) -> list[str]:
     aliases = _VALUE_ALIASES.get(category, {})
     out = []
     for raw in values:
+        # Uppercase is common in a hand-written .env (config.py lowercases the
+        # language lists, but never lowercased this one) - without this, a
+        # value that only differs from the vocabulary by case is dropped as
+        # if it were unrecognised, silently discarding the user's preference.
+        raw = str(raw).strip().lower()
+        if not raw:
+            continue
         value = aliases.get(raw, raw)
         if value in vocabulary:
             if value not in out:

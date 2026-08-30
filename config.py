@@ -152,15 +152,23 @@ LANGUAGE_REQUIRED  = [v.strip().lower() for v in _env("LANGUAGE_REQUIRED", "").s
 LANGUAGE_INCLUDED  = [v.strip().lower() for v in _env("LANGUAGE_INCLUDED", "").split(",") if v.strip()]
 LANGUAGE_STRICT    = _env("LANGUAGE_STRICT", "false").lower() in ("1", "true", "yes")
 
+# The shipped sort order, kept as a literal tuple so a broken SORT_ORDER in
+# .env cannot take ranking down with it (see streams._resolve_sort_order,
+# which falls back to streams.DEFAULT_SORT_ORDER - the same tuple, imported
+# from here - rather than to SORT_ORDER below). season pack, then resolution,
+# language, source, encode, seeders, size. cached, visual_tag and audio_tag
+# are real criteria (see streams.SORT_CRITERIA) but are deliberately absent
+# from this default: they are new capabilities, and turning them on by
+# default would change which release every user downloads without their
+# asking.
+DEFAULT_SORT_ORDER = ("season_pack", "resolution", "language", "source",
+                      "encode", "seeders", "size")
+
 # Order in which survivors are ranked; each named criterion breaks ties left by
-# the ones before it. This default reproduces the ranking order that shipped
-# before SORT_ORDER existed - season pack, then resolution, language, source,
-# encode, seeders, size. cached, visual_tag and audio_tag are real criteria
-# (see streams.SORT_CRITERIA) but are deliberately absent from the default:
-# they are new capabilities, and turning them on by default would change which
-# release every user downloads without their asking.
+# the ones before it. This is the user's raw .env value and may be anything at
+# all - streams._resolve_sort_order is what makes it safe to use.
 SORT_ORDER = [c.strip().lower() for c in _env(
-    "SORT_ORDER", "season_pack,resolution,language,source,encode,seeders,size"
+    "SORT_ORDER", ",".join(DEFAULT_SORT_ORDER)
 ).split(",") if c.strip()]
 
 # How long to wait for Torbox to make the torrent available before triggering Jellyfin scan.

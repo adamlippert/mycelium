@@ -21,7 +21,7 @@ _RESOLUTION_PATTERNS = (
 SOURCE_VALUES = (
     "remux", "bluray", "bdrip", "brrip", "webdl", "webrip", "web", "hdrip",
     "dvdrip", "dvd", "hdtv", "satrip", "tvrip", "r5", "ppvrip",
-    "ts", "tc", "scr", "cam", UNKNOWN,
+    "ts", "tc", "scr", "cam", "workprint", UNKNOWN,
 )
 
 # Ordered most-specific first. The first match wins, which is what makes the
@@ -42,6 +42,7 @@ _SOURCE_PATTERNS = (
     ("hdtv", re.compile(r"\bhdtv\b", re.IGNORECASE)),
     ("scr", re.compile(r"\b(scr|screener|dvdscr|bdscr)\b", re.IGNORECASE)),
     ("cam", re.compile(r"\b(cam|camrip|hdcam)\b", re.IGNORECASE)),
+    ("workprint", re.compile(r"\bworkprint\b", re.IGNORECASE)),
     ("ts", re.compile(r"\b(ts|telesync|hdts)\b", re.IGNORECASE)),
     ("tc", re.compile(r"\b(tc|telecine)\b", re.IGNORECASE)),
     ("r5", re.compile(r"\br5\b", re.IGNORECASE)),

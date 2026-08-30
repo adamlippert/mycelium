@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass
 
 from config import (
+    DEFAULT_SORT_ORDER,
     EXCLUDE_UNDERSIZED_RELEASES,
     MAX_SIZE_GB,
     MIN_SEEDERS,
@@ -283,6 +284,14 @@ def _resolve_sort_order(raw) -> list[str]:
     streams.py; the reverse import already exists). A DB-stored value already
     passed set()'s validation, but running it through here too is harmless and
     keeps this function the single source of truth for what actually sorts.
+
+    Falls back to DEFAULT_SORT_ORDER, never to SORT_ORDER: SORT_ORDER is
+    exactly the unvalidated config.SORT_ORDER value this function exists to
+    tolerate, so falling back to it would mean a SORT_ORDER=bogus in .env gets
+    rejected here and then handed straight back as the "default" - every
+    rank_streams call would raise a KeyError in sort_key on the very name this
+    function just dropped. DEFAULT_SORT_ORDER is a plain literal that cannot
+    be broken by any env value.
     """
     names = raw if isinstance(raw, (list, tuple)) else []
     seen: set[str] = set()
@@ -298,7 +307,7 @@ def _resolve_sort_order(raw) -> list[str]:
             continue
         seen.add(name)
         resolved.append(name)
-    return resolved or list(SORT_ORDER)
+    return resolved or list(DEFAULT_SORT_ORDER)
 
 
 def _sort_candidates(
