@@ -147,28 +147,10 @@ resolves to `remux`.
 `dv_only` is synthetic: Dolby Vision with no HDR10 base layer, which is what
 `EXCLUDE_DV_P5` means today. No plain tag expresses it, so it stays computed.
 
-### Storage
+### Storage: four plain lists per category
 
-**Correction: `key=value` CSV does not exist in this codebase.** `settings._coerce`
-handles bool, plain comma list, int, float and enum only. Feeding
-`"2160p=preferred"` to the existing list coercion yields the literal unparsed
-string `['2160p=preferred']`. That format lived only on the retired
-`feat/ranking-and-limits` branch. Option A below would introduce it as new.
-
-Two options, storing the same model.
-
-**Option A, one row per category (new format).**
-
-```
-RESOLUTION_RULES  = "2160p=preferred,1080p=preferred,480p=excluded"
-RESOLUTION_STRICT = false
-```
-
-Fourteen settings. Compact, but needs a new coercion type, a new validator for
-`value=state` pairs, and new UI input handling. A value can be named twice with
-conflicting states, so the validator must also define precedence.
-
-**Option B, four lists per category (existing format). Recommended.**
+**Decided.** Each category gets four ordinary comma-separated list settings plus
+one strict toggle:
 
 ```
 RESOLUTION_PREFERRED = "2160p,1080p"
@@ -178,13 +160,26 @@ RESOLUTION_INCLUDED  = ""
 RESOLUTION_STRICT    = false
 ```
 
-Thirty-five settings. Every list is an ordinary `_LIST_KEYS` entry, so parsing is
-unchanged, and per-value validation reuses the `_LANGUAGE_LIST_KEYS` pattern
-shipped in 0.6.6. Order inside `preferred` survives the existing comma split.
+Thirty-five settings. Every list is an ordinary `_LIST_KEYS` entry, so:
 
-Option B is recommended: no new parsing, no new failure modes, and validation
-that already exists and is tested. Its only cost is a long settings page during
-the C1-only window, and C2 replaces that page with a grid regardless.
+- parsing is unchanged, and order inside `preferred` survives the comma split;
+- per-value validation reuses the `_LANGUAGE_LIST_KEYS` pattern shipped in 0.6.6;
+- the settings page renders each one with **no new UI code**, because
+  `settings.py` infers the widget from registry membership
+  (`"list" if key in _LIST_KEYS`).
+
+The rejected alternative was one packed row per category
+(`RESOLUTION_RULES = "2160p=preferred,480p=excluded"`, fourteen settings). It
+was rejected because `key=value` exists nowhere in this codebase, so it needs a
+new parser, a new validator including precedence for a value named twice with
+conflicting states, and a new UI widget kind. That last point is decisive: a
+packed row belongs to no registry, falls through to `"str"`, and renders as an
+unvalidated free-text box unless C1 also builds UI, which is the work C1 exists
+to defer.
+
+The accepted cost is a long settings page until C2 lands, roughly 35 added lines
+in `.env.example`, and 28 bookkeeping entries in `_LIST_KEYS`. None of those can
+select the wrong release. A buggy parser can.
 
 ### Sorting
 
@@ -199,6 +194,77 @@ SORT_ORDER = season_pack,resolution,cached,language,quality,encode,
 Built natively in C1. The retired `feat/ranking-and-limits` branch had a version
 of this, but it is being rebuilt rather than cherry-picked so no part of the
 rejected approach is resurrected.
+
+## Explainability: every rejection carries its reason
+
+**Decided.** The engine must never discard a candidate silently.
+
+Today `rank_streams` rebinds `candidates` on every filter pass, so a rejected
+release is unreferenced and its reason exists only as an unstructured
+`log.warning` that names no release. Four candidates in, one out, and nothing
+records which of three different rules removed each of the other three.
+
+### Required shape
+
+The engine walks the pool **once** and attaches a verdict to every candidate,
+then derives survivors from the verdicts. It does not rebind the list.
+
+```python
+@dataclass(frozen=True)
+class Verdict:
+    kept: bool
+    rule: str | None      # "SOURCE_EXCLUDED", "MIN_SEEDERS", ...
+    value: str | None     # the matched value, e.g. "remux"
+    relaxed: bool         # this rule self-disabled to avoid an empty pool
+```
+
+`relaxed` is not optional bookkeeping. A category that switched itself off to
+avoid returning nothing is exactly the event a user needs to see, and today it
+is a log line they will never read.
+
+### Public surface
+
+The internal engine always computes verdicts. Two entry points expose them:
+
+- `rank_streams(...) -> list[Stream]` keeps today's signature, so the two
+  existing call sites (`torrentio.py:110`, `scrapers.py:150`) are untouched.
+- `rank_streams_explained(...) -> tuple[list[Stream], list[Verdict]]` returns
+  both. `rank_streams` becomes a thin wrapper that discards the verdicts.
+
+Structured logging: one line per drop at DEBUG, one summary line at INFO
+(`kept 1 of 4; SOURCE_EXCLUDED dropped 2, MIN_SEEDERS dropped 1`).
+
+### Deliberately deferred
+
+Persisting verdicts for later display is C2's decision, between re-running the
+ranker and storing the last decision per item. That is a storage question and can
+be added without touching the loop. Producing the verdicts cannot be, which is
+why it is here and not there.
+
+## Source capability map
+
+**Included on my recommendation, not an explicit instruction. Strike it if you
+disagree.**
+
+`zilean.LANGUAGES_AVAILABLE = False` is today the only statement of what a
+scraper can and cannot supply, and it is a one-off. Zilean sends no language
+data at all, and probably no audio tags or channels either, so a `REQUIRED` rule
+in those categories would silently discard every Zilean result forever. That is
+the same class of defect as the Debridio language bug, which went unnoticed
+through several releases.
+
+Each scraper module declares which categories it can populate:
+
+```python
+CAPABILITIES: frozenset[str] = frozenset({"resolution", "source", "encode"})
+```
+
+`rank_streams` logs a warning when a `REQUIRED` rule names a category that a
+contributing source cannot populate. C2 later uses the same map to annotate or
+grey out those rules.
+
+The map is populated as tag parsing is written, not guessed up front. Only the
+Zilean language entry is known today.
 
 ## Migration
 
