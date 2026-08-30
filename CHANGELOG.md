@@ -2,6 +2,17 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.7.1] - 2026-08-30
+
+### Fixed
+
+- **Deleting a request now actually deletes it.** Delete removed only the `requests` row, leaving behind three things it had created, each of which then poisoned the next request for the same title: the `webhook_events` dedup key (which lives 24h, so re-requesting the title was answered `duplicate` and silently never processed), the `.strm` files and `virtual_items` rows, and the `retry_queue` row (so a deleted request reappeared at the next backoff interval). `db.delete_request()` now clears the dedup keys and queued retries with the row.
+- **A re-requested series is no longer marked failed while its episodes sit in the library.** `strm_generator.create_lazy_episode_strm()` returns `False` both when the episode is already registered and when the write genuinely failed, and `processor._lazy_register_season()` treated both as failure. So every season of a re-requested series returned `False`, the request was marked `failed`, and a retry was queued that could never accomplish anything - while Jellyfin and Plex had the whole show. The movie path had been fixed for this already (`_lazy_register_movie`: "strm already exists - still a success"); the series path never was. The new `_already_registered()` asks the database whether the episode has a `virtual_item`, which is the only way to tell "already there" from "write failed" - a disk error is still reported as a failure rather than as a healthy library.
+
+### Added
+
+- **A second "Remove from library" button** beside Delete, in both the classic admin Requests tab and the SPA (admin-only there). Delete keeps its existing meaning: forget the request record, keep the files. Remove from library additionally deletes the `.strm` files, their `.nfo`, the Spore stubs, the `virtual_items` rows and the monitoring rows that would regenerate them, then prunes the emptied folders and refreshes Jellyfin. Folder pruning uses `rmdir` only and never walks above `MEDIA_PATH`, so a directory still holding another title is left exactly as it was.
+
 ## [0.7.0] - 2026-08-30
 
 ### Changed

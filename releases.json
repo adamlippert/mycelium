@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.7.1",
+    "date": "2026-08-30",
+    "notes": [
+      "Fix: deleting a request now actually deletes it - the webhook dedup key, the queued retry and (with the new button) the .strm files went with it, where before they survived and broke the next request for the same title",
+      "Fix: re-requesting something you deleted was answered 'duplicate' and silently never processed, for up to 24 hours",
+      "Fix: a re-requested series was marked failed while its episodes were sitting in the library, because 'already registered' and 'could not register' were the same return value; a genuine write failure is still reported as a failure",
+      "Fix: a deleted request could reappear an hour later when its queued retry fired",
+      "New: a second 'Remove from library' button beside Delete, which also deletes the .strm files so the title leaves Jellyfin and Plex; Delete keeps its old meaning of forgetting the record only"
+    ]
+  },
+  {
     "version": "0.7.0",
     "date": "2026-08-30",
     "notes": [
