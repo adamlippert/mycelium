@@ -334,7 +334,23 @@
       border-radius: 9999px; background: var(--accent); color: #fff; letter-spacing: .04em; }
     .release-notes { margin: 0; padding: 0 16px 14px 36px; list-style: disc;
       font-size: 13px; line-height: 1.7; color: var(--text); }
+    .fr-panel { border-bottom:1px solid var(--panel2); padding:10px 0 }
+    .fr-panel-head { display:flex; align-items:center; gap:10px; margin-bottom:6px }
+    .fr-count { font-size:11px }
+    .fr-strict { margin-left:auto; font-size:11px }
+    .fr-row { display:flex; align-items:flex-start; gap:8px; margin:4px 0; font-size:12px }
+    .fr-row-label { width:80px; flex:none; padding-top:3px }
+    .fr-chips { flex:1; display:flex; flex-wrap:wrap; gap:4px }
+    .fr-chip { display:inline-flex; align-items:center; gap:4px; padding:2px 6px;
+               border:1px solid var(--panel2); border-radius:10px }
+    .fr-chip-invalid { text-decoration:line-through; opacity:.6 }
+    .fr-chip-remove { border:0; background:none; cursor:pointer; padding:0 }
+    .fr-move { font-size:11px; padding:1px 5px }
+    .fr-warn { font-size:11px }
+    .fr-collapsed { display:flex; align-items:center; gap:10px;
+                    padding:8px 0; border-bottom:1px solid var(--panel2) }
   </style>
+  <script src="/static/admin/filter_rules.js"></script>
 </head>
 <body>
 
@@ -1203,6 +1219,21 @@
             root.appendChild(card);
           }
           return; // skip normal rendering for mode group
+        }
+
+        // The 35 rule keys render as seven category panels instead of 35 text
+        // boxes. The panels write to hidden setting_ inputs, so /ui/settings
+        // is unchanged and a script failure degrades to the normal rows.
+        if (g.id === 'filter_rules' && window.FilterRules) {
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.style.marginBottom = '12px';
+          card.innerHTML = `<div class="card-title">${g.title}</div>`;
+          const host = document.createElement('div');
+          card.appendChild(host);
+          root.appendChild(card);
+          window.FilterRules.initFilterRules(g, host);
+          return; // skip normal rendering for the filter rules group
         }
 
         // ── Normal groups ──────────────────────────────────────────────────
