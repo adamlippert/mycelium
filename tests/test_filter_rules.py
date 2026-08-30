@@ -67,3 +67,138 @@ def test_language_vocabulary_is_never_reachable_as_an_empty_value():
         "bypasses lazy resolution")
     assert len(rt.values_for("language")) > 30
     assert rt.UNKNOWN in rt.values_for("language")
+
+
+import filter_rules as fr
+
+
+def _rules(**kw):
+    """Every category empty unless named. Mirrors an untouched install."""
+    base = {c: {"preferred": [], "excluded": [], "required": [], "included": [],
+                "strict": False}
+            for c in rt.CATEGORIES}
+    for category, states in kw.items():
+        base[category].update(states)
+    return base
+
+
+def _tag(name, languages=()):
+    return rt.detect_all(name, languages)
+
+
+def test_every_candidate_gets_a_verdict_including_survivors():
+    tagged = [_tag("Movie.1080p.WEB-DL.x264"), _tag("Movie.1080p.HDCAM.x264")]
+    verdicts = fr.evaluate(tagged, _rules(source={"excluded": ["cam"]}))
+    assert len(verdicts) == 2
+    assert verdicts[0].kept is True
+    assert verdicts[1].kept is False
+
+
+def test_a_drop_names_the_rule_and_the_value():
+    tagged = [_tag("Movie.1080p.WEB-DL.x264"), _tag("Movie.1080p.HDCAM.x264")]
+    verdicts = fr.evaluate(tagged, _rules(source={"excluded": ["cam"]}))
+    assert verdicts[1].rule == "SOURCE_EXCLUDED"
+    assert verdicts[1].value == "cam"
+
+
+def test_evaluation_is_order_independent(monkeypatch):
+    """Each category sees the full pool, so no category can shrink the pool
+    another category then evaluates against."""
+    tagged = [
+        _tag("Movie.2160p.BluRay.REMUX.x265"),
+        _tag("Movie.1080p.WEB-DL.x264"),
+        _tag("Movie.720p.HDCAM.x264"),
+    ]
+    rules = _rules(source={"excluded": ["remux", "cam"]},
+                   resolution={"excluded": ["720p"]})
+    forward = fr.evaluate(tagged, rules)
+
+    # evaluate() iterates rt.CATEGORIES, so the evaluation order lives THERE,
+    # not in the rules dict. Reversing the dict would change nothing and the
+    # test would pass against a sequential implementation too.
+    monkeypatch.setattr(fr.rt, "CATEGORIES", tuple(reversed(rt.CATEGORIES)))
+    backward = fr.evaluate(tagged, rules)
+
+    assert [v.kept for v in forward] == [v.kept for v in backward]
+    assert [v.kept for v in forward] == [False, True, False]
+
+
+def test_required_does_not_drop_unknown():
+    """Absence of data is not evidence of absence. Zilean supplies no language
+    at all, so a required-language rule must not delete every Zilean result."""
+    tagged = [_tag("Movie.1080p.WEB-DL.x264", ()),          # language unknown
+              _tag("Movie.1080p.WEB-DL.FRENCH.x264", ("fr",))]
+    verdicts = fr.evaluate(tagged, _rules(language={"required": ["en"]}))
+    assert verdicts[0].kept is True, "unknown must survive a required rule"
+    assert verdicts[1].kept is False, "a positively non-matching value is dropped"
+
+
+def test_unknown_can_be_excluded_explicitly():
+    """A second, known-language candidate keeps the pool from going fully
+    empty. A single-candidate pool would hit the global soft-by-default
+    relaxation (every candidate dropped -> relax), which is a different
+    behaviour under test elsewhere; this test is specifically about the
+    exclusion itself taking effect, so it needs a survivor alongside it."""
+    tagged = [_tag("Movie.1080p.WEB-DL.x264", ()),
+              _tag("Movie.1080p.WEB-DL.FRENCH.x264", ("fr",))]
+    verdicts = fr.evaluate(tagged, _rules(language={"excluded": [rt.UNKNOWN]}))
+    assert verdicts[0].kept is False
+    assert verdicts[0].rule == "LANGUAGE_EXCLUDED"
+    assert verdicts[1].kept is True
+
+
+def test_included_rescues_across_categories_and_short_circuits():
+    tagged = [_tag("Movie.1080p.HDCAM.Atmos.x264")]
+    rules = _rules(source={"excluded": ["cam"]}, audio_tag={"included": ["atmos"]})
+    verdicts = fr.evaluate(tagged, rules)
+    assert verdicts[0].kept is True
+    assert verdicts[0].rule == "AUDIO_TAG_INCLUDED"
+
+
+def test_preferred_never_filters():
+    tagged = [_tag("Movie.1080p.WEBRip.x264")]
+    verdicts = fr.evaluate(tagged, _rules(source={"preferred": ["webdl"]}))
+    assert verdicts[0].kept is True
+
+
+def test_a_rule_that_would_empty_the_pool_relaxes_and_says_so():
+    tagged = [_tag("Movie.1080p.HDCAM.x264"), _tag("Movie.720p.HDCAM.x264")]
+    verdicts = fr.evaluate(tagged, _rules(source={"excluded": ["cam"]}))
+    assert all(v.kept for v in verdicts), "soft by default"
+    assert all(v.relaxed for v in verdicts), "relaxation must be recorded"
+
+
+def test_strict_holds_even_when_it_empties_the_pool():
+    tagged = [_tag("Movie.1080p.HDCAM.x264")]
+    rules = _rules(source={"excluded": ["cam"], "strict": True})
+    verdicts = fr.evaluate(tagged, rules)
+    assert verdicts[0].kept is False
+    assert verdicts[0].relaxed is False
+
+
+def test_two_categories_that_each_drop_part_of_the_pool_still_relax(monkeypatch):
+    """Soft-by-default has to be assessed globally. A per-category emptiness
+    check misses the case where two categories drop disjoint subsets that
+    together cover everything: neither category sees an empty pool on its own,
+    so neither relaxes, and the caller gets nothing."""
+    tagged = [
+        _tag("Movie.1080p.HDCAM.x264"),
+        _tag("Movie.1080p.HDCAM.x264"),
+        _tag("Movie.720p.WEB-DL.x264"),
+    ]
+    rules = _rules(source={"excluded": ["cam"]},
+                   resolution={"excluded": ["720p"]})
+    verdicts = fr.evaluate(tagged, rules)
+    assert all(v.kept for v in verdicts), (
+        "the pool emptied across two categories without either relaxing: "
+        f"{[(v.kept, v.rule) for v in verdicts]}")
+    assert all(v.relaxed for v in verdicts)
+
+
+def test_relaxed_is_not_set_on_survivors_of_an_unrelaxed_run(monkeypatch):
+    """relaxed marks a candidate a relaxed rule voted against, not every
+    survivor of any run in which some relaxation happened."""
+    tagged = [_tag("Movie.1080p.WEB-DL.x264"), _tag("Movie.1080p.HDCAM.x264")]
+    verdicts = fr.evaluate(tagged, _rules(source={"excluded": ["cam"]}))
+    assert verdicts[0].kept is True and verdicts[0].relaxed is False
+    assert verdicts[1].kept is False
