@@ -1,5 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
+import { Pill, StatTile } from '../components/primitives';
+import type { PillState } from '../components/primitives';
+import { QuotaCard } from '../components/requests/QuotaCard';
 
 export default function Requests() {
   const qc = useQueryClient();
@@ -20,8 +23,19 @@ export default function Requests() {
   });
   if (isLoading) return <div className="text-muted">Loading…</div>;
   const items = data?.items || [];
+  const counts = {
+    pending: items.filter((r: any) => r.status === 'pending').length,
+    approved: items.filter((r: any) => r.status === 'approved').length,
+    denied: items.filter((r: any) => r.status === 'denied').length,
+  };
   return (
     <div className="space-y-8">
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <QuotaCard />
+        <StatTile value={String(counts.pending)} label="Awaiting review" glow="warn" />
+        <StatTile value={String(counts.approved)} label="Approved" glow="ok" />
+        <StatTile value={String(counts.denied)} label="Denied" glow="danger" />
+      </div>
       {isAdmin && <PendingApprovalsPanel />}
       <section>
         <h2 className="text-lg font-bold mb-3">My requests</h2>
@@ -219,24 +233,25 @@ function PendingApprovalsPanel() {
   );
 }
 
+function statusToPillState(status: string): PillState {
+  if (status === 'pending') return 'queued';
+  if (status === 'approved' || status === 'success' || status === 'available') return 'ready';
+  if (status === 'denied' || status === 'failed') return 'failed';
+  return 'lazy';
+}
+
 function StatusPill({ status }: { status: string }) {
-  const cls =
-    status === 'approved' ? 'bg-ok/20 text-ok' :
-    status === 'denied' ? 'bg-red-500/20 text-red-400' :
-    status === 'failed' ? 'bg-red-500/20 text-red-400' :
-    'bg-warn/20 text-warn';
-  return <span className={`px-2 py-0.5 rounded text-xs font-semibold capitalize ${cls}`}>{status}</span>;
+  return <Pill state={statusToPillState(status)}><span className="capitalize">{status}</span></Pill>;
 }
 
 function LibraryPill({ status }: { status: string | null }) {
   if (!status) return <span className="text-xs text-muted">--</span>;
-  const map: Record<string, { cls: string; label: string }> = {
-    success: { cls: 'bg-ok/20 text-ok', label: 'In library' },
-    wanted:  { cls: 'bg-warn/20 text-warn', label: 'Wanted' },
-    upcoming:{ cls: 'bg-blue-500/20 text-blue-400', label: 'Upcoming' },
-    failed:  { cls: 'bg-red-500/20 text-red-400', label: 'Failed' },
-    pending: { cls: 'bg-warn/20 text-warn', label: 'Processing' },
+  const labels: Record<string, string> = {
+    success: 'In library',
+    wanted: 'Wanted',
+    upcoming: 'Upcoming',
+    failed: 'Failed',
+    pending: 'Processing',
   };
-  const m = map[status] || { cls: 'bg-gray-500/20 text-gray-400', label: status };
-  return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${m.cls}`}>{m.label}</span>;
+  return <Pill state={statusToPillState(status)}>{labels[status] || status}</Pill>;
 }
