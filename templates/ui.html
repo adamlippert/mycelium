@@ -567,6 +567,10 @@
             <span class="dim">Rename items still using tt-codes as title</span>
           </div>
           <div class="maint-item">
+            <button class="btn btn-secondary btn-sm" onclick="clearRetryQueue(this)">Clear retry queue</button>
+            <span class="dim">Drop every pending retry (they re-queue if they fail again)</span>
+          </div>
+          <div class="maint-item">
             <button class="btn btn-secondary btn-sm" onclick="repairTvshowTitles(this)">Fix series titles</button>
             <span class="dim">Rewrite tvshow.nfo files that say "Season 01" instead of the show name</span>
           </div>
@@ -1661,6 +1665,24 @@
       await fetch('/ui/strm-rescan', { method: 'POST' });
       toast('strm rescan', 'Started  -  check Logs', 'ok');
     } catch(e) { toast('Rescan failed', e.message, 'err'); }
+  }
+
+  async function clearRetryQueue(btn) {
+    if (!confirm('Drop every pending retry?\n\nAnything still wanted will be re-queued the next time it fails.')) return;
+    btn.disabled = true;
+    btn.textContent = 'Clearing...';
+    try {
+      const r = await fetch('/ui/api/retry-queue/clear', { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+      toast('Clear retry queue', d.removed ? `Removed ${d.removed} pending retr${d.removed === 1 ? 'y' : 'ies'}`
+                                           : 'The queue was already empty', 'ok');
+    } catch(e) {
+      toast('Clear retry queue failed', e.message, 'err');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Clear retry queue';
+    }
   }
 
   async function repairTvshowTitles(btn) {

@@ -597,10 +597,12 @@ def process(req: MediaRequest, _retry_attempt: int = 0) -> bool:
             # collided with a retry-queue trigger (and vice versa).
             log.info("Skip: %s already in flight; re-queueing in 60s", req.imdb_id)
             try:
-                db.enqueue_retry(
-                    req.imdb_id, req.title, req.media_type, req.seasons,
-                    _retry_attempt, delay_seconds=60,
-                )
+                # Goes through retry_queue so the collision ceiling applies.
+                # Calling db.enqueue_retry directly here skipped both that and
+                # schedule()'s give-up check, so a title that kept colliding
+                # re-queued every 60 seconds forever with its attempt frozen.
+                import retry_queue
+                retry_queue.requeue_after_collision(req, _retry_attempt)
             except Exception:
                 log.exception("Could not re-enqueue %s after mutex miss", req.imdb_id)
             return False

@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS webhook_events (
 
 CREATE TABLE IF NOT EXISTS retry_queue (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    imdb_id         TEXT    NOT NULL,
+    imdb_id         TEXT    NOT NULL UNIQUE,
     title           TEXT    NOT NULL,
     media_type      TEXT    NOT NULL,
     seasons         TEXT,
@@ -402,6 +402,31 @@ def _migrate() -> None:
         # the plugin's own inserts (ON CONFLICT(user_id, imdb_id)) would then fail.
         # Drop it here if it's still in that shape so the plugin can recreate it
         # correctly on next startup.
+        rq_cols = {r["name"] for r in conn.execute("PRAGMA table_info(retry_queue)")}
+        if rq_cols:
+            # One pending retry per title. Without the constraint a title could
+            # hold many rows at once, which is how the queue turned into a
+            # backlog. Collapse existing duplicates (keep the highest attempt,
+            # then the newest row) before the unique index can be created.
+            dupes = conn.execute(
+                "SELECT COUNT(*) c FROM retry_queue GROUP BY imdb_id HAVING c > 1"
+            ).fetchone()
+            if dupes:
+                # For each imdb_id pick one survivor - furthest-along attempt,
+                # newest row to break a tie - and delete the rest.
+                conn.execute("""
+                    DELETE FROM retry_queue WHERE id NOT IN (
+                        SELECT (SELECT x.id FROM retry_queue x
+                                WHERE x.imdb_id = q.imdb_id
+                                ORDER BY x.attempt DESC, x.id DESC
+                                LIMIT 1)
+                        FROM retry_queue q GROUP BY q.imdb_id
+                    )
+                """)
+                log.info("Migration: collapsed duplicate retry_queue rows")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_retry_queue_imdb "
+                         "ON retry_queue(imdb_id)")
+
         _cols = {r["name"] for r in conn.execute("PRAGMA table_info(trakt_watched)")}
         if _cols and "season" in _cols:
             conn.execute("DROP TABLE trakt_watched")
@@ -1268,12 +1293,43 @@ def enqueue_retry(imdb_id: str, title: str, media_type: str, seasons: list[int] 
     seasons_str = ",".join(str(s) for s in (seasons or []))
     delay_modifier = f"+{delay_seconds} seconds"
     with _connect() as conn:
+        # One row per title. MAX() on attempt so a collision re-queue (which
+        # carries the current attempt, not a higher one) can never reset a
+        # title's progress toward being given up on.
         conn.execute(
             """INSERT INTO retry_queue (imdb_id, title, media_type, seasons, attempt, next_retry_at)
-               VALUES (?, ?, ?, ?, ?, datetime('now', ?))""",
+               VALUES (?, ?, ?, ?, ?, datetime('now', ?))
+               ON CONFLICT(imdb_id) DO UPDATE SET
+                 title=excluded.title,
+                 media_type=excluded.media_type,
+                 seasons=COALESCE(excluded.seasons, seasons),
+                 attempt=MAX(excluded.attempt, attempt),
+                 next_retry_at=excluded.next_retry_at""",
             (imdb_id, title, media_type, seasons_str or None, attempt, delay_modifier),
         )
         conn.commit()
+
+
+def prune_retry_queue(max_age_days: int = 7) -> int:
+    """Drop retries still queued after max_age_days.
+
+    A row that is never processed never increments its attempt, so it never
+    reaches the give-up threshold. That happens whenever run_due() keeps
+    bailing on an exhausted TorBox budget. Without this the queue only grows."""
+    with _connect() as conn:
+        cur = conn.execute(
+            "DELETE FROM retry_queue WHERE created_at < datetime('now', ?)",
+            (f"-{int(max_age_days)} days",),
+        )
+        conn.commit()
+        return cur.rowcount or 0
+
+
+def clear_retry_queue() -> int:
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM retry_queue")
+        conn.commit()
+        return cur.rowcount or 0
 
 
 def get_due_retries() -> list[dict]:

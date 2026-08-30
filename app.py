@@ -422,6 +422,12 @@ def _start_scheduler() -> BackgroundScheduler:
     # Aggressive pruning so volatile tables don't grow unbounded between scrapes.
     scheduler.add_job(lambda: db.prune_old(14), trigger="interval", hours=6,
                        id="prune_old", next_run_time=None, max_instances=1)
+    # A retry still queued after a week is not going to succeed. Rows can sit
+    # there indefinitely when run_due() keeps bailing on an exhausted TorBox
+    # budget, because a row that is never processed never increments its
+    # attempt and so never reaches the give-up threshold.
+    scheduler.add_job(lambda: db.prune_retry_queue(7), trigger="interval", hours=12,
+                      id="retry_queue_prune", next_run_time=None)
     scheduler.add_job(lambda: db.prune_webhook_events(24), trigger="interval", hours=6,
                        id="prune_webhooks", next_run_time=None, max_instances=1)
     scheduler.add_job(db.vacuum, trigger="interval", hours=24 * 7,
@@ -2008,6 +2014,16 @@ def ui_quota_check():
 
 
 # ── Retry queue + show overrides + metrics + TorBox usage ─────────────────────
+
+@app.post("/ui/api/retry-queue/clear")
+@auth.require_role("admin")
+def ui_api_clear_retry_queue():
+    """Empty the retry queue. Visible in the dashboard but until now with no
+    way to act on it."""
+    removed = db.clear_retry_queue()
+    log.info("Retry queue cleared by admin: %d row(s) removed", removed)
+    return jsonify(ok=True, removed=removed)
+
 
 @app.get("/ui/api/retry-queue")
 def ui_api_retry_queue():
