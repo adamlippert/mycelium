@@ -375,3 +375,34 @@ def test_a_source_absent_from_preferred_is_not_rewarded():
     rules = _rules(source={"preferred": ["webdl"]})
     tags = rt.detect_sources("Movie.1080p.WEBRip.x264 Movie.1080p.WEBRip.x264")
     assert not any(v in rules["source"]["preferred"] for v in tags)
+
+
+def test_source_strict_does_not_make_the_size_check_fatal(monkeypatch):
+    """STRICT_NO_CAM used to hard-fail the undersized check too. That coupling
+    is a bug and must not survive the migration."""
+    import settings as _s  # see comment in test_rank_streams_signature_is_unchanged
+    def fake_get(key, default=None):
+        return {"SOURCE_STRICT": True,
+                "EXCLUDE_UNDERSIZED_RELEASES": True,
+                "EXCLUDE_UNDERSIZED_STRICT": False}.get(key, default)
+    monkeypatch.setattr(_s, "get", fake_get)
+
+    tiny = streams.Stream(name="Movie.1080p.WEB-DL.x264", title="Movie.1080p.WEB-DL.x264",
+                          info_hash="c" * 40, quality="1080p", seeders=10, size_gb=0.05,
+                          is_season_pack=False)
+    kept, _ = streams.rank_streams_explained([tiny], override={"runtime_minutes": 120})
+    assert kept, "the size check must relax, not hard-fail, under SOURCE_STRICT"
+
+
+def test_undersized_strict_makes_the_size_check_fatal(monkeypatch):
+    import settings as _s  # see comment in test_rank_streams_signature_is_unchanged
+    def fake_get(key, default=None):
+        return {"EXCLUDE_UNDERSIZED_RELEASES": True,
+                "EXCLUDE_UNDERSIZED_STRICT": True}.get(key, default)
+    monkeypatch.setattr(_s, "get", fake_get)
+
+    tiny = streams.Stream(name="Movie.1080p.WEB-DL.x264", title="Movie.1080p.WEB-DL.x264",
+                          info_hash="d" * 40, quality="1080p", seeders=10, size_gb=0.05,
+                          is_season_pack=False)
+    kept, _ = streams.rank_streams_explained([tiny], override={"runtime_minutes": 120})
+    assert kept == []

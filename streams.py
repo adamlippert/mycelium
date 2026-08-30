@@ -245,7 +245,6 @@ def _apply_non_category_filters(candidates: list[Stream], override: dict) -> lis
 
     import settings as _settings
 
-    strict_cam = _settings.get("STRICT_NO_CAM", False)
     exclude_undersized = _settings.get("EXCLUDE_UNDERSIZED_RELEASES", EXCLUDE_UNDERSIZED_RELEASES)
     runtime_minutes = override.get("runtime_minutes")
     if exclude_undersized and runtime_minutes:
@@ -256,9 +255,11 @@ def _apply_non_category_filters(candidates: list[Stream], override: dict) -> lis
         filtered = [s for s in candidates if not _is_undersized(s)]
         if filtered:
             candidates = filtered
-        elif strict_cam:
-            log.warning("Only implausibly small (likely fake/cam/trailer) candidates available "
-                        "and STRICT_NO_CAM is on  -  rejecting all")
+        # Previously governed by STRICT_NO_CAM, which had nothing to do with
+        # release size. Now it has its own toggle.
+        elif _settings.get("EXCLUDE_UNDERSIZED_STRICT", False):
+            log.warning("Only implausibly small candidates available and "
+                        "EXCLUDE_UNDERSIZED_STRICT is on; rejecting all")
             return []
         else:
             log.warning("Only implausibly small (likely fake/cam/trailer) candidates available; allowing them")

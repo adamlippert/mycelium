@@ -94,6 +94,9 @@ STRICT_NO_CAM = _env("STRICT_NO_CAM", "false").lower() in ("1", "true", "yes")
 # about their quality (a cam mislabeled as "2160p") or aren't the full title
 # at all (a trailer standing in for the movie).
 EXCLUDE_UNDERSIZED_RELEASES = _env("EXCLUDE_UNDERSIZED_RELEASES", "true").lower() in ("1", "true", "yes")
+# When true, hard-fail the undersized size check (reject all if only undersized
+# candidates remain). When false, allow them as a soft fallback.
+EXCLUDE_UNDERSIZED_STRICT = _env("EXCLUDE_UNDERSIZED_STRICT", "false").lower() in ("1", "true", "yes")
 PREFER_WEBDL = _env("PREFER_WEBDL", "true").lower() in ("1", "true", "yes")
 PREFER_HEVC = _env("PREFER_HEVC", "true").lower() in ("1", "true", "yes")
 # Minimum seeders to include a candidate (0 = no filter; unknown seeders always pass).
