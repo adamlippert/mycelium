@@ -312,6 +312,51 @@ narrower behaviour and document it.
 Blast radius is nil for default installs: both language settings ship empty, so
 this rescue only ever fires for users who configured both.
 
+## Per-show overrides
+
+`show_quality_override` is a live table (`db.py:168`) read by `processor.py:55`
+and `:62`. It lets one show override `quality_preference`, `allow_4k` and
+`prefer_hevc`, which are three of the eleven settings C1 retires.
+
+**Decision: keep the table and its UI unchanged; translate at rank time.**
+Migrating per-show rules to the full four-state model would multiply the schema
+by seven categories for a feature nobody has asked to extend. Instead
+`rank_streams` translates the three fields into the new model for that call:
+
+| Override field | Translated to |
+|---|---|
+| `quality_preference` | replaces `RESOLUTION_PREFERRED` for this call |
+| `allow_4k` false | adds `2160p` to `RESOLUTION_EXCLUDED` for this call |
+| `prefer_hevc` | adds or removes `hevc` in `ENCODE_PREFERRED` for this call |
+
+`runtime_minutes` is not a filter category and is untouched. Any later desire
+for per-show rules in the other categories is a separate project.
+
+## The STRICT_NO_CAM coupling, and what replaces it
+
+`STRICT_NO_CAM` currently governs two unrelated things. It hard-fails the
+cam filter, and it **also** hard-fails the undersized-release check:
+
+```python
+filtered = [s for s in candidates if not _is_undersized(s)]
+if filtered:
+    candidates = filtered
+elif strict_cam:
+    log.warning("Only implausibly small ... and STRICT_NO_CAM is on  -  rejecting all")
+    return []
+```
+
+A setting named for cam rips decides whether an unrelated size heuristic is fatal.
+This is almost certainly unintended.
+
+**Decision: break the coupling.** `SOURCE_STRICT` governs source-type rules only.
+The undersized check keeps its own hard-fail behaviour under a new
+`EXCLUDE_UNDERSIZED_STRICT`, defaulting to the current effective value (`false`,
+matching `STRICT_NO_CAM`'s default) so no live behaviour changes on upgrade.
+
+Recorded rather than silently preserved, because a migration that carried the
+coupling forward would make `SOURCE_STRICT` mean two things forever.
+
 ## What C1 does not do
 
 Deliberately out of scope, from the AIOStreams relevance pass: stream-type
