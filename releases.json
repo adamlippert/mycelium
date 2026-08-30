@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.7.2",
+    "date": "2026-08-30",
+    "notes": [
+      "New: PUID/PGID support, the same variables Jellyfin and Plex use - set them to your Jellyfin user and Mycelium stops writing files your media server cannot delete",
+      "The ownership pass runs once, re-runs if you change the ids, and is skipped on normal restarts; a failed pass is not recorded as done, so it retries rather than booting into a database it cannot write",
+      "PUID=0 is the default and changes nothing, so existing deployments are unaffected until they opt in",
+      "Fix: the SMB share keeps port 445 under a non-zero PUID, which would otherwise have stopped binding silently",
+      "Fix: a spore-nfs or spore-smb process that dies is now logged; previously the share just vanished with nothing in the log"
+    ]
+  },
+  {
     "version": "0.7.1",
     "date": "2026-08-30",
     "notes": [

@@ -2,6 +2,19 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.7.2] - 2026-08-30
+
+### Added
+
+- **`PUID` / `PGID` support.** Mycelium writes the `.strm` files that Jellyfin and Plex read and delete. Deleting a file needs write permission on its parent *directory*, so all three have to agree on a user id - and running as root meant Mycelium owned everything it created and Jellyfin could not remove any of it from its web UI. That id is a property of the deployment rather than of the image, so it arrives at runtime through the same two variables Jellyfin and Plex already use, instead of a `USER` line in the Dockerfile. The new entrypoint corrects ownership of the data directories and then drops to `PUID:PGID`. `PUID=0` is the default and execs straight through, so nothing changes for anyone who does not set it.
+- The recursive ownership pass is guarded by a marker named `.ownership-<uid>-<gid>`: it runs once, re-runs when the ids change rather than leaving half the tree owned by the old id, and is skipped on every normal restart, where a walk over a large library would otherwise cost minutes on each boot. A chown that fails deliberately does not write the marker, so a broken permission state retries on the next start instead of booting into a database it cannot write. `FORCE_CHOWN=1` repeats the pass on demand.
+- Setting `user:` in Compose achieves the same end result, but leaves the operator to fix existing ownership by hand and to remember the setting on every deployment - and a platform that regenerates its Compose file can drop it with no visible symptom beyond new files quietly reverting to root. `PUID`/`PGID` is ordinary configuration, which is the thing such platforms carry correctly.
+
+### Fixed
+
+- **`spore-smb` keeps its port under a non-zero `PUID`.** Port 445 is below 1024 and so normally requires root to bind, which would have silently cost the SMB share to anyone adopting `PUID`. The binary now carries `cap_net_bind_service`, which works at any user id on any host without asking operators to set sysctls or capabilities per deployment. Applied after the `COPY` because capabilities live in the file's extended attributes. Verified not to disturb the default path: the binary still loads normally under the secure-execution mode that file capabilities enable.
+- **A dead `spore-nfs` or `spore-smb` is no longer silent.** Both were backgrounded while only gunicorn was `exec`'d, so either could fail at startup or die days later with nothing logged and nothing restarted - the share simply was not there, with no error to search for. Their exits are now reported.
+
 ## [0.7.1] - 2026-08-30
 
 ### Fixed
