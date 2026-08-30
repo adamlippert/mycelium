@@ -3,9 +3,9 @@
 <img src="assets/banner.svg" alt="myc3l1um: the hidden network beneath your media library" width="800"/>
 
 <p>
-  <a href="https://github.com/corveck79/mycelium/releases"><img src="https://img.shields.io/github/v/release/corveck79/mycelium?include_prereleases&color=22d3ee" alt="Release"/></a>
+  <a href="https://github.com/adamlippert/mycelium/releases"><img src="https://img.shields.io/github/v/release/adamlippert/mycelium?include_prereleases&color=22d3ee" alt="Release"/></a>
   <a href="https://hub.docker.com/r/corveck/mycelium"><img src="https://img.shields.io/docker/pulls/corveck/mycelium?color=2496ED&logo=docker&logoColor=white" alt="Docker Pulls"/></a>
-  <a href="https://github.com/corveck79/mycelium/pkgs/container/mycelium"><img src="https://img.shields.io/badge/ghcr.io-mycelium-2496ED.svg?logo=docker&logoColor=white" alt="GHCR"/></a>
+  <a href="https://github.com/adamlippert/mycelium/pkgs/container/mycelium"><img src="https://img.shields.io/badge/ghcr.io-mycelium-2496ED.svg?logo=docker&logoColor=white" alt="GHCR"/></a>
   <img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python 3.12"/>
   <img src="https://img.shields.io/badge/license-MIT-22d3ee.svg" alt="MIT licensed"/>
 </p>
@@ -306,7 +306,7 @@ docker run -d \
 Or with Docker Compose:
 
 ```bash
-git clone https://github.com/corveck79/mycelium.git
+git clone https://github.com/adamlippert/mycelium.git
 cd mycelium
 docker compose up -d
 ```
