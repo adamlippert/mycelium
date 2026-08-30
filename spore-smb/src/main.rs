@@ -82,6 +82,9 @@ struct TreeInner {
     by_path: HashMap<String, String>,
     dirs: std::collections::HashSet<String>,
     fetched_at: Option<Instant>,
+    // Counts at the previous refresh, so a refresh that changed nothing is silent.
+    last_files: usize,
+    last_dirs: usize,
 }
 
 struct Tree {
@@ -98,6 +101,8 @@ impl Tree {
                 by_path: HashMap::new(),
                 dirs,
                 fetched_at: None,
+                last_files: 0,
+                last_dirs: 0,
             }),
             ttl: Duration::from_secs(10),
         }
@@ -158,11 +163,19 @@ impl Tree {
         let count = by_path.len();
         let dcount = dirs.len();
         let mut g = self.inner.write().await;
+        let changed = count != g.last_files || dcount != g.last_dirs;
         g.by_path = by_path;
         g.dirs = dirs;
+        g.last_files = count;
+        g.last_dirs = dcount;
         g.fetched_at = Some(Instant::now());
         drop(g);
-        eprintln!("tree refreshed: {count} files, {dcount} dirs");
+        // Only log a change. This runs every few seconds; logging every refresh
+        // produced thousands of identical lines a day and pushed real errors
+        // out of the retained log.
+        if changed {
+            eprintln!("tree refreshed: {count} files, {dcount} dirs");
+        }
     }
 
     async fn token_for(&self, state: &AppState, p: &str) -> Option<String> {

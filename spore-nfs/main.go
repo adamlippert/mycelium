@@ -58,6 +58,8 @@ type tree struct {
 	byPath    map[string]string // path -> token
 	dirs      map[string]bool   // every ancestor directory of every file
 	fetchedAt time.Time
+	lastFiles int // counts at the previous refresh, so we only log on a change
+	lastDirs  int
 }
 
 func newTree() *tree { return &tree{byPath: map[string]string{}, dirs: map[string]bool{"": true}} }
@@ -108,8 +110,16 @@ func (t *tree) refresh() {
 	t.byPath = byPath
 	t.dirs = dirs
 	t.fetchedAt = time.Now()
+	changed := len(byPath) != t.lastFiles || len(dirs) != t.lastDirs
+	t.lastFiles = len(byPath)
+	t.lastDirs = len(dirs)
 	t.mu.Unlock()
-	log.Printf("tree refreshed: %d files, %d dirs", len(byPath), len(dirs))
+	// Only log when the library actually changed. This refreshes every few
+	// seconds, and logging unconditionally buried real errors under thousands
+	// of identical lines a day and rotated useful history out of the log.
+	if changed {
+		log.Printf("tree refreshed: %d files, %d dirs", len(byPath), len(dirs))
+	}
 }
 
 func (t *tree) tokenFor(p string) (string, bool) {
