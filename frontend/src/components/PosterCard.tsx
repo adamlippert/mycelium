@@ -19,7 +19,7 @@ export default function PosterCard({
     <button
       type="button"
       onClick={() => onClick(item)}
-      className="group relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-card border border-border
+      className="group relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-card border border-border
                   hover:border-accent/50 transition-all hover:-translate-y-1 hover:shadow-xl
                   hover:shadow-black/40 text-left"
     >
@@ -49,8 +49,11 @@ export default function PosterCard({
         {isTV ? 'TV' : 'Movie'}
       </div>
       {isWatched && (
-        <div className="absolute top-8 right-2 w-5 h-5 rounded-full bg-green-500/90 flex items-center justify-center shadow-md z-10"
-             title="Watched">
+        <div
+          className="absolute top-8 right-2 w-5 h-5 rounded-full flex items-center justify-center shadow-md z-10"
+          style={{ background: 'rgba(37,140,96,0.9)' }}
+          title="Watched"
+        >
           <span className="text-white text-[10px] font-bold leading-none">✓</span>
         </div>
       )}
@@ -62,7 +65,10 @@ export default function PosterCard({
         <div className="flex items-center gap-2 text-[10px] text-white/70">
           {item.year && <span>{item.year}</span>}
           {item.rating > 0 && (
-            <span className="bg-warn/90 text-black font-semibold px-1.5 py-0.5 rounded">
+            <span
+              className="font-semibold px-1.5 py-0.5 rounded"
+              style={{ background: 'rgba(198,178,83,0.9)', color: '#070707' }}
+            >
               &#9733; {item.rating}
             </span>
           )}
@@ -72,20 +78,25 @@ export default function PosterCard({
   );
 }
 
-const STATUS_STYLES: Record<string, { bg: string; label: string }> = {
-  success:   { bg: 'bg-green-600',  label: 'In library' },
-  available: { bg: 'bg-green-600',  label: 'In library' },
-  wanted:    { bg: 'bg-yellow-600', label: 'Wanted' },
-  upcoming:  { bg: 'bg-blue-600',   label: 'Upcoming' },
-  pending:   { bg: 'bg-yellow-600', label: 'Pending' },
-  failed:    { bg: 'bg-red-600',    label: 'Failed' },
+const BADGES: Record<string, { bg: string; label: string }> = {
+  success:   { bg: 'rgba(37,140,96,0.85)',  label: 'IN LIBRARY' },
+  available: { bg: 'rgba(37,140,96,0.85)',  label: 'IN LIBRARY' },
+  pending:   { bg: 'rgba(97,82,223,0.88)',  label: 'REQUESTED' },
+  wanted:    { bg: 'rgba(198,178,83,0.85)', label: 'WANTED' },
+  upcoming:  { bg: 'rgba(97,82,223,0.55)',  label: 'UPCOMING' },
+  failed:    { bg: 'rgba(209,71,71,0.85)',  label: 'FAILED' },
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const s = STATUS_STYLES[status];
+  const s = BADGES[status];
   if (!s) return null;
   return (
-    <div className={`absolute top-2 left-2 px-1.5 py-0.5 rounded text-[10px] font-semibold ${s.bg} text-white`}>
+    <div
+      data-badge
+      className="absolute top-2 left-2 rounded-md px-1.5 py-1 text-[9px] font-semibold tracking-wide
+                 text-white backdrop-blur-sm"
+      style={{ background: s.bg }}
+    >
       {s.label}
     </div>
   );

@@ -14,6 +14,7 @@ export interface TmdbItem {
   backdrop_path: string | null;
   genre_ids?: number[];
   library_status?: string | null;
+  imdb_id?: string | null;
 }
 
 export interface Provider {
