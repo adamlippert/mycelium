@@ -8,8 +8,6 @@ marker and every later call is a no-op unless force=True is passed.
 """
 import logging
 
-import config
-
 log = logging.getLogger(__name__)
 
 CAM_FAMILY = ["cam", "ts", "tc", "scr", "r5", "ppvrip"]
@@ -22,6 +20,12 @@ BLURAY_FAMILY = ["bluray", "bdrip", "brrip"]
 WEBDL_FAMILY = ["webdl", "webrip", "web"]
 
 MIGRATION_MARKER = "FILTER_RULES_MIGRATED"
+
+# Retired settings could spell a value differently from the new vocabulary.
+# _QUALITY_PATTERNS matched "2160p|4k|uhd", so all three meant 2160p.
+_VALUE_ALIASES = {
+    "resolution": {"4k": "2160p", "uhd": "2160p"},
+}
 
 # Retired key -> the key that replaces it, for the stale-.env warning.
 RETIRED = {
@@ -37,6 +41,34 @@ RETIRED = {
     "AUDIO_LANGUAGE_PREFERENCE": "LANGUAGE_PREFERRED",
     "EXCLUDE_LANGUAGES": "LANGUAGE_EXCLUDED",
 }
+
+
+def _sanitise(key: str, values: list[str]) -> list[str]:
+    """Map known aliases, drop anything the new vocabulary cannot express.
+
+    A migration must never raise. It runs at startup before the admin UI is
+    reachable, so an exception here leaves the user unable to fix the value
+    that is blocking boot.
+    """
+    import release_tags as rt
+    import settings as _settings
+
+    category = _settings._RULE_LIST_KEYS.get(key)
+    if not category:
+        return values
+    vocabulary = rt.values_for(category)
+    aliases = _VALUE_ALIASES.get(category, {})
+    out = []
+    for raw in values:
+        value = aliases.get(raw, raw)
+        if value in vocabulary:
+            if value not in out:
+                out.append(value)
+        else:
+            log.warning("Migration dropped %r from %s: no equivalent in the new "
+                        "%s values. Set it in the admin UI if you need it.",
+                        raw, key, category)
+    return out
 
 
 def migrate(dry_run: bool = False, force: bool = False) -> dict:
@@ -63,13 +95,15 @@ def migrate(dry_run: bool = False, force: bool = False) -> dict:
 
     out: dict = {}
 
-    resolution_preferred = list(_settings.get("QUALITY_PREFERENCE", []) or [])
+    resolution_preferred = _sanitise(
+        "RESOLUTION_PREFERRED", list(_settings.get("QUALITY_PREFERENCE", []) or []))
     if resolution_preferred:
         out["RESOLUTION_PREFERRED"] = resolution_preferred
 
     resolution_excluded = []
     if _settings.get("ALLOW_4K", True) is False:
         resolution_excluded.append("2160p")
+    resolution_excluded = _sanitise("RESOLUTION_EXCLUDED", resolution_excluded)
     if resolution_excluded:
         out["RESOLUTION_EXCLUDED"] = resolution_excluded
 
@@ -80,23 +114,26 @@ def migrate(dry_run: bool = False, force: bool = False) -> dict:
         source_excluded.extend(BLURAY_FAMILY)
     if _settings.get("EXCLUDE_CAM", False):
         source_excluded.extend(CAM_FAMILY)
+    source_excluded = _sanitise("SOURCE_EXCLUDED", source_excluded)
     if source_excluded:
         out["SOURCE_EXCLUDED"] = source_excluded
 
     if _settings.get("PREFER_WEBDL", False):
-        out["SOURCE_PREFERRED"] = list(WEBDL_FAMILY)
+        out["SOURCE_PREFERRED"] = _sanitise("SOURCE_PREFERRED", list(WEBDL_FAMILY))
     if _settings.get("PREFER_HEVC", False):
-        out["ENCODE_PREFERRED"] = ["hevc"]
+        out["ENCODE_PREFERRED"] = _sanitise("ENCODE_PREFERRED", ["hevc"])
     if _settings.get("EXCLUDE_DV_P5", False):
-        out["VISUAL_TAG_EXCLUDED"] = ["dv_only"]
+        out["VISUAL_TAG_EXCLUDED"] = _sanitise("VISUAL_TAG_EXCLUDED", ["dv_only"])
 
     if _settings.get("STRICT_NO_CAM", False):
         out["SOURCE_STRICT"] = True
 
-    language_preferred = list(_settings.get("AUDIO_LANGUAGE_PREFERENCE", []) or [])
+    language_preferred = _sanitise(
+        "LANGUAGE_PREFERRED", list(_settings.get("AUDIO_LANGUAGE_PREFERENCE", []) or []))
     if language_preferred:
         out["LANGUAGE_PREFERRED"] = language_preferred
-    language_excluded = list(_settings.get("EXCLUDE_LANGUAGES", []) or [])
+    language_excluded = _sanitise(
+        "LANGUAGE_EXCLUDED", list(_settings.get("EXCLUDE_LANGUAGES", []) or []))
     if language_excluded:
         out["LANGUAGE_EXCLUDED"] = language_excluded
 
@@ -109,10 +146,19 @@ def migrate(dry_run: bool = False, force: bool = False) -> dict:
 
 
 def warn_stale_env() -> list[str]:
-    """A retired key left in .env is silently inert after upgrade. Say so."""
+    """Name retired keys the user actually set, so the warning means something.
+
+    Probing config attributes warns everyone, because config.py always defines
+    them with defaults. A warning that fires for every user trains people to
+    ignore warnings. Checking os.environ also catches a key explicitly set to
+    a falsy value, such as EXCLUDE_BLURAY=false, which a truthiness check on
+    the parsed config value would miss.
+    """
+    import os
+
     messages = []
     for old, new in RETIRED.items():
-        if hasattr(config, old) and getattr(config, old) not in (None, "", [], False):
+        if old in os.environ:
             messages.append(
                 f"{old} in your .env is no longer read; it was replaced by {new}. "
                 f"Remove it to silence this warning."

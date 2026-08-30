@@ -77,8 +77,13 @@ db.init()
 
 import settings as _settings_mod
 import migrate_filters
-migrate_filters.migrate()
-migrate_filters.warn_stale_env()
+try:
+    migrate_filters.migrate()
+    migrate_filters.warn_stale_env()
+except Exception:
+    log.exception("Filter migration failed; leaving the new rule settings "
+                  "untouched. The service starts with defaults and the rules "
+                  "can be set in the admin UI.")
 import os as _os
 LITE_MODE: bool = (
     _settings_mod.get("LITE_MODE", False)

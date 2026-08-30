@@ -92,8 +92,7 @@ def test_dry_run_writes_nothing(monkeypatch, store):
 
 
 def test_stale_env_keys_are_reported(monkeypatch):
-    import config
-    monkeypatch.setattr(config, "QUALITY_PREFERENCE", ["1080p"], raising=False)
+    monkeypatch.setenv("QUALITY_PREFERENCE", "1080p")
     messages = migrate_filters.warn_stale_env()
     assert any("QUALITY_PREFERENCE" in m for m in messages)
     assert any("RESOLUTION_PREFERRED" in m for m in messages)
@@ -122,3 +121,43 @@ def test_force_reruns_a_completed_migration(monkeypatch, store):
                         lambda k, d=None: True if k == migrate_filters.MIGRATION_MARKER
                         else ({"EXCLUDE_CAM": True}.get(k, d)))
     assert migrate_filters.migrate(force=True) != {}
+
+
+def test_an_unmappable_value_is_dropped_not_raised(monkeypatch, store):
+    """A migration runs before the admin UI is reachable, so raising would
+    leave the user unable to fix the value that is blocking boot."""
+    _old(monkeypatch, QUALITY_PREFERENCE=["totally_bogus", "1080p"])
+    result = migrate_filters.migrate()
+    assert result["RESOLUTION_PREFERRED"] == ["1080p"]
+
+
+def test_retired_resolution_spellings_are_aliased(monkeypatch, store):
+    """_QUALITY_PATTERNS matched 2160p, 4k and uhd alike, so a .env saying 4k
+    meant 2160p and must migrate to it rather than being discarded."""
+    _old(monkeypatch, QUALITY_PREFERENCE=["4k", "1080p"])
+    assert migrate_filters.migrate()["RESOLUTION_PREFERRED"] == ["2160p", "1080p"]
+
+
+def test_uhd_and_4k_do_not_produce_a_duplicate(monkeypatch, store):
+    _old(monkeypatch, QUALITY_PREFERENCE=["4k", "uhd", "1080p"])
+    assert migrate_filters.migrate()["RESOLUTION_PREFERRED"] == ["2160p", "1080p"]
+
+
+def test_warn_stale_env_is_silent_for_a_clean_environment(monkeypatch):
+    for key in migrate_filters.RETIRED:
+        monkeypatch.delenv(key, raising=False)
+    assert migrate_filters.warn_stale_env() == []
+
+
+def test_warn_stale_env_names_a_key_the_user_actually_set(monkeypatch):
+    monkeypatch.setenv("QUALITY_PREFERENCE", "1080p")
+    messages = migrate_filters.warn_stale_env()
+    assert len(messages) == 1
+    assert "QUALITY_PREFERENCE" in messages[0]
+    assert "RESOLUTION_PREFERRED" in messages[0]
+
+
+def test_warn_stale_env_warns_about_an_explicitly_false_setting(monkeypatch):
+    """A user who set EXCLUDE_BLURAY=false still has an inert key in .env."""
+    monkeypatch.setenv("EXCLUDE_BLURAY", "false")
+    assert any("EXCLUDE_BLURAY" in m for m in migrate_filters.warn_stale_env())
