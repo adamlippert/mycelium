@@ -122,7 +122,7 @@ function ConfigGateAlert({ message, link, linkLabel }: {
   message: string; link?: string; linkLabel?: string
 }) {
   return (
-    <div className="text-xs text-yellow-400 bg-yellow-400/10 border border-yellow-400/20 rounded px-3 py-2 mb-4">
+    <div className="text-xs text-warn bg-warn/10 border border-warn/20 rounded px-3 py-2 mb-4">
       {message}
       {link && (
         <>
@@ -228,7 +228,7 @@ function OAuthDeviceSection({ spec, configured, connected, username, syncedAt, o
         {syncedAt && <p className="text-xs text-muted">Last synced: {syncedAt}</p>}
         <button
           onClick={revokeAuth}
-          className="px-3 py-1.5 rounded bg-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/30"
+          className="px-3 py-1.5 rounded bg-danger/20 text-danger text-xs font-medium hover:bg-danger/30"
         >
           Disconnect
         </button>

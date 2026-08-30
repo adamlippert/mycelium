@@ -371,7 +371,7 @@ function SeriesPanel() {
                             if (isWanted) {
                               return (
                                 <span key={ep}
-                                  className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400"
+                                  className="text-xs px-2 py-0.5 rounded bg-danger/20 text-danger"
                                   title="Wanted - not yet cached"
                                 >
                                   {label}
@@ -391,7 +391,7 @@ function SeriesPanel() {
                                   })}
                                   className={`text-xs px-2 py-0.5 rounded transition-colors
                                     ${isWatched
-                                      ? 'bg-green-500/20 text-green-400 hover:bg-green-600 hover:text-white'
+                                      ? 'bg-ok/20 text-ok hover:bg-ok hover:text-white'
                                       : 'bg-accent/20 text-accent hover:bg-indigo-600 hover:text-white'
                                     }`}
                                   title={isWatched ? 'Watched - play again' : 'Play in browser'}
@@ -404,7 +404,7 @@ function SeriesPanel() {
                             return (
                               <span key={ep}
                                 className={`text-xs px-2 py-0.5 rounded
-                                  ${isWatched ? 'bg-green-500/20 text-green-400' : 'bg-accent/20 text-accent'}`}
+                                  ${isWatched ? 'bg-ok/20 text-ok' : 'bg-accent/20 text-accent'}`}
                                 title={isWatched ? 'Watched' : 'Available'}
                               >
                                 {label}

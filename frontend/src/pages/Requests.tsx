@@ -74,7 +74,7 @@ export default function Requests() {
                       type="button"
                       onClick={() => { if (confirm(`Forget the request "${r.title}"?\n\nThe files stay in your library.`)) deleteMut.mutate(r.id); }}
                       disabled={deleteMut.isPending}
-                      className="px-2 py-1 rounded text-xs text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                      className="px-2 py-1 rounded text-xs text-danger hover:bg-danger/10 disabled:opacity-50"
                       title="Forget the request. Keeps the files in your library."
                     >
                       x
@@ -84,7 +84,7 @@ export default function Requests() {
                         type="button"
                         onClick={() => { if (confirm(`Remove "${r.title}" from the library?\n\nThis deletes its .strm files and it will disappear from Jellyfin and Plex. This cannot be undone.`)) purgeMut.mutate(r.id); }}
                         disabled={purgeMut.isPending}
-                        className="ml-1 px-2 py-1 rounded text-xs text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                        className="ml-1 px-2 py-1 rounded text-xs text-danger hover:bg-danger/10 disabled:opacity-50"
                         title="Remove from library (deletes the .strm files)"
                       >
                         Remove
@@ -222,7 +222,7 @@ function PendingApprovalsPanel() {
                     if (note !== null) denyMut.mutate({ id: r.id, note: note || undefined });
                   }}
                   disabled={denyMut.isPending}
-                  className="px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs hover:bg-red-500/30 disabled:opacity-50"
+                  className="px-2 py-1 rounded bg-danger/20 text-danger text-xs hover:bg-danger/30 disabled:opacity-50"
                 >Deny</button>
               </td>
             </tr>

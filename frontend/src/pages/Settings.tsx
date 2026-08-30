@@ -187,7 +187,7 @@ function PreferencesCard() {
             <div className="text-xs text-muted mt-0.5">
               Clicking a poster in the Library tab opens the item in Jellyfin web instead of showing the detail modal.
               {!jellyfinUrl && (
-                <span className="text-yellow-400 ml-1">(Jellyfin URL not configured)</span>
+                <span className="text-warn ml-1">(Jellyfin URL not configured)</span>
               )}
             </div>
           </div>
