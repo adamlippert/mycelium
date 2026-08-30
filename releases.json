@@ -1,5 +1,22 @@
 [
   {
+    "version": "0.7.0",
+    "date": "2026-08-30",
+    "notes": [
+      "Release filtering is now a four-state rule model: twelve booleans retired in favour of 37 settings across seven categories, each value marked preferred, excluded, required or included",
+      "Evaluation is order-independent: every category votes against the full candidate pool and the votes are unioned, so the result no longer depends on the order rules happen to be written in",
+      "Soft relaxation is assessed globally, so two categories that each drop a different half of the pool no longer empty it between them",
+      "Every rejected candidate now carries the rule and value that dropped it, and whether that rule then relaxed",
+      "The settings page renders seven category panels with per-value chips instead of 35 comma-separated text boxes; each category's vocabulary is a dropdown, so an invalid value cannot be typed",
+      "A value stored from .env that is not in its vocabulary is shown struck through with an explanation, where before it warned once at startup and was then invisible while matching nothing",
+      "SORT_ORDER is configurable across ten criteria; the default reproduces the previous ranking exactly",
+      "Behaviour change: EXCLUDE_LANGUAGES loses an undocumented rescue, and Dolby Vision detection now catches a trailing .DV the old pattern missed, so EXCLUDE_DV_P5 drops some releases that previously passed",
+      "Naming fix: QUALITY_PREFERENCE held a RESOLUTION despite its name; it becomes RESOLUTION_PREFERRED",
+      "Retired settings migrate once at startup, guarded by FILTER_RULES_MIGRATED so a restart cannot overwrite later edits, and any retired key left in .env is named in a startup warning",
+      "Fix: the OIDC toggle in the admin UI now takes effect, in both directions"
+    ]
+  },
+  {
     "version": "0.6.6",
     "date": "2026-08-29",
     "notes": [

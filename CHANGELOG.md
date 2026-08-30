@@ -2,7 +2,7 @@
 
 All notable changes to Mycelium are documented in this file.
 
-## [Unreleased]
+## [0.7.0] - 2026-08-30
 
 ### Changed
 
@@ -17,6 +17,10 @@ All notable changes to Mycelium are documented in this file.
 - **Naming fix:** `QUALITY_PREFERENCE` held a resolution (1080p/2160p/720p) despite its name. The new `RESOLUTION_PREFERRED` (and the rest of the `RESOLUTION_*` family) name it correctly - if you hand-write a `.env`, `QUALITY_PREFERENCE=1080p,2160p` becomes `RESOLUTION_PREFERRED=1080p,2160p`, not a `QUALITY_*` key.
 - The retired settings are translated into the new rule rows automatically, once, at startup, guarded by `FILTER_RULES_MIGRATED` - a later startup never re-reads them and clobbers an edit made since in the admin UI. A retired key still present in `.env` after migration is reported (not silently ignored) via a startup warning naming the key and its replacement.
 - **The settings page renders the rule editor as seven category panels with per-value chips,** replacing 35 comma-separated text boxes and dropdown-selected lists. Each category's vocabulary is offered as a dropdown picker, so an invalid value cannot be typed. A value stored from `.env` that is not in the vocabulary is now surfaced in the UI struck through with an explanation; previously it warned once at container startup and was then invisible while matching nothing. `preferred` is the only state offering reorder controls, because order only changes behaviour in that state; `included` carries a permanent warning that it overrides every other rule in every category. The editor writes the same settings as before - `setting_<KEY>` hidden inputs on save - so `.env` values and the API remain unaffected.
+
+### Fixed
+
+- **The OIDC toggle in the admin UI now takes effect.** `oidc.is_enabled()` read `config.OIDC_ENABLED`, a snapshot taken from `.env` at startup, so switching OIDC on or off in Settings saved the value and changed nothing; only editing `.env` and restarting worked. It now reads the live settings overlay, falling back to `.env`. `OIDC_ENABLED` is also registered as a boolean setting: without that, storing `false` wrote the string `"false"`, which is truthy, so switching OIDC off would have left it on. A half-working toggle is worse than one that plainly does nothing, so both halves are needed.
 
 ## [0.6.6] - 2026-08-29
 
