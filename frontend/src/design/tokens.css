@@ -1,0 +1,31 @@
+/* Alpha-composited surfaces. These sit over varying card grounds, so they
+   cannot be flat hex the way the Tailwind palette is. */
+:root {
+  --pill-ready-bg: rgba(37, 140, 96, 0.14);
+  --pill-ready-fg: #7bd0a7;
+  --pill-ready-border: rgba(87, 161, 129, 0.28);
+
+  --pill-materializing-bg: rgba(97, 82, 223, 0.16);
+  --pill-materializing-fg: #c7c2ff;
+  --pill-materializing-border: rgba(159, 146, 255, 0.3);
+
+  --pill-queued-bg: rgba(198, 178, 83, 0.13);
+  --pill-queued-fg: #dacd8a;
+  --pill-queued-border: rgba(198, 178, 83, 0.28);
+
+  --pill-failed-bg: rgba(209, 71, 71, 0.14);
+  --pill-failed-fg: #e48181;
+  --pill-failed-border: rgba(228, 129, 129, 0.28);
+
+  --pill-lazy-bg: rgba(255, 255, 255, 0.05);
+  --pill-lazy-fg: rgba(255, 255, 255, 0.55);
+  --pill-lazy-border: rgba(255, 255, 255, 0.1);
+
+  --dot-ok: #57a181;
+  --dot-warn: #c6b253;
+  --dot-danger: #d14747;
+
+  --surface-subtle: rgba(255, 255, 255, 0.04);
+  --surface-hover: rgba(255, 255, 255, 0.06);
+  --nav-active: rgba(97, 82, 223, 0.16);
+}

@@ -170,7 +170,7 @@ function PendingApprovalsPanel() {
 
   return (
     <section>
-      <h2 className="text-lg font-bold mb-3 text-amber">Pending approvals</h2>
+      <h2 className="text-lg font-bold mb-3 text-warn">Pending approvals</h2>
       <p className="text-muted text-xs mb-3">
         These requests need your approval before they are processed.
       </p>
@@ -224,7 +224,7 @@ function StatusPill({ status }: { status: string }) {
     status === 'approved' ? 'bg-ok/20 text-ok' :
     status === 'denied' ? 'bg-red-500/20 text-red-400' :
     status === 'failed' ? 'bg-red-500/20 text-red-400' :
-    'bg-amber/20 text-amber';
+    'bg-warn/20 text-warn';
   return <span className={`px-2 py-0.5 rounded text-xs font-semibold capitalize ${cls}`}>{status}</span>;
 }
 
@@ -232,10 +232,10 @@ function LibraryPill({ status }: { status: string | null }) {
   if (!status) return <span className="text-xs text-muted">--</span>;
   const map: Record<string, { cls: string; label: string }> = {
     success: { cls: 'bg-ok/20 text-ok', label: 'In library' },
-    wanted:  { cls: 'bg-amber/20 text-amber', label: 'Wanted' },
+    wanted:  { cls: 'bg-warn/20 text-warn', label: 'Wanted' },
     upcoming:{ cls: 'bg-blue-500/20 text-blue-400', label: 'Upcoming' },
     failed:  { cls: 'bg-red-500/20 text-red-400', label: 'Failed' },
-    pending: { cls: 'bg-amber/20 text-amber', label: 'Processing' },
+    pending: { cls: 'bg-warn/20 text-warn', label: 'Processing' },
   };
   const m = map[status] || { cls: 'bg-gray-500/20 text-gray-400', label: status };
   return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${m.cls}`}>{m.label}</span>;

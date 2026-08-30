@@ -62,7 +62,7 @@ export default function PosterCard({
         <div className="flex items-center gap-2 text-[10px] text-white/70">
           {item.year && <span>{item.year}</span>}
           {item.rating > 0 && (
-            <span className="bg-amber/90 text-black font-semibold px-1.5 py-0.5 rounded">
+            <span className="bg-warn/90 text-black font-semibold px-1.5 py-0.5 rounded">
               &#9733; {item.rating}
             </span>
           )}

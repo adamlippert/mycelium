@@ -56,7 +56,7 @@ export default function Layout() {
             <circle cx="20" cy="35" r="2.2" fill="#5eead4"/>
           </svg>
           <span className="font-mono font-bold tracking-wide text-lg text-white">
-            myc<span className="text-accent-2">3</span>l<span className="text-accent-2">1</span>um
+            myc<span className="text-accent-pale">3</span>l<span className="text-accent-pale">1</span>um
           </span>
         </div>
         <nav className="py-3">
