@@ -19,7 +19,7 @@ _RESOLUTION_PATTERNS = (
 )
 
 SOURCE_VALUES = (
-    "remux", "bluray", "bdrip", "brrip", "webdl", "webrip", "hdrip",
+    "remux", "bluray", "bdrip", "brrip", "webdl", "webrip", "web", "hdrip",
     "dvdrip", "dvd", "hdtv", "satrip", "tvrip", "r5", "ppvrip",
     "ts", "tc", "scr", "cam", UNKNOWN,
 )
@@ -33,6 +33,7 @@ _SOURCE_PATTERNS = (
     ("bluray", re.compile(r"\b(bluray|blu-ray)\b", re.IGNORECASE)),
     ("webdl", re.compile(r"\bweb-?dl\b", re.IGNORECASE)),
     ("webrip", re.compile(r"\bweb-?rip\b", re.IGNORECASE)),
+    ("web", re.compile(r"\bweb\b", re.IGNORECASE)),
     ("hdrip", re.compile(r"\bhd-?rip\b", re.IGNORECASE)),
     ("dvdrip", re.compile(r"\bdvd-?rip\b", re.IGNORECASE)),
     ("ppvrip", re.compile(r"\bppv-?rip\b", re.IGNORECASE)),

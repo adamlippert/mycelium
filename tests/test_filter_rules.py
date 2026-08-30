@@ -339,3 +339,39 @@ def test_no_warning_without_a_required_rule():
 def test_an_unimportable_source_name_does_not_raise():
     assert fr.warn_unsupported_requirements(
         _rules(language={"required": ["en"]}), ["not_a_real_module"]) == []
+
+
+def test_preferring_webdl_still_rewards_webrip_and_bare_web():
+    """The retired PREFER_WEBDL matched web-dl, webrip and web alike. The sort
+    term must consult the preferred list rather than one hardcoded value, so a
+    migration that lists all three ranks each of them ahead of a source that
+    is not on the list.
+
+    This drives the actual sort (streams._sort_candidates), not just
+    release_tags.detect_sources: a membership check against detect_sources
+    alone passes identically whether the sort term is hardcoded to "webdl" or
+    reads the preferred list, and would not have caught the regression this
+    test exists to pin.
+    """
+    import streams
+    rules = _rules(source={"preferred": ["webdl", "webrip", "web"]})
+
+    def mk(name, info_hash):
+        return streams.Stream(name=name, title=name, info_hash=info_hash,
+                               quality="1080p", seeders=10, size_gb=5.0,
+                               is_season_pack=False)
+
+    webrip = mk("Movie.1080p.WEBRip.x264", "a" * 40)
+    bare_web = mk("Movie.1080p.WEB.x264", "b" * 40)
+    bluray = mk("Movie.1080p.BluRay.x264", "c" * 40)  # not on the preferred list
+
+    ranked = streams._sort_candidates([bluray, webrip, bare_web], rules, False, {})
+    names = [s.name for s in ranked]
+    assert names.index(webrip.name) < names.index(bluray.name), names
+    assert names.index(bare_web.name) < names.index(bluray.name), names
+
+
+def test_a_source_absent_from_preferred_is_not_rewarded():
+    rules = _rules(source={"preferred": ["webdl"]})
+    tags = rt.detect_sources("Movie.1080p.WEBRip.x264 Movie.1080p.WEBRip.x264")
+    assert not any(v in rules["source"]["preferred"] for v in tags)

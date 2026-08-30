@@ -26,6 +26,7 @@ def test_detect_resolution(text, expected):
     ("Movie.1080p.BRRip.x264", {"brrip"}),
     ("Movie.1080p.WEB-DL.DDP5.1", {"webdl"}),
     ("Movie.1080p.WEBRip.x264", {"webrip"}),
+    ("Movie.1080p.WEB.x264", {"web"}),
     ("Movie.720p.HDTV.x264", {"hdtv"}),
     ("Movie.DVDRip.XviD", {"dvdrip"}),
     ("Movie.2024.HDCAM.x264", {"cam"}),

@@ -301,8 +301,8 @@ def _sort_candidates(
 
     resolution_preferred = rules["resolution"]["preferred"]
     language_preferred = rules["language"]["preferred"]
-    prefer_webdl = "webdl" in rules["source"]["preferred"]
-    prefer_hevc = "hevc" in rules["encode"]["preferred"]
+    source_preferred = rules["source"]["preferred"]
+    encode_preferred = rules["encode"]["preferred"]
 
     def _lang_score(s: Stream) -> int:
         if not language_preferred:          # no preference: everything ties
@@ -320,8 +320,13 @@ def _sort_candidates(
             0 if prefer_season_pack and s.is_season_pack else 1,
             _quality_rank(s, resolution_preferred),
             _lang_score(s),
-            0 if prefer_webdl and "webdl" in release_tags.detect_sources(blob) else 1,
-            0 if prefer_hevc and "hevc" in release_tags.detect_encode(blob) else 1,
+            # Reward any source the user listed as preferred, not one hardcoded
+            # value. The old _WEBDL_RE matched web-dl, webrip and web alike, so
+            # hardcoding webdl here silently demoted the other two.
+            0 if any(v in source_preferred
+                     for v in release_tags.detect_sources(blob)) else 1,
+            0 if any(v in encode_preferred
+                     for v in release_tags.detect_encode(blob)) else 1,
             -s.seeders,
             s.size_gb,
         )
