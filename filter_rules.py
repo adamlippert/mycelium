@@ -9,7 +9,6 @@ import logging
 from dataclasses import dataclass
 
 import release_tags as rt
-import settings as _settings
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +34,17 @@ class Verdict:
 
 
 def load_rules() -> dict[str, dict]:
-    """Read the 35 settings into the nested shape evaluate() expects."""
+    """Read the 35 settings into the nested shape evaluate() expects.
+
+    settings is imported lazily, not at module level: some tests pop
+    "settings" out of sys.modules to force a reload, and a module-level import
+    here would keep pointing at the stale pre-pop object, silently missing
+    monkeypatches applied to the module that a later `import settings` call
+    actually resolves to. streams.py already imports settings this way for
+    the same reason.
+    """
+    import settings as _settings
+
     rules = {}
     for category, prefix in _PREFIX_BY_CATEGORY.items():
         rules[category] = {

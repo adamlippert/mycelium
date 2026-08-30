@@ -247,3 +247,48 @@ def test_show_override_does_not_mutate_the_global_rules():
 def test_empty_override_changes_nothing():
     base = _rules(resolution={"preferred": ["1080p"]})
     assert streams._apply_show_override(base, {}) == base
+
+
+# ── rank_streams routed through the rule engine ──────────────────────────────
+
+def test_rank_streams_signature_is_unchanged(monkeypatch):
+    # Local import, not the module-level _s: some tests elsewhere pop
+    # "settings" out of sys.modules to force a reload, and rank_streams'
+    # settings access (via filter_rules.load_rules) is itself lazy for the
+    # same reason. Importing here, immediately before the monkeypatch and the
+    # call under test, is what keeps both sides looking at the same object.
+    import settings as _s
+    monkeypatch.setattr(_s, "get", lambda k, d=None: d)
+    out = streams.rank_streams([
+        streams.Stream(name="Movie.1080p.WEB-DL.x264", title="Movie.1080p.WEB-DL.x264",
+                       info_hash="a" * 40, quality="1080p", seeders=10, size_gb=5.0,
+                       is_season_pack=False),
+    ])
+    assert isinstance(out, list)
+    assert all(isinstance(s, streams.Stream) for s in out)
+
+
+def test_rank_streams_explained_returns_a_verdict_per_input(monkeypatch):
+    import settings as _s  # see comment in the previous test
+
+    def fake_get(key, default=None):
+        if key == "SOURCE_EXCLUDED":
+            return ["cam"]
+        return default
+    monkeypatch.setattr(_s, "get", fake_get)
+
+    cands = [
+        streams.Stream(name="Movie.1080p.WEB-DL.x264", title="Movie.1080p.WEB-DL.x264",
+                       info_hash="a" * 40, quality="1080p", seeders=10, size_gb=5.0,
+                       is_season_pack=False),
+        streams.Stream(name="Movie.1080p.HDCAM.x264", title="Movie.1080p.HDCAM.x264",
+                       info_hash="b" * 40, quality="1080p", seeders=99, size_gb=5.0,
+                       is_season_pack=False),
+    ]
+    kept, verdicts = streams.rank_streams_explained(cands)
+    assert len(verdicts) == 2
+    assert len(kept) == 1
+    assert kept[0].info_hash == "a" * 40
+    dropped = [v for v in verdicts if not v.kept]
+    assert dropped[0].rule == "SOURCE_EXCLUDED"
+    assert dropped[0].value == "cam"
