@@ -149,17 +149,42 @@ resolves to `remux`.
 
 ### Storage
 
-One row per category plus one strict toggle, using the `key=value` CSV shape the
-settings table already ships:
+**Correction: `key=value` CSV does not exist in this codebase.** `settings._coerce`
+handles bool, plain comma list, int, float and enum only. Feeding
+`"2160p=preferred"` to the existing list coercion yields the literal unparsed
+string `['2160p=preferred']`. That format lived only on the retired
+`feat/ranking-and-limits` branch. Option A below would introduce it as new.
+
+Two options, storing the same model.
+
+**Option A, one row per category (new format).**
 
 ```
-RESOLUTION_RULES = "2160p=preferred,1080p=preferred,480p=excluded"
+RESOLUTION_RULES  = "2160p=preferred,1080p=preferred,480p=excluded"
 RESOLUTION_STRICT = false
 ```
 
-Seven rules rows and seven strict toggles, so fourteen settings replacing
-twelve. Twenty-eight separate per-state lists would be worse than what exists
-now. Order within a `preferred` run is significant and preserved.
+Fourteen settings. Compact, but needs a new coercion type, a new validator for
+`value=state` pairs, and new UI input handling. A value can be named twice with
+conflicting states, so the validator must also define precedence.
+
+**Option B, four lists per category (existing format). Recommended.**
+
+```
+RESOLUTION_PREFERRED = "2160p,1080p"
+RESOLUTION_EXCLUDED  = "480p"
+RESOLUTION_REQUIRED  = ""
+RESOLUTION_INCLUDED  = ""
+RESOLUTION_STRICT    = false
+```
+
+Thirty-five settings. Every list is an ordinary `_LIST_KEYS` entry, so parsing is
+unchanged, and per-value validation reuses the `_LANGUAGE_LIST_KEYS` pattern
+shipped in 0.6.6. Order inside `preferred` survives the existing comma split.
+
+Option B is recommended: no new parsing, no new failure modes, and validation
+that already exists and is tested. Its only cost is a long settings page during
+the C1-only window, and C2 replaces that page with a grid regardless.
 
 ### Sorting
 
