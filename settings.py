@@ -41,6 +41,9 @@ _BOOL_KEYS = {
     "MULTI_DEBRID_ENABLED",
     "WEBDAV_ENABLED",
     "AUTH_ENABLED",
+    # Without this the UI toggle stores the string "false", which is truthy,
+    # so switching OIDC off would leave it on.
+    "OIDC_ENABLED",
     "TRUSTED_PROXY_AUTH",
     "LITE_MODE",
     "DEBRIDIO_ENABLED",
