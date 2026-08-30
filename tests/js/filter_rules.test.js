@@ -124,3 +124,28 @@ test("toFormFields keeps an invalid value rather than silently dropping it", () 
   assert.strictEqual(fr.toFormFields(s, "RESOLUTION").setting_RESOLUTION_PREFERRED,
                      "4k");
 });
+
+test("displayValue names a language code", () => {
+  assert.strictEqual(fr.displayValue("language", "de"), "German (de)");
+  assert.strictEqual(fr.displayValue("language", "en"), "English (en)");
+});
+
+test("displayValue falls back to the bare code for an unmapped language", () => {
+  assert.strictEqual(fr.displayValue("language", "zz"), "zz");
+});
+
+test("displayValue leaves other categories untouched", () => {
+  assert.strictEqual(fr.displayValue("resolution", "2160p"), "2160p");
+  assert.strictEqual(fr.displayValue("source", "webdl"), "webdl");
+  assert.strictEqual(fr.displayValue("language", "multi"), "Multi (multi)");
+});
+
+test("every language code the backend can emit has a name", () => {
+  // Mirrors streams.LANGUAGE_CODES. A code without a name is not an error,
+  // it just displays bare, but the common ones should read properly.
+  const codes = ["ar","bg","cs","da","de","el","en","es","fa","fi","fr","he",
+                 "hi","hr","hu","id","it","ja","ko","lt","multi","nl","no",
+                 "pl","pt","ro","ru","sk","sl","sv","ta","th","tr","uk","zh"];
+  const unnamed = codes.filter(c => fr.displayValue("language", c) === c);
+  assert.deepStrictEqual(unnamed, [], `unnamed language codes: ${unnamed}`);
+});

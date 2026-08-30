@@ -80,8 +80,27 @@ function toFormFields(state, prefix) {
   return fields;
 }
 
+// Only language needs this. Every other vocabulary is already readable.
+const LANGUAGE_NAMES = {
+  ar: "Arabic", bg: "Bulgarian", cs: "Czech", da: "Danish", de: "German",
+  el: "Greek", en: "English", es: "Spanish", fa: "Persian", fi: "Finnish",
+  fr: "French", he: "Hebrew", hi: "Hindi", hr: "Croatian", hu: "Hungarian",
+  id: "Indonesian", is: "Icelandic", it: "Italian", ja: "Japanese", ko: "Korean",
+  lt: "Lithuanian", ms: "Malay", multi: "Multi", nl: "Dutch", no: "Norwegian",
+  pl: "Polish", pt: "Portuguese", ro: "Romanian", ru: "Russian",
+  sk: "Slovak", sl: "Slovenian", sv: "Swedish", ta: "Tamil", th: "Thai",
+  tr: "Turkish", uk: "Ukrainian", vi: "Vietnamese", zh: "Chinese",
+};
+
+function displayValue(category, code) {
+  if (category !== "language") return code;
+  const name = LANGUAGE_NAMES[code];
+  return name ? `${name} (${code})` : code;
+}
+
 const _api = { STATE_NAMES, parseList, serializeList, buildState, assign,
-               reorder, availableFor, invalidValues, isEmpty, toFormFields };
+               reorder, availableFor, invalidValues, isEmpty, toFormFields,
+               displayValue, LANGUAGE_NAMES };
 
 if (typeof module !== "undefined" && module.exports) module.exports = _api;
 if (typeof window !== "undefined") window.FilterRules = _api;
