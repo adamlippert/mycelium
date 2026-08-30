@@ -253,9 +253,15 @@ def _write_nfo(strm_path: Path, imdb_id: str | None, tmdb_id: int | None = None,
     nfo_path = nfo_path or strm_path.with_suffix(".nfo")
     if nfo_path.exists():
         return
-    m = _YEAR_RE.search(strm_path.parent.name)
+    # Derive the title from the folder the NFO itself sits in, not from the
+    # .strm's folder. For a movie they are the same directory, but tvshow.nfo
+    # is written to the SERIES root while the .strm lives one level deeper in
+    # the season folder - so using the .strm's parent titled every series
+    # "Season 01", which is what Jellyfin then displayed as the show name.
+    folder_name = nfo_path.parent.name
+    m = _YEAR_RE.search(folder_name)
     year = int(m.group(1)) if m else None
-    title = _YEAR_RE.sub("", strm_path.parent.name).replace("()", "").strip() if m else strm_path.parent.name
+    title = _YEAR_RE.sub("", folder_name).replace("()", "").strip() if m else folder_name
 
     fileinfo = _fileinfo_xml(quality)
 

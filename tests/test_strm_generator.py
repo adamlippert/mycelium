@@ -398,3 +398,58 @@ class TestWriteStrm:
         assert sg._write_strm(second, "http://dune2") is True
         assert first.exists()
         assert second.exists()
+
+
+# ── tvshow.nfo title (Jellyfin showed "Season 01" for every series) ───────────
+
+def _read_title(nfo_path):
+    import xml.etree.ElementTree as ET
+    return ET.parse(nfo_path).getroot().findtext("title")
+
+
+def test_tvshow_nfo_gets_the_series_name_not_the_season_folder(tmp_path):
+    """_write_nfo derived the title from strm_path.parent.name. For an episode
+    that parent is the SEASON folder, so every tvshow.nfo written from an
+    episode said "Season 01" and Jellyfin displayed that as the show's name.
+    """
+    import strm_generator as sg
+    series = tmp_path / "series" / "Reacher (2022)"
+    season = series / "Season 01"
+    season.mkdir(parents=True)
+    strm = season / "Reacher (2022) S01E01.strm"
+    strm.write_text("http://x")
+
+    sg._write_nfo(strm, "tt9288030", nfo_path=series / "tvshow.nfo", media_type="series")
+
+    assert _read_title(series / "tvshow.nfo") == "Reacher"
+
+
+def test_tvshow_nfo_keeps_a_show_whose_name_starts_with_season(tmp_path):
+    """Guard against 'fixing' this by string-matching the title."""
+    import strm_generator as sg
+    series = tmp_path / "series" / "Seasons of Love (2019)"
+    season = series / "Season 02"
+    season.mkdir(parents=True)
+    strm = season / "Seasons of Love (2019) S02E03.strm"
+    strm.write_text("http://x")
+
+    sg._write_nfo(strm, "tt1234567", nfo_path=series / "tvshow.nfo", media_type="series")
+
+    assert _read_title(series / "tvshow.nfo") == "Seasons of Love"
+
+
+def test_movie_nfo_title_is_unchanged(tmp_path):
+    """The movie path always sat next to its own folder, so it was correct.
+    The fix must not disturb it."""
+    import strm_generator as sg
+    folder = tmp_path / "movies" / "Dune (2021)"
+    folder.mkdir(parents=True)
+    strm = folder / "Dune (2021).strm"
+    strm.write_text("http://x")
+
+    sg._write_nfo(strm, "tt1160419", media_type="movie")
+
+    nfo = folder / "Dune (2021).nfo"
+    assert _read_title(nfo) == "Dune"
+    import xml.etree.ElementTree as ET
+    assert ET.parse(nfo).getroot().findtext("year") == "2021"
