@@ -116,23 +116,30 @@ EXCLUDE_LANGUAGES = [l.strip().lower() for l in _env("EXCLUDE_LANGUAGES", "").sp
 # Values from .env bypass settings.set()'s vocabulary validation, the same as
 # AUDIO_LANGUAGE_PREFERENCE always has; settings.py warns (without raising)
 # about a value not valid for its category, at import time.
-RESOLUTION_PREFERRED = [v.strip().lower() for v in _env("RESOLUTION_PREFERRED", "").split(",") if v.strip()]
+# Five of these carry non-empty defaults so a fresh install with no .env
+# behaves exactly as Mycelium did before the rule model replaced the
+# booleans: cam rips and remuxes excluded, WEB sources and HEVC preferred,
+# Dolby Vision without an HDR10 base layer excluded. The retired settings
+# they replace (EXCLUDE_CAM, EXCLUDE_REMUX, PREFER_WEBDL, PREFER_HEVC,
+# EXCLUDE_DV_P5, QUALITY_PREFERENCE) all defaulted to on, so shipping these
+# empty would silently drop filtering for anyone starting fresh.
+RESOLUTION_PREFERRED = [v.strip().lower() for v in _env("RESOLUTION_PREFERRED", "1080p,2160p,720p").split(",") if v.strip()]
 RESOLUTION_EXCLUDED  = [v.strip().lower() for v in _env("RESOLUTION_EXCLUDED", "").split(",") if v.strip()]
 RESOLUTION_REQUIRED  = [v.strip().lower() for v in _env("RESOLUTION_REQUIRED", "").split(",") if v.strip()]
 RESOLUTION_INCLUDED  = [v.strip().lower() for v in _env("RESOLUTION_INCLUDED", "").split(",") if v.strip()]
 RESOLUTION_STRICT    = _env("RESOLUTION_STRICT", "false").lower() in ("1", "true", "yes")
-SOURCE_PREFERRED = [v.strip().lower() for v in _env("SOURCE_PREFERRED", "").split(",") if v.strip()]
-SOURCE_EXCLUDED  = [v.strip().lower() for v in _env("SOURCE_EXCLUDED", "").split(",") if v.strip()]
+SOURCE_PREFERRED = [v.strip().lower() for v in _env("SOURCE_PREFERRED", "webdl,webrip,web").split(",") if v.strip()]
+SOURCE_EXCLUDED  = [v.strip().lower() for v in _env("SOURCE_EXCLUDED", "remux,cam,ts,tc,scr,r5,ppvrip,workprint").split(",") if v.strip()]
 SOURCE_REQUIRED  = [v.strip().lower() for v in _env("SOURCE_REQUIRED", "").split(",") if v.strip()]
 SOURCE_INCLUDED  = [v.strip().lower() for v in _env("SOURCE_INCLUDED", "").split(",") if v.strip()]
 SOURCE_STRICT    = _env("SOURCE_STRICT", "false").lower() in ("1", "true", "yes")
-ENCODE_PREFERRED = [v.strip().lower() for v in _env("ENCODE_PREFERRED", "").split(",") if v.strip()]
+ENCODE_PREFERRED = [v.strip().lower() for v in _env("ENCODE_PREFERRED", "hevc").split(",") if v.strip()]
 ENCODE_EXCLUDED  = [v.strip().lower() for v in _env("ENCODE_EXCLUDED", "").split(",") if v.strip()]
 ENCODE_REQUIRED  = [v.strip().lower() for v in _env("ENCODE_REQUIRED", "").split(",") if v.strip()]
 ENCODE_INCLUDED  = [v.strip().lower() for v in _env("ENCODE_INCLUDED", "").split(",") if v.strip()]
 ENCODE_STRICT    = _env("ENCODE_STRICT", "false").lower() in ("1", "true", "yes")
 VISUAL_TAG_PREFERRED = [v.strip().lower() for v in _env("VISUAL_TAG_PREFERRED", "").split(",") if v.strip()]
-VISUAL_TAG_EXCLUDED  = [v.strip().lower() for v in _env("VISUAL_TAG_EXCLUDED", "").split(",") if v.strip()]
+VISUAL_TAG_EXCLUDED  = [v.strip().lower() for v in _env("VISUAL_TAG_EXCLUDED", "dv_only").split(",") if v.strip()]
 VISUAL_TAG_REQUIRED  = [v.strip().lower() for v in _env("VISUAL_TAG_REQUIRED", "").split(",") if v.strip()]
 VISUAL_TAG_INCLUDED  = [v.strip().lower() for v in _env("VISUAL_TAG_INCLUDED", "").split(",") if v.strip()]
 VISUAL_TAG_STRICT    = _env("VISUAL_TAG_STRICT", "false").lower() in ("1", "true", "yes")

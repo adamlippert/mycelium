@@ -69,3 +69,34 @@ def test_the_save_endpoint_still_reads_the_setting_prefix():
         "the save endpoint no longer filters on the setting_ prefix; the "
         "rules editor writes hidden inputs with that prefix and would "
         "silently stop saving")
+
+
+def test_a_fresh_install_still_filters_without_any_env_or_database():
+    """The retired booleans all defaulted to ON: EXCLUDE_CAM, EXCLUDE_REMUX,
+    EXCLUDE_DV_P5, PREFER_WEBDL, PREFER_HEVC and QUALITY_PREFERENCE. If the
+    rule keys that replaced them shipped empty, a brand new install with no
+    .env and no database would silently accept cam rips, telesyncs and Dolby
+    Vision releases with no HDR10 base layer.
+
+    This pins the code defaults, not .env.example. A user who deletes their
+    .env should still get Mycelium's historical behaviour.
+    """
+    import config
+
+    assert "cam" in config.SOURCE_EXCLUDED
+    assert "remux" in config.SOURCE_EXCLUDED
+    assert "workprint" in config.SOURCE_EXCLUDED
+    assert "webdl" in config.SOURCE_PREFERRED
+    assert "hevc" in config.ENCODE_PREFERRED
+    assert "dv_only" in config.VISUAL_TAG_EXCLUDED
+    assert config.RESOLUTION_PREFERRED == ["1080p", "2160p", "720p"]
+
+
+def test_bluray_is_not_excluded_by_default():
+    """EXCLUDE_BLURAY defaulted to false, and the retiring regexes overlapped
+    so that excluding BluRay silently dropped remuxes too. Neither behaviour
+    should be reintroduced through a default."""
+    import config
+
+    assert "bluray" not in config.SOURCE_EXCLUDED
+    assert "bdrip" not in config.SOURCE_EXCLUDED
