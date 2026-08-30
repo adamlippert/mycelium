@@ -71,9 +71,15 @@ def test_detect_visual_tags(text, expected):
     assert set(rt.detect_visual_tags(text)) == expected
 
 
-def test_hdr10_plus_is_not_an_hdr10_fallback():
-    """HDR10+ does not give a DV-only release a safe base layer, so it must not
-    satisfy the hdr10 tag."""
-    tags = rt.detect_visual_tags("Movie.2160p.DV.HDR10Plus.WEB-DL")
+@pytest.mark.parametrize("text", [
+    "Movie.2160p.DV.HDR10+.WEB-DL",
+    "Movie.2160p.DV.HDR10Plus.WEB-DL",
+])
+def test_hdr10_plus_is_not_an_hdr10_fallback(text):
+    """Both HDR10+ and HDR10Plus must fail to satisfy the hdr10 tag when DV has
+    no HDR10 base layer. The '+' spelling exercises the lookahead (word boundary
+    between '0' and '+'); the 'Plus' spelling is already rejected by the trailing
+    \\b word boundary in the hdr10 pattern itself."""
+    tags = rt.detect_visual_tags(text)
     assert "hdr10" not in tags
     assert "dv_only" in tags
