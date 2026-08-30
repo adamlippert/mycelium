@@ -150,15 +150,41 @@ CATEGORIES = (
     "audio_tag", "audio_channels", "language",
 )
 
-VALUES_BY_CATEGORY: dict[str, tuple[str, ...]] = {
+def _language_values() -> tuple[str, ...]:
+    from streams import LANGUAGE_CODES
+    return tuple(LANGUAGE_CODES) + (UNKNOWN,)
+
+
+class _CategoryValues(dict):
+    """dict whose 'language' entry resolves lazily on first access.
+
+    Plain indexing (VALUES_BY_CATEGORY["language"]) behaves exactly like
+    calling language_values() directly, without importing streams until
+    something actually asks for the language vocabulary. That keeps the
+    streams import out of this module's top level, which is what avoids the
+    settings -> release_tags -> streams cycle while streams is mid-import.
+    """
+
+    def __getitem__(self, key):
+        if key == "language" and not dict.__getitem__(self, key):
+            dict.__setitem__(self, key, _language_values())
+        return dict.__getitem__(self, key)
+
+
+VALUES_BY_CATEGORY: dict[str, tuple[str, ...]] = _CategoryValues({
     "resolution": RESOLUTION_VALUES,
     "source": SOURCE_VALUES,
     "encode": ENCODE_VALUES,
     "visual_tag": VISUAL_TAG_VALUES,
     "audio_tag": AUDIO_TAG_VALUES,
     "audio_channels": AUDIO_CHANNELS_VALUES,
-    "language": (),   # filled by Task 4 from streams.LANGUAGE_CODES
-}
+    "language": (),   # resolved lazily on first access, see _CategoryValues
+})
+
+
+def language_values() -> tuple[str, ...]:
+    """Resolved lazily because streams imports release_tags indirectly."""
+    return VALUES_BY_CATEGORY["language"]
 
 
 def detect_audio_tags(text: str) -> tuple[str, ...]:

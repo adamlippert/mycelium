@@ -12,6 +12,7 @@ import logging
 
 import config as _config
 import db
+import release_tags as _rt
 import streams as _streams
 
 log = logging.getLogger(__name__)
@@ -49,6 +50,29 @@ _LIST_KEYS = {
     "EXCLUDE_LANGUAGES",
     "OPENSUBTITLES_LANGUAGES",
 }
+_RULE_PREFIX_BY_CATEGORY = {
+    "resolution": "RESOLUTION",
+    "source": "SOURCE",
+    "encode": "ENCODE",
+    "visual_tag": "VISUAL_TAG",
+    "audio_tag": "AUDIO_TAG",
+    "audio_channels": "AUDIO_CHANNELS",
+    "language": "LANGUAGE",
+}
+_RULE_STATES = ("PREFERRED", "EXCLUDED", "REQUIRED", "INCLUDED")
+
+# key -> category, used by set() to validate each value against that
+# category's vocabulary, the same way _LANGUAGE_LIST_KEYS works.
+_RULE_LIST_KEYS: dict[str, str] = {
+    f"{prefix}_{state}": category
+    for category, prefix in _RULE_PREFIX_BY_CATEGORY.items()
+    for state in _RULE_STATES
+}
+_RULE_STRICT_KEYS = {f"{p}_STRICT" for p in _RULE_PREFIX_BY_CATEGORY.values()}
+
+_LIST_KEYS |= set(_RULE_LIST_KEYS)
+_BOOL_KEYS |= _RULE_STRICT_KEYS
+
 # List keys whose values must each be a code detect_languages() can actually
 # produce (streams.LANGUAGE_CODES). Checked in set() below, the same way
 # _ENUM_KEYS is checked, so a typo like AUDIO_LANGUAGE_PREFERENCE=english
@@ -217,6 +241,11 @@ SETTING_GROUPS = [
         ],
     },
     {
+        "id": "filter_rules",
+        "title": "Filtering rules",
+        "keys": [k for k in _RULE_LIST_KEYS] + sorted(_RULE_STRICT_KEYS),
+    },
+    {
         "id": "languages",
         "title": "Languages & subtitles",
         "keys": ["AUDIO_LANGUAGE_PREFERENCE", "EXCLUDE_LANGUAGES", "OPENSUBTITLES_LANGUAGES",
@@ -340,6 +369,20 @@ def set(key: str, value) -> None:
                 f"{key} has unknown language code(s) {unknown}; valid codes "
                 f"are {', '.join(_streams.LANGUAGE_CODES)}"
             )
+    if key in _RULE_LIST_KEYS:
+        category = _RULE_LIST_KEYS[key]
+        vocabulary = (_rt.language_values() if category == "language"
+                      else _rt.VALUES_BY_CATEGORY[category])
+        values = [v.strip().lower() for v in
+                  (value if isinstance(value, list) else str(value).split(","))
+                  if str(v).strip()]
+        unknown = [v for v in values if v not in vocabulary]
+        if unknown:
+            raise ValueError(
+                f"{key} has value(s) not valid for {category}: {unknown}. "
+                f"Valid values are {list(vocabulary)}"
+            )
+        value = values
     if isinstance(value, bool):
         stored = "true" if value else "false"
     elif isinstance(value, (list, tuple)):
