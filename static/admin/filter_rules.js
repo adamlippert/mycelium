@@ -98,9 +98,129 @@ function displayValue(category, code) {
   return name ? `${name} (${code})` : code;
 }
 
+const STATE_LABELS = {
+  preferred: "Preferred", excluded: "Excluded",
+  required: "Required", included: "Included",
+};
+
+function _chip(state, stateName, value, isInvalid) {
+  const chip = document.createElement("span");
+  chip.className = "fr-chip" + (isInvalid ? " fr-chip-invalid" : "");
+  chip.dataset.value = value;
+  chip.dataset.state = stateName;
+  chip.textContent = displayValue(state.category, value);
+  if (isInvalid) {
+    chip.title = `${value} is not a valid ${state.category} value. It was ` +
+                 `probably set in .env before the vocabulary changed. ` +
+                 `It matches nothing. Remove it.`;
+  }
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "fr-chip-remove";
+  x.textContent = "x";
+  x.dataset.action = "remove";
+  chip.appendChild(x);
+  return chip;
+}
+
+function renderPanel(state, prefix) {
+  const invalid = new Set(invalidValues(state));
+  const panel = document.createElement("div");
+  panel.className = "fr-panel";
+  panel.dataset.category = state.category;
+  panel.dataset.prefix = prefix;
+
+  const head = document.createElement("div");
+  head.className = "fr-panel-head";
+  head.innerHTML =
+    `<strong>${state.category.replace("_", " ").toUpperCase()}</strong>` +
+    `<span class="dim fr-count">${state.options.length} values</span>`;
+  const strict = document.createElement("label");
+  strict.className = "fr-strict";
+  strict.innerHTML =
+    `<input type="checkbox" data-action="strict"${state.strict ? " checked" : ""}> strict`;
+  strict.title = "Hold this category's rules even when that leaves no " +
+                 "candidates at all. Off means the rules relax rather than " +
+                 "return nothing.";
+  head.appendChild(strict);
+  panel.appendChild(head);
+
+  STATE_NAMES.forEach(name => {
+    const row = document.createElement("div");
+    row.className = "fr-row";
+    row.dataset.state = name;
+
+    const label = document.createElement("span");
+    label.className = "fr-row-label";
+    label.textContent = STATE_LABELS[name];
+    row.appendChild(label);
+
+    const chips = document.createElement("span");
+    chips.className = "fr-chips";
+    const values = state.states[name];
+    if (values.length === 0) {
+      const none = document.createElement("span");
+      none.className = "dim";
+      none.textContent = "(none)";
+      chips.appendChild(none);
+    } else {
+      values.forEach(v => chips.appendChild(_chip(state, name, v, invalid.has(v))));
+    }
+    row.appendChild(chips);
+
+    const add = document.createElement("select");
+    add.className = "fr-add";
+    add.dataset.action = "add";
+    add.innerHTML = `<option value="">+ add</option>` +
+      availableFor(state).map(v =>
+        `<option value="${v}">${displayValue(state.category, v)}</option>`).join("");
+    row.appendChild(add);
+
+    // Order is load-bearing only for preferred. Offering reorder on a
+    // membership test would imply a semantics that does not exist.
+    if (name === "preferred") {
+      const up = document.createElement("button");
+      up.type = "button"; up.textContent = "up";
+      up.className = "fr-move"; up.dataset.action = "up";
+      const down = document.createElement("button");
+      down.type = "button"; down.textContent = "down";
+      down.className = "fr-move"; down.dataset.action = "down";
+      row.appendChild(up); row.appendChild(down);
+    }
+
+    if (name === "included") {
+      const warn = document.createElement("span");
+      warn.className = "fr-warn";
+      warn.textContent = "! overrides every other rule";
+      warn.title = "An included value keeps a release no matter what any " +
+                   "other rule says, in any category. Marking atmos as " +
+                   "included will keep a cam rip that happens to carry Atmos.";
+      row.appendChild(warn);
+    }
+
+    panel.appendChild(row);
+  });
+
+  return panel;
+}
+
+function renderCollapsed(state, prefix) {
+  const row = document.createElement("div");
+  row.className = "fr-collapsed";
+  row.dataset.category = state.category;
+  row.dataset.prefix = prefix;
+  row.innerHTML =
+    `<button type="button" data-action="expand" class="fr-expand">&gt;</button>` +
+    `<strong>${state.category.replace("_", " ").toUpperCase()}</strong>` +
+    `<span class="dim">no rules set</span>` +
+    `<span class="dim fr-count">${state.options.length} values</span>`;
+  return row;
+}
+
 const _api = { STATE_NAMES, parseList, serializeList, buildState, assign,
                reorder, availableFor, invalidValues, isEmpty, toFormFields,
-               displayValue, LANGUAGE_NAMES };
+               displayValue, LANGUAGE_NAMES, STATE_LABELS, renderPanel,
+               renderCollapsed };
 
 if (typeof module !== "undefined" && module.exports) module.exports = _api;
 if (typeof window !== "undefined") window.FilterRules = _api;
