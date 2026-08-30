@@ -22,6 +22,10 @@ log = logging.getLogger(__name__)
 # from here; keep it working.
 TorrentioStream = Stream
 
+# Categories this scraper can populate. Torrentio parses every category from
+# the release name, including language via detect_languages.
+CAPABILITIES = ("resolution", "source", "encode", "visual_tag", "audio_tag", "audio_channels", "language")
+
 _HTTP_HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",

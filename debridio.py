@@ -27,6 +27,10 @@ log = logging.getLogger(__name__)
 # falls through to Torrentio/Zilean instead of retrying a dead addon forever.
 DOWN_STATUS_CODES = (401, 403, 404)
 
+# Categories this scraper can populate. Debridio parses every category from
+# the release name, including language via detect_languages.
+CAPABILITIES = ("resolution", "source", "encode", "visual_tag", "audio_tag", "audio_channels", "language")
+
 _RESOLUTIONS = ["8k", "4k", "1440p", "1080p", "720p", "480p", "360p", "unknown"]
 _HEX40_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 _B64_SEGMENT_RE = re.compile(r"/(?:ey[A-Za-z0-9+/=_-]{16,})")

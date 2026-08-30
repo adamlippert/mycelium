@@ -157,3 +157,48 @@ def evaluate(tagged: list[dict], rules: dict) -> list[Verdict]:
             was_relaxed = any(i in votes[c] for c in relaxed_categories)
             verdicts.append(Verdict(kept=True, relaxed=was_relaxed))
     return verdicts
+
+
+def warn_unsupported_requirements(rules: dict, sources: list[str]) -> list[str]:
+    """Warn if a required rule names a category no source can provide.
+
+    A required rule is inert (safe, but useless) for a source that cannot
+    populate that category - it will always match UNKNOWN and never drop
+    anything. This function identifies those cases and returns a message for
+    each one, guiding the user to remove a rule that has no effect.
+
+    Gracefully handles unknown source names (returns empty list, does not raise).
+    """
+    messages = []
+
+    # Map each source name to its CAPABILITIES.
+    capabilities_by_source = {}
+    for source in sources:
+        try:
+            # Import the module for this source dynamically.
+            module = __import__(source)
+            capabilities_by_source[source] = tuple(getattr(module, "CAPABILITIES", rt.CATEGORIES))
+        except ImportError:
+            # Unknown source name; silently skip it.
+            pass
+
+    # For each category with required values, check which sources support it.
+    for category in rt.CATEGORIES:
+        required = rules.get(category, {}).get("required") or []
+        if not required:
+            continue
+
+        # Find sources that cannot populate this category.
+        unsupported_sources = [s for s in sources
+                               if s in capabilities_by_source
+                               and category not in capabilities_by_source[s]]
+        if unsupported_sources:
+            # Build a message naming the category, the rule, and the sources.
+            category_prefix = _PREFIX_BY_CATEGORY[category]
+            source_list = ", ".join(sorted(unsupported_sources))
+            messages.append(
+                f"{category_prefix}_REQUIRED={required} will have no effect on {source_list}: "
+                f"that source cannot populate {category}"
+            )
+
+    return messages

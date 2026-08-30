@@ -350,15 +350,9 @@ def rank_streams_explained(
     rules = filter_rules.load_rules()
     rules = _apply_show_override(rules, override)
 
-    # filter_rules.warn_unsupported_requirements ships in a later task in this
-    # series and is not present on this branch yet; call it once it lands.
-    # Guarded so this function activates the warning automatically the moment
-    # that function exists, with no further change here.
-    warn_unsupported_requirements = getattr(filter_rules, "warn_unsupported_requirements", None)
-    if warn_unsupported_requirements is not None:
-        for message in warn_unsupported_requirements(
-                rules, sorted({s.source for s in streams})):
-            log.warning("%s", message)
+    for message in filter_rules.warn_unsupported_requirements(
+            rules, sorted({s.source for s in streams})):
+        log.warning("%s", message)
 
     tagged = [release_tags.detect_all(f"{s.name} {s.title}", s.languages)
               for s in streams]

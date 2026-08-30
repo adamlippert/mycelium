@@ -18,6 +18,10 @@ log = logging.getLogger(__name__)
 # Keep it; it is not unused by oversight.
 LANGUAGES_AVAILABLE = False
 
+# Categories this scraper can populate. Zilean does not provide language data,
+# only the six categories that come from release name parsing.
+CAPABILITIES = ("resolution", "source", "encode", "visual_tag", "audio_tag", "audio_channels")
+
 _BYTES_PER_GB = 1024 ** 3
 
 # Maps Zilean quality field to the token that rank_streams() regex filters recognise.
