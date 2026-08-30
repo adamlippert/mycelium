@@ -217,10 +217,121 @@ function renderCollapsed(state, prefix) {
   return row;
 }
 
+function syncHiddenInputs(state, prefix, form) {
+  // Rewrites every field for this category from one state object. Mutating
+  // fields individually is how a chip view and its hidden inputs drift apart.
+  const fields = toFormFields(state, prefix);
+  Object.keys(fields).forEach(name => {
+    const input = form.querySelector(`[name="${name}"]`);
+    if (input) input.value = fields[name];
+  });
+}
+
+function initFilterRules(group, container) {
+  const form = document.getElementById("settings-form");
+  const byPrefix = {};
+
+  // all_for_ui sends 35 flat keys. Fold them into seven category states.
+  group.items.forEach(item => {
+    const m = item.key.match(/^(.*)_(PREFERRED|EXCLUDED|REQUIRED|INCLUDED|STRICT)$/);
+    if (!m) return;
+    const [, prefix, suffix] = m;
+    byPrefix[prefix] = byPrefix[prefix] || { current: {}, options: [], strict: false };
+    if (suffix === "STRICT") {
+      byPrefix[prefix].strict = Boolean(item.value);
+    } else {
+      byPrefix[prefix].current[suffix.toLowerCase()] =
+        Array.isArray(item.value) ? item.value.join(",") : item.value;
+      if (item.options && item.options.length) byPrefix[prefix].options = item.options;
+    }
+  });
+
+  const states = {};
+  Object.keys(byPrefix).forEach(prefix => {
+    const raw = byPrefix[prefix];
+    states[prefix] = buildState(prefix.toLowerCase(), raw.options, raw.current, raw.strict);
+  });
+
+  function hidden(name, value) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    return input;
+  }
+
+  function draw() {
+    container.innerHTML = "";
+    Object.keys(states).forEach(prefix => {
+      const state = states[prefix];
+      const expanded = container.dataset[`open_${prefix}`] === "1" || !isEmpty(state);
+      const node = expanded ? renderPanel(state, prefix) : renderCollapsed(state, prefix);
+      container.appendChild(node);
+      // The hidden inputs live outside the redrawn node so a redraw cannot
+      // destroy them mid-edit.
+      Object.entries(toFormFields(state, prefix)).forEach(([name, value]) => {
+        let input = form.querySelector(`[name="${name}"]`);
+        if (!input) { input = hidden(name, value); form.appendChild(input); }
+        else { input.value = value; }
+      });
+    });
+  }
+
+  container.addEventListener("click", ev => {
+    const action = ev.target.dataset && ev.target.dataset.action;
+    if (!action) return;
+    const holder = ev.target.closest("[data-prefix]");
+    if (!holder) return;
+    const prefix = holder.dataset.prefix;
+    const row = ev.target.closest("[data-state]");
+
+    if (action === "expand") {
+      container.dataset[`open_${prefix}`] = "1";
+    } else if (action === "remove") {
+      const chip = ev.target.closest(".fr-chip");
+      states[prefix] = assign(states[prefix], chip.dataset.value, null);
+    } else if (action === "up" || action === "down") {
+      const chips = row.querySelectorAll(".fr-chip");
+      const last = chips.length ? chips[chips.length - 1].dataset.value : null;
+      if (last) {
+        states[prefix] = reorder(states[prefix], "preferred", last,
+                                 action === "up" ? -1 : 1);
+      }
+    } else {
+      return;
+    }
+    syncHiddenInputs(states[prefix], prefix, form);
+    draw();
+    form.dispatchEvent(new Event("input"));
+  });
+
+  container.addEventListener("change", ev => {
+    const action = ev.target.dataset && ev.target.dataset.action;
+    if (!action) return;
+    const holder = ev.target.closest("[data-prefix]");
+    if (!holder) return;
+    const prefix = holder.dataset.prefix;
+
+    if (action === "add" && ev.target.value) {
+      const row = ev.target.closest("[data-state]");
+      states[prefix] = assign(states[prefix], ev.target.value, row.dataset.state);
+    } else if (action === "strict") {
+      states[prefix] = { ...states[prefix], strict: ev.target.checked };
+    } else {
+      return;
+    }
+    syncHiddenInputs(states[prefix], prefix, form);
+    draw();
+    form.dispatchEvent(new Event("input"));
+  });
+
+  draw();
+}
+
 const _api = { STATE_NAMES, parseList, serializeList, buildState, assign,
                reorder, availableFor, invalidValues, isEmpty, toFormFields,
                displayValue, LANGUAGE_NAMES, STATE_LABELS, renderPanel,
-               renderCollapsed };
+               renderCollapsed, syncHiddenInputs, initFilterRules };
 
 if (typeof module !== "undefined" && module.exports) module.exports = _api;
 if (typeof window !== "undefined") window.FilterRules = _api;

@@ -149,3 +149,43 @@ test("every language code the backend can emit has a name", () => {
   const unnamed = codes.filter(c => fr.displayValue("language", c) === c);
   assert.deepStrictEqual(unnamed, [], `unnamed language codes: ${unnamed}`);
 });
+
+test("syncHiddenInputs writes every field for the category from one state", () => {
+  // A minimal form stub. This is the seam between the tested pure half and
+  // the untested DOM half, so it is worth pinning even without a real DOM.
+  const written = {};
+  const form = {
+    querySelector(sel) {
+      const name = sel.match(/name="([^"]+)"/)[1];
+      return { set value(v) { written[name] = v; }, get value() { return written[name]; } };
+    },
+  };
+  let s = fr.assign(state(), "2160p", "preferred");
+  s = fr.assign(s, "1080p", "preferred");
+  s = fr.assign(s, "480p", "excluded");
+  fr.syncHiddenInputs(s, "RESOLUTION", form);
+
+  assert.strictEqual(written.setting_RESOLUTION_PREFERRED, "2160p,1080p");
+  assert.strictEqual(written.setting_RESOLUTION_EXCLUDED, "480p");
+  assert.strictEqual(written.setting_RESOLUTION_REQUIRED, "");
+  assert.strictEqual(written.setting_RESOLUTION_INCLUDED, "");
+  assert.strictEqual(written.setting_RESOLUTION_STRICT, "false");
+});
+
+test("syncHiddenInputs clears a state that has been emptied", () => {
+  const written = {};
+  const form = {
+    querySelector(sel) {
+      const name = sel.match(/name="([^"]+)"/)[1];
+      return { set value(v) { written[name] = v; }, get value() { return written[name]; } };
+    },
+  };
+  let s = fr.assign(state(), "1080p", "preferred");
+  fr.syncHiddenInputs(s, "RESOLUTION", form);
+  assert.strictEqual(written.setting_RESOLUTION_PREFERRED, "1080p");
+
+  s = fr.assign(s, "1080p", null);
+  fr.syncHiddenInputs(s, "RESOLUTION", form);
+  assert.strictEqual(written.setting_RESOLUTION_PREFERRED, "",
+    "an emptied state must clear its field, not leave the old value behind");
+});
