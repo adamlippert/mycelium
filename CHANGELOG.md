@@ -2,6 +2,12 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.8.4] - 2026-08-31
+
+### Fixed
+
+- **The TorBox Usage card works again.** An audit of what the redesign left behind found this was the one live card of the old dashboard that had not been rebuilt: the new Overview's TorBox tile carries only item count and total size, while the old card also showed the plan and a per-download-state breakdown. The old card had in fact stopped working before the redesign began - only its "Loading..." placeholder survived in the template, its filler script having been lost at some point - so `/ui/api/torbox-usage` has been serving a card nobody could read. The React Overview now renders it properly.
+
 ## [0.8.3] - 2026-08-31
 
 ### Fixed

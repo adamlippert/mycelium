@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.8.4",
+    "date": "2026-08-31",
+    "notes": [
+      "The admin Overview has a working TorBox Usage card again: torrent count, total size, your plan, and a breakdown by download state"
+    ]
+  },
+  {
     "version": "0.8.3",
     "date": "2026-08-31",
     "notes": [
