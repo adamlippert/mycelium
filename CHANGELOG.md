@@ -6,6 +6,7 @@ All notable changes to Mycelium are documented in this file.
 
 ### Added
 
+- **`scripts/loadtest-streams.sh`**: a dependency-free concurrent-stream load test. Opens N rate-limited streams against one warm token and measures `/health` latency while they run, which is the number that actually matters: whether the rest of the app stays responsive under streaming load. Includes a before/after recipe against `STREAM_FRONT_ENABLED=false`.
 - **Playability panel in admin Maintenance**, closing two long-standing open points: the playability-state table (items that failed to materialize 3+ times in a row, with failure counts, reasons and last-known-good provider) and a per-item Re-resolve button - previously only reachable with curl against `/ui/api/virtual-items/<token>/re-resolve`.
 
 ### Removed
