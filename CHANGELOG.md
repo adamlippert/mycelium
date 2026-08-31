@@ -2,7 +2,7 @@
 
 All notable changes to Mycelium are documented in this file.
 
-## [Unreleased]
+## [0.8.6] - 2026-08-31
 
 ### Changed
 
@@ -11,11 +11,6 @@ All notable changes to Mycelium are documented in this file.
 - **Wanted-episode reconciliation is batched and debounced.** The connection runs in autocommit mode, so its per-episode UPDATE loop took the writer lock once per episode inside a GET handler; the loop now runs inside one transaction. Both reconcile functions also run at most once per minute no matter how many users are loading the Library, since they are repair work rather than something a page load needs freshly computed.
 - **The series-episodes endpoint caches its response for 30 seconds** instead of walking every show and season folder on disk for every viewer, and a purge invalidates the cache immediately so removed titles do not linger.
 - **The strm repair job scales linearly.** Pass 2 checked each `.strm` file's token with its own SELECT; it now checks against one snapshot query, falling back to the database on a miss so tokens created mid-run are not misread as orphaned. Pass 1 re-listed the entire library root for every folder that had lost its `.strm`, which went quadratic when a batch broke at once; it now consults a sibling map built in a single pass.
-
-## [Unreleased]
-
-### Changed
-
 - **The serving thread pool grows from 16 to 64** (overridable with `GUNICORN_THREADS`). Every proxied stream holds its thread for the whole transfer, so the thread count is the hard ceiling on simultaneous open streams; 16 was the ceiling on everything, health checks included. Workers stay pinned at 1, and the reasons (single-flight locks, the scan-burst detector, the login rate limiter's in-memory counters) are now documented at the gunicorn line so a future "add workers" change trips over them.
 - **The TorBox createtorrent budget is enforced through the database.** The 60/hour guard lived in a per-process deque; the check-and-reserve now happens in one immediate SQLite transaction, so the budget holds across threads and across processes, and adding workers can never multiply the local guard into N independent counters discovering TorBox's real limit the hard way.
 - **The TorBox library-list cache refreshes single-flight.** At TTL expiry every concurrent caller used to independently run the up-to-20-page fetch; now one caller pays it while the rest wait for the result or briefly serve the stale copy.
