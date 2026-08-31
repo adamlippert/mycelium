@@ -1,5 +1,12 @@
 name: Release
 
+# The run's title in the Actions list. Without this GitHub uses the commit
+# subject on a tag push and the bare workflow name on a dispatch, so the same
+# release shows up under three different labels depending on how it was
+# started. inputs.version is empty for a tag push, which falls through to the
+# tag itself; both spellings end up as "Release v1.2.3".
+run-name: Release ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
+
 on:
   push:
     tags: ["v*"]
