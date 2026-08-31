@@ -144,13 +144,13 @@ buttons above move to Scrapers.
 
 ## Settings
 
-- [ ] Settings: dynamic settings-group renderer (per-key text/number/checkbox/select/list inputs; hot-reload lightning-bolt vs restart-required warning badge; override-active badge; secret-field masking with "already set - type to replace") -> `refreshSettings()` / `GET /ui/api/settings`, `POST /ui/settings` -> planned home: Settings
-- [ ] Settings: Deployment Mode toggle (Full vs Lite radio tiles, restart required) -> inline in `refreshSettings()` -> planned home: Settings
-- [ ] Settings: restart-required banner (dirty-diff against initial values of restart-required keys) -> `settings-form` `input` listener -> planned home: Settings
-- [ ] Settings: Save all button + "empty a field clears the override" hint -> `POST /ui/settings` -> planned home: Settings
-- [ ] Settings: Re-run setup wizard link -> `GET /setup?rerun=1` -> planned home: Settings
-- [ ] Settings: Auto-add now button -> `autoAddNow()` / `POST /ui/api/auto-add-now` -> planned home: Settings
-- [ ] Settings: Discover genre tabs editor (Admin.tsx `DiscoverGenreTabsPanel`: add/edit/remove tab rows, save) -> `api.genreTabsConfig` / `setGenreTabsConfig` -> planned home: Settings (explicit in map)
+- [x] Settings: dynamic settings-group renderer (per-key text/number/checkbox/select/list inputs; hot-reload lightning-bolt vs restart-required warning badge; override-active badge; secret-field masking with "already set - type to replace") -> `refreshSettings()` / `GET /ui/api/settings`, `POST /ui/settings` -> planned home: Settings (Task 11: `frontend/src/pages/admin/Settings.tsx`; "everything else" kinds (str/int/float) share one text input per the brief rather than a separate number input, so int fields lose the browser spinner control - value/validation are unaffected)
+- [x] Settings: Deployment Mode toggle (Full vs Lite radio tiles, restart required) -> inline in `refreshSettings()` -> planned home: Settings (Task 11)
+- [x] Settings: restart-required banner (dirty-diff against initial values of restart-required keys) -> `settings-form` `input` listener -> planned home: Settings (Task 11)
+- [x] Settings: Save all button + "empty a field clears the override" hint -> `POST /ui/settings` -> planned home: Settings (Task 11)
+- [x] Settings: Re-run setup wizard link -> `GET /setup?rerun=1` -> planned home: Settings (Task 11)
+- [x] Settings: Auto-add now button -> `autoAddNow()` / `POST /ui/api/auto-add-now` -> planned home: Settings (Task 11)
+- [x] Settings: Discover genre tabs editor (Admin.tsx `DiscoverGenreTabsPanel`: add/edit/remove tab rows, save) -> `api.genreTabsConfig` / `setGenreTabsConfig` -> planned home: Settings (explicit in map) (Task 11: ported verbatim in behaviour, restyled onto `Card`, `GenreRuleRows` duplicated locally same as the Requests tab's own copy)
 
 Notification-channel settings (`api.setNotificationSettings`, `POST /ui/api/settings/notifications`)
 are already wired in `frontend/src/pages/Settings.tsx`, a page outside this
