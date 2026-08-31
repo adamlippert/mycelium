@@ -450,6 +450,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(values),
     }),
+  // The Jinja settings form itself: POSTs setting_<KEY> fields form-encoded
+  // and redirects back to the dashboard rather than returning JSON, same
+  // shape as the maintenance routes above, so this goes through formPost.
+  saveSettings: (fields: Record<string, string>) => formPost('/ui/settings', fields),
 
   // Application shell (nav counts + TorBox pill)
   shellSummary: () => http<ShellSummary>('/ui/api/shell-summary'),
@@ -569,7 +573,8 @@ export interface BlacklistItem {
 export interface SettingItem {
   key: string;
   value: any;
-  kind: 'bool' | 'list' | 'int' | 'float' | 'str';
+  kind: 'bool' | 'list' | 'int' | 'float' | 'str' | 'enum';
+  options?: string[] | null;
   overridden: boolean;
   hot_reload: boolean;
 }

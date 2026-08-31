@@ -79,13 +79,13 @@ A control the map does not name gets the best-fitting tab plus a
 
 ## Filter rules
 
-- [ ] Filter rules: RESOLUTION category editor (strict toggle, add-to-state select, remove chip, reorder within Preferred, expand/collapse, "+N more" overflow) -> `static/admin/filter_rules.js` `initFilterRules()` -> planned home: Filter rules
-- [ ] Filter rules: SOURCE category editor (same control set) -> `filter_rules.js` -> planned home: Filter rules
-- [ ] Filter rules: ENCODE category editor (same control set) -> `filter_rules.js` -> planned home: Filter rules
-- [ ] Filter rules: VISUAL_TAG category editor (same control set) -> `filter_rules.js` -> planned home: Filter rules
-- [ ] Filter rules: AUDIO_TAG category editor (same control set) -> `filter_rules.js` -> planned home: Filter rules
-- [ ] Filter rules: AUDIO_CHANNELS category editor (same control set) -> `filter_rules.js` -> planned home: Filter rules
-- [ ] Filter rules: LANGUAGE category editor (same control set, plus a code-to-language-name display map) -> `filter_rules.js` -> planned home: Filter rules
+- [x] Filter rules: RESOLUTION category editor (strict toggle, add-to-state select, remove chip, reorder within Preferred, expand/collapse, "+N more" overflow) -> `static/admin/filter_rules.js` `initFilterRules()` -> planned home: Filter rules (Task 10: ported via `frontend/src/pages/admin/filterRulesModel.ts` + `FilterRules.tsx`; the whole-category expand/collapse for an empty category is dropped - all seven panels always render open - but the per-row "+N more" chip overflow (`visibleChips`) is ported and proven equivalent to the original by test)
+- [x] Filter rules: SOURCE category editor (same control set) -> `filter_rules.js` -> planned home: Filter rules (Task 10)
+- [x] Filter rules: ENCODE category editor (same control set) -> `filter_rules.js` -> planned home: Filter rules (Task 10)
+- [x] Filter rules: VISUAL_TAG category editor (same control set) -> `filter_rules.js` -> planned home: Filter rules (Task 10)
+- [x] Filter rules: AUDIO_TAG category editor (same control set) -> `filter_rules.js` -> planned home: Filter rules (Task 10)
+- [x] Filter rules: AUDIO_CHANNELS category editor (same control set) -> `filter_rules.js` -> planned home: Filter rules (Task 10)
+- [x] Filter rules: LANGUAGE category editor (same control set, plus a code-to-language-name display map) -> `filter_rules.js` -> planned home: Filter rules (Task 10)
 
 All seven write into the same `settings-form` as hidden `setting_<CATEGORY>_<STATE>`
 fields and are saved together by the Settings tab's "Save all" (`POST /ui/settings`).

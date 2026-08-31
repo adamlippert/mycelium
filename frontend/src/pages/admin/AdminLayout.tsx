@@ -7,6 +7,7 @@ import Maintenance from './Maintenance';
 import Blacklist from './Blacklist';
 import Scrapers from './Scrapers';
 import Logs from './Logs';
+import FilterRules from './FilterRules';
 
 function Stub() {
   return <p className="text-muted text-sm">Coming in this plan.</p>;
@@ -16,7 +17,7 @@ export const ADMIN_TABS: { id: string; label: string; component: ComponentType }
   { id: 'overview', label: 'Overview', component: Overview },
   { id: 'users', label: 'Users', component: Users },
   { id: 'requests', label: 'Requests', component: Requests },
-  { id: 'filter-rules', label: 'Filter rules', component: Stub },
+  { id: 'filter-rules', label: 'Filter rules', component: FilterRules },
   { id: 'scrapers', label: 'Scrapers', component: Scrapers },
   { id: 'logs', label: 'Logs', component: Logs },
   { id: 'maintenance', label: 'Maintenance', component: Maintenance },
