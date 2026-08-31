@@ -302,7 +302,12 @@ Code blocks use JetBrains Mono with a `$` prompt affordance for shell lines.
 
 ### Setup wizard
 
-Four steps, rendered in React at `/setup`, replacing `templates/setup.html`.
+Rendered in React at `/setup`, replacing `templates/setup.html`. The mockup
+shows four steps; the real wizard has ten (Welcome, TorBox, Jellyfin, Catbox,
+Quality and language, Zilean, Radarr and Sonarr, Seerr, Trakt and
+notifications, OpenSubtitles, then the completion screen), and the port keeps
+every real step and field: the mockup's step count was illustrative, and a
+four-step wizard would silently drop configuration surface.
 
 The POST endpoints (`/setup/save`, `/setup/skip`, `/setup/test/<kind>`) already
 return JSON and are **not changed**. This is a view swap. Each step keeps its
