@@ -34,18 +34,15 @@ export function RegionPicker({ region }: { region: string }) {
   const mutation = useMutation({
     mutationFn: (code: string) => api.setRegion(code),
     onSuccess: (r) => {
-      // Patch the cached session directly instead of invalidating it. A
-      // refetch of GET /ui/api/session re-derives region from
-      // auth.current_user_record() (app.py:2954/2963), which for the legacy
-      // single-user login is a synthetic dict with no region to read back
-      // (auth.py:170) - POST /ui/api/me/region can't persist anything for
-      // that account either (app.py's ui_api_me_region now 409s for it), so
-      // a refetch would just re-show the old region. Patching the cache
-      // keeps the picker correct for that setup, and is harmless for real
-      // multi-user accounts where the write actually landed server-side.
+      // Both login types genuinely persist now (app.py's ui_api_me_region:
+      // real users write the users-table row, the legacy single-user shim
+      // writes the LEGACY_USER_REGION runtime setting), so a plain
+      // session refetch reflects the pick either way. Patch the cache first
+      // so the picker updates instantly instead of waiting on that refetch.
       queryClient.setQueryData<SessionInfo>(['session'], (old) =>
         old?.user ? { ...old, user: { ...old.user, region: r.region } } : old,
       );
+      queryClient.invalidateQueries({ queryKey: ['session'] });
       queryClient.invalidateQueries({ queryKey: ['trending'] });
       queryClient.invalidateQueries({ queryKey: ['popular'] });
       queryClient.invalidateQueries({ queryKey: ['top-rated'] });

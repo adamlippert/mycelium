@@ -2955,12 +2955,21 @@ def ui_api_session():
     if not rec:
         return jsonify(authenticated=False, user=None, **_login_flags())
     import settings as _settings
+    # region: a real users-table row (rec["id"] >= 1) carries its own region
+    # column. The legacy single-user login's shim (id=0, auth.py:170) has no
+    # such column - its choice lives in the LEGACY_USER_REGION runtime
+    # setting instead (see ui_api_me_region below). Either way, a value that
+    # was never set falls back to "US", not the old hardcoded "NL".
+    if rec.get("id"):
+        region = rec.get("region") or "US"
+    else:
+        region = rec.get("region") or _settings.get("LEGACY_USER_REGION", "US")
     user: dict = {
         "id": rec.get("id"),
         "username": rec.get("username"),
         "role": rec.get("role"),
         "auto_approve": bool(rec.get("auto_approve")),
-        "region": rec.get("region", "NL"),
+        "region": region,
         "library_click_jellyfin": bool(rec.get("library_click_jellyfin")),
         "discover_language_include": rec.get("discover_language_include") or "",
         "discover_language_exclude": rec.get("discover_language_exclude") or "",
@@ -3071,13 +3080,14 @@ def ui_api_me_region():
     if not rec.get("id"):
         # Legacy single-user login (AUTH_USERNAME/AUTH_PASSWORD) has no real
         # users-table row: current_user_record() hands back a synthetic dict
-        # with id=0 (auth.py:170), so db.update_user(0, ...) below would match
-        # zero rows and silently no-op - the picker would look like it saved
-        # (200 ok=true) but GET /ui/api/session keeps reporting the old region
-        # forever because the shim never carries one. Fail loudly instead so
-        # RegionPicker.tsx can toast it rather than pretend it worked.
-        return jsonify(error="Region can't be saved for the shared login. "
-                              "Create a personal account under Settings > Users to persist preferences."), 409
+        # with id=0 (auth.py:170), so db.update_user(0, ...) would match zero
+        # rows and silently no-op. That login is single-user by definition
+        # though, so there is nothing ambiguous about "the" region for it -
+        # persist it as a runtime setting instead of a users-table column.
+        # ui_api_session reads it back the same way (LEGACY_USER_REGION).
+        import settings as _settings
+        _settings.set("LEGACY_USER_REGION", region)
+        return jsonify(ok=True, region=region)
     db.update_user(rec["id"], region=region)
     return jsonify(ok=True, region=region)
 

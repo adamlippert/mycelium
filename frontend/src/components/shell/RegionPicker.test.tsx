@@ -45,11 +45,11 @@ describe('RegionPicker', () => {
     await waitFor(() => expect(api.setRegion).toHaveBeenCalledWith('DE'));
   });
 
-  // F3(a): a successful save patches the cached session in place rather than
-  // invalidating it. GET /ui/api/session re-derives region from
-  // auth.current_user_record(), which for the legacy single-user login never
-  // carries one (auth.py:170) - a refetch there would silently re-show the
-  // old region, so the picker must not depend on one to reflect a real save.
+  // F3 round 1: a successful save patches the cached session immediately
+  // instead of waiting on a session refetch to land - both login types
+  // genuinely persist now (real users via the users-table row, the legacy
+  // single-user login via the LEGACY_USER_REGION runtime setting), so this
+  // is purely about not making the picker wait on a round-trip.
   it('patches the cached session region on success without waiting on a refetch', async () => {
     vi.mocked(api.setRegion).mockResolvedValue({ ok: true, region: 'DE' });
     const qc = renderPicker('NL');
@@ -60,14 +60,12 @@ describe('RegionPicker', () => {
     });
   });
 
-  // F3(a): for the legacy single-user login, POST /ui/api/me/region now
-  // fails loudly (app.py's ui_api_me_region 409s when current_user_record()
-  // has no persistable id) instead of silently no-oping, so this must
-  // surface to the user via F1's toast system.
-  it('toasts the failure when the save cannot persist', async () => {
-    vi.mocked(api.setRegion).mockRejectedValue(
-      new Error("409: Region can't be saved for the shared login."),
-    );
+  // The error-toast branch (F1's toast system) still covers genuine
+  // failures - a network error, a 5xx, an expired session - even though the
+  // legacy single-user login no longer 409s here (round 1 fix: it persists
+  // to LEGACY_USER_REGION instead of failing).
+  it('toasts the failure on a genuine save error', async () => {
+    vi.mocked(api.setRegion).mockRejectedValue(new Error('500: internal error'));
     renderPicker('NL');
     pickGermany();
     expect(await screen.findByText('Could not save region')).toBeInTheDocument();
