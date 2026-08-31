@@ -58,13 +58,15 @@ describe('Scrapers tab', () => {
     });
   });
 
-  it('shows the failed pill for the down scraper and "-" for its null latency', async () => {
+  it('shows the "down" pill label (mapped to the failed pill state) for the down scraper and "-" for its null latency', async () => {
     renderIt();
     await waitFor(() => {
       const row = screen.getByText('debridio').closest('tr');
       expect(row).not.toBeNull();
       expect(row!.textContent).toContain('-');
-      expect(row!.textContent).toMatch(/failed/i);
+      expect(row!.textContent).toMatch(/down/i);
+      const pill = row!.querySelector('span[style*="--pill-failed-bg"]');
+      expect(pill).not.toBeNull();
     });
   });
 

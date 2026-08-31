@@ -30,11 +30,17 @@ function PendingApprovalsPanel() {
   });
   const approveMut = useMutation({
     mutationFn: (id: number) => api.approveRequest(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['user-requests'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['user-requests'] });
+      qc.invalidateQueries({ queryKey: ['requests-all'] });
+    },
   });
   const denyMut = useMutation({
     mutationFn: ({ id, note }: { id: number; note?: string }) => api.denyRequest(id, note),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['user-requests'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['user-requests'] });
+      qc.invalidateQueries({ queryKey: ['requests-all'] });
+    },
   });
 
   const rows = data?.items ?? [];

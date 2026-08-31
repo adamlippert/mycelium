@@ -165,7 +165,7 @@ export default function Scrapers() {
     {
       key: 'state',
       header: 'State',
-      render: (s) => <Pill state={PILL_BY_STATE[s.state]}>{PILL_BY_STATE[s.state]}</Pill>,
+      render: (s) => <Pill state={PILL_BY_STATE[s.state]}>{s.state}</Pill>,
     },
     {
       key: 'samples',
