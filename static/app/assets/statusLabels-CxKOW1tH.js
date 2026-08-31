@@ -1,0 +1,1 @@
+const n={success:"In library",available:"In library",wanted:"Wanted",upcoming:"Upcoming",failed:"Failed",denied:"Denied",approved:"Approved",pending:"Processing"};function i(e){return n[e]??e}function r(e){return e==="success"||e==="available"||e==="approved"?"ready":e==="pending"||e==="wanted"?"queued":e==="denied"||e==="failed"?"failed":"lazy"}export{r as a,i as s};

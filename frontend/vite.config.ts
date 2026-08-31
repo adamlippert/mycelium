@@ -40,6 +40,19 @@ export default defineConfig({
     outDir: '../static/app',
     emptyOutDir: true,
     assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        // The vendor stack changes far less often than app code, so it gets
+        // its own chunk and stays cached in browsers across releases.
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
+          // The webplayer plugin imports hls.js at module level and the
+          // eager plugin-slot glob pulls it into the shared chunk; keep the
+          // ~400KB player library in its own long-cached chunk instead.
+          hls: ['hls.js'],
+        },
+      },
+    },
   },
   server: {
     port: 5173,

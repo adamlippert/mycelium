@@ -28,25 +28,58 @@ else:
     sys.modules.pop("torbox", None)
 
 
+import db
+
+
+def _drop_cached_conn():
+    conn = getattr(db._tls, "conn", None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        db._tls.conn = None
+
+
 @pytest.fixture(autouse=True)
-def _isolated_log(monkeypatch):
-    """Give each test its own in-memory log and skip the DB-backed preload."""
-    monkeypatch.setattr(torbox, "_CREATETORRENT_LOG", __import__("collections").deque(maxlen=200))
-    monkeypatch.setattr(torbox, "_CREATETORRENT_LOADED", True)
-    monkeypatch.setattr(torbox, "_persist_createtorrent", lambda ts, reason: None)
+def _isolated_log(tmp_path, monkeypatch):
+    """The reservation log lives in SQLite (the single source of truth, so
+    the budget holds across processes); give each test its own database."""
+    _drop_cached_conn()
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.db"))
+    _drop_cached_conn()
+    db.init()
     yield
+    _drop_cached_conn()
+
+
+def _log_count():
+    with db._connect() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) AS n FROM createtorrent_log").fetchone()["n"]
 
 
 def test_reservation_counts_immediately():
     entry = torbox._reserve_createtorrent_slot("test")
-    assert len(torbox._CREATETORRENT_LOG) == 1
-    assert entry in torbox._CREATETORRENT_LOG
+    assert isinstance(entry, int)
+    assert _log_count() == 1
 
 
 def test_release_gives_the_slot_back():
     entry = torbox._reserve_createtorrent_slot("test")
     torbox._release_createtorrent_slot(entry)
-    assert len(torbox._CREATETORRENT_LOG) == 0
+    assert _log_count() == 0
+
+
+def test_usage_reads_from_the_database():
+    torbox._reserve_createtorrent_slot("play")
+    torbox._reserve_createtorrent_slot("play")
+    torbox._reserve_createtorrent_slot("upgrade")
+
+    usage = torbox.createtorrent_usage()
+
+    assert usage["count"] == 3
+    assert usage["by_reason"] == {"play": 2, "upgrade": 1}
 
 
 def test_hourly_limit_blocks_reservation_once_reached(monkeypatch):

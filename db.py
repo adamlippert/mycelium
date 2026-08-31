@@ -1980,13 +1980,50 @@ def integrity_report() -> dict:
     return report
 
 
-def log_createtorrent(ts: float, reason: str) -> None:
-    """Persist a createtorrent call so the quota counter survives restarts."""
+def reserve_createtorrent_slot(now: float, reason: str,
+                               hour_limit: int, min_limit: int) -> dict:
+    """Count against the createtorrent budget and reserve a slot in ONE
+    immediate transaction, so the check-then-insert is atomic across threads
+    AND across processes. This table is the single source of truth for the
+    quota: adding gunicorn workers must never multiply the local budget into
+    N independent counters (TorBox's real 60/hour does not care how many
+    workers we run).
+
+    Returns {"id": rowid, "hour_count", "min_count"} with the counts
+    including this reservation, or id None (and the counts that blocked it)
+    when no budget remains."""
     with _connect() as conn:
-        conn.execute("INSERT INTO createtorrent_log (ts, reason) VALUES (?, ?)", (ts, reason))
-        conn.commit()
-        # Prune entries older than 2 hours to keep the table small.
-        conn.execute("DELETE FROM createtorrent_log WHERE ts < ?", (ts - 7200,))
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            hour_count = conn.execute(
+                "SELECT COUNT(*) AS n FROM createtorrent_log WHERE ts >= ?",
+                (now - 3600,)).fetchone()["n"]
+            min_count = conn.execute(
+                "SELECT COUNT(*) AS n FROM createtorrent_log WHERE ts >= ?",
+                (now - 60,)).fetchone()["n"]
+            if hour_count >= hour_limit - 2 or min_count >= min_limit - 1:
+                conn.execute("COMMIT")
+                return {"id": None, "hour_count": hour_count, "min_count": min_count}
+            cur = conn.execute(
+                "INSERT INTO createtorrent_log (ts, reason) VALUES (?, ?)",
+                (now, reason))
+            conn.execute("DELETE FROM createtorrent_log WHERE ts < ?", (now - 7200,))
+            row_id = cur.lastrowid
+            conn.execute("COMMIT")
+            return {"id": row_id, "hour_count": hour_count + 1,
+                    "min_count": min_count + 1}
+        except Exception:
+            try:
+                conn.execute("ROLLBACK")
+            except Exception:
+                pass
+            raise
+
+
+def release_createtorrent_slot(row_id: int) -> None:
+    """Give a reserved slot back when the API call never reached TorBox."""
+    with _connect() as conn:
+        conn.execute("DELETE FROM createtorrent_log WHERE id=?", (row_id,))
         conn.commit()
 
 

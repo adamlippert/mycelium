@@ -102,9 +102,12 @@ function PendingApprovalsPanel() {
   return <DataTable columns={columns} rows={rows} empty="No requests awaiting review" />;
 }
 
+const ALL_REQUESTS_PAGE_SIZE = 50;
+
 function AllRequestsPanel() {
   const qc = useQueryClient();
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
   const { data } = useQuery({ queryKey: ['requests-all'], queryFn: api.requestsAll });
   const deleteMut = useMutation({
     mutationFn: (id: number) => api.deleteRequest(id),
@@ -117,9 +120,14 @@ function AllRequestsPanel() {
 
   const allRows = data?.items ?? [];
   const q = query.trim().toLowerCase();
-  const rows = q
+  const filtered = q
     ? allRows.filter((r) => r.title.toLowerCase().includes(q) || r.imdb_id.toLowerCase().includes(q))
     : allRows;
+  // Only one page goes into the DOM; the endpoint returns up to 5,000 rows
+  // and mounting them all as <tr> nodes froze the tab.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ALL_REQUESTS_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const rows = filtered.slice((safePage - 1) * ALL_REQUESTS_PAGE_SIZE, safePage * ALL_REQUESTS_PAGE_SIZE);
 
   const columns: Column<RequestRow>[] = [
     { key: 'title', header: 'Title', render: (r) => <span className="font-medium">{r.title || '-'}</span> },
@@ -188,11 +196,32 @@ function AllRequestsPanel() {
       <input
         type="text"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => { setQuery(e.target.value); setPage(1); }}
         placeholder="Search..."
         className="w-full max-w-sm rounded border border-border bg-bg px-3 py-2 text-sm"
       />
       <DataTable columns={columns} rows={rows} empty="No requests" />
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={safePage === 1}
+            className="rounded border border-border px-3 py-1 text-sm text-muted hover:text-white disabled:opacity-30 transition"
+          >
+            Prev
+          </button>
+          <span className="text-sm text-muted">{safePage} / {totalPages}</span>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={safePage === totalPages}
+            className="rounded border border-border px-3 py-1 text-sm text-muted hover:text-white disabled:opacity-30 transition"
+          >
+            Next
+          </button>
+        </div>
+      )}
     </div>
   );
 }

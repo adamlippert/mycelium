@@ -91,7 +91,13 @@ port=os.environ.get('LISTEN_PORT','8088'); \
 r=urllib.request.urlopen(f'http://127.0.0.1:{port}/health',timeout=5); \
 sys.exit(0 if r.status==200 else 1)" || exit 1
 
+# --workers MUST stay 1: catbox's single-flight token locks, the scan-burst
+# detector, mp4_faststart's build locks, Flask-Limiter's memory:// login
+# counters and several caches all live in process memory and are only correct
+# in a single process. Concurrency comes from --threads instead: streaming
+# responses hold their thread for the whole transfer (I/O-bound waits, not
+# CPU), so the thread count is the ceiling on simultaneous open streams.
 CMD ["sh", "-c", "\
 ( LISTEN_ADDR=:2049 spore-nfs; echo \"[mycelium] spore-nfs exited (status $?); the NFS share is now unavailable\" >&2 ) & \
 ( LISTEN_ADDR=0.0.0.0:445 spore-smb; echo \"[mycelium] spore-smb exited (status $?); the SMB share is now unavailable\" >&2 ) & \
-exec gunicorn --bind ${LISTEN_HOST}:${LISTEN_PORT} --workers 1 --threads 16 --access-logfile - app:app"]
+exec gunicorn --bind ${LISTEN_HOST}:${LISTEN_PORT} --workers 1 --threads ${GUNICORN_THREADS:-64} --access-logfile - app:app"]

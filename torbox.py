@@ -1,7 +1,6 @@
 import logging
 import threading
 import time
-from collections import deque
 
 import requests
 
@@ -25,84 +24,52 @@ def _headers() -> dict[str, str]:
 
 
 # ── createtorrent rate-limit visibility ───────────────────────────────────────
-# TorBox limits POST /torrents/createtorrent to 60/hour per API token. We keep a
-# rolling 1-hour log of every call (with the reason / caller) so the UI can show
-# exactly what is consuming the quota.
-_CREATETORRENT_LOG: deque = deque(maxlen=200)
-_CREATETORRENT_LOCK = threading.Lock()
-_CREATETORRENT_LOADED = False
+# TorBox limits POST /torrents/createtorrent to 60/hour per API token. Every
+# call is reserved in the createtorrent_log table BEFORE the HTTP request, in
+# one immediate transaction, so the budget holds across threads AND across
+# processes: the database is the single source of truth, and adding gunicorn
+# workers cannot multiply the local guard into N independent 60/hour counters
+# (TorBox's real limit does not care how many workers we run).
 
 
-def _load_createtorrent_from_db() -> None:
-    """Populate in-memory log from DB on startup so counter survives restarts."""
-    try:
-        import db as _db
-        since = time.time() - 3600
-        for ts, reason in _db.get_createtorrent_log(since):
-            _CREATETORRENT_LOG.append((ts, reason))
-    except Exception as exc:
-        log.debug("Could not load createtorrent log from DB: %s", exc)
-
-
-def _persist_createtorrent(ts: float, reason: str) -> None:
-    try:
-        import db as _db
-        _db.log_createtorrent(ts, reason)
-    except Exception as exc:
-        log.debug("Could not persist createtorrent log: %s", exc)
-
-
-def _reserve_createtorrent_slot(reason: str) -> tuple[float, str]:
+def _reserve_createtorrent_slot(reason: str) -> int:
     """Atomically check both the hourly and per-minute budgets and reserve a
-    slot in the same locked section, so two concurrent callers can't both
-    pass the check before either recorded a call (the old check-then-record
-    was two separate locked sections with the actual HTTP call in between,
-    letting concurrent cold-starts collectively overshoot TorBox's real
-    quota). Raises RateLimited if no budget remains; otherwise returns the
-    log entry so the caller can roll it back if the API call itself fails."""
-    global _CREATETORRENT_LOADED
-    if not _CREATETORRENT_LOADED:
-        _CREATETORRENT_LOADED = True
-        _load_createtorrent_from_db()
-    now = time.time()
-    with _CREATETORRENT_LOCK:
-        hour_count = sum(1 for ts, _ in _CREATETORRENT_LOG if ts >= now - 3600)
-        min_count  = sum(1 for ts, _ in _CREATETORRENT_LOG if ts >= now - 60)
-        if hour_count >= _CREATETORRENT_LIMIT_HOUR - 2:
+    slot in the same transaction, so two concurrent callers can't both pass
+    the check before either recorded a call. Raises RateLimited if no budget
+    remains; otherwise returns the reservation's row id so the caller can
+    roll it back if the API call itself fails."""
+    import db as _db
+    res = _db.reserve_createtorrent_slot(
+        time.time(), reason, _CREATETORRENT_LIMIT_HOUR, _CREATETORRENT_LIMIT_MIN)
+    if res["id"] is None:
+        if res["hour_count"] >= _CREATETORRENT_LIMIT_HOUR - 2:
             log.warning("createtorrent [%s] SKIPPED  -  hourly quota %d/%d reached",
-                        reason, hour_count, _CREATETORRENT_LIMIT_HOUR)
-            raise RateLimited()
-        if min_count >= _CREATETORRENT_LIMIT_MIN - 1:
+                        reason, res["hour_count"], _CREATETORRENT_LIMIT_HOUR)
+        else:
             log.warning("createtorrent [%s] SKIPPED  -  per-minute burst %d/%d reached",
-                        reason, min_count, _CREATETORRENT_LIMIT_MIN)
-            raise RateLimited()
-        entry = (now, reason)
-        _CREATETORRENT_LOG.append(entry)
-        log.info("createtorrent [%s] (%d/60h, %d/10m): reserving slot",
-                  reason, hour_count + 1, min_count + 1)
-        return entry
+                        reason, res["min_count"], _CREATETORRENT_LIMIT_MIN)
+        raise RateLimited()
+    log.info("createtorrent [%s] (%d/60h, %d/10m): reserving slot",
+             reason, res["hour_count"], res["min_count"])
+    return res["id"]
 
 
-def _release_createtorrent_slot(entry: tuple[float, str]) -> None:
+def _release_createtorrent_slot(entry: int) -> None:
     """Undo a reservation when the API call never actually reached/was
     accepted by TorBox (network error, explicit 429, or non-2xx response)."""
-    with _CREATETORRENT_LOCK:
-        try:
-            _CREATETORRENT_LOG.remove(entry)
-        except ValueError:
-            pass
+    import db as _db
+    try:
+        _db.release_createtorrent_slot(entry)
+    except Exception as exc:
+        log.debug("Could not release createtorrent slot %s: %s", entry, exc)
 
 
 def createtorrent_usage(window_sec: int = 3600) -> dict:
     """Return how many createtorrent calls happened in the last `window_sec`,
     broken down by reason. Used by the UI to explain rate-limit hits."""
-    global _CREATETORRENT_LOADED
-    if not _CREATETORRENT_LOADED:
-        _CREATETORRENT_LOADED = True
-        _load_createtorrent_from_db()
+    import db as _db
     cutoff = time.time() - window_sec
-    with _CREATETORRENT_LOCK:
-        recent = [(ts, reason) for ts, reason in _CREATETORRENT_LOG if ts >= cutoff]
+    recent = _db.get_createtorrent_log(cutoff)
     by_reason: dict[str, int] = {}
     for _, reason in recent:
         by_reason[reason] = by_reason.get(reason, 0) + 1
@@ -144,7 +111,6 @@ def add_magnet(magnet: str, timeout: int = 30, reason: str = "unknown") -> dict:
         # TorBox never actually accepted this call - give the slot back.
         _release_createtorrent_slot(entry)
         raise
-    _persist_createtorrent(*entry)
     payload = resp.json() or {}
     if not payload.get("success", False):
         # DUPLICATE_ITEM means the torrent is already in TorBox  -  treat as success
@@ -164,16 +130,43 @@ def add_magnet(magnet: str, timeout: int = 30, reason: str = "unknown") -> dict:
 
 _MYLIST_TTL_SECONDS = 45
 _mylist_cache: dict = {"items": None, "ts": 0.0}
-_mylist_lock = __import__("threading").Lock()
+_mylist_lock = threading.Lock()
+# Held for the duration of one refresh, so TTL expiry does not stampede: one
+# thread pays the (up to 20-page) fetch, everyone else waits for its result
+# or keeps serving the barely-stale copy.
+_mylist_refresh_lock = threading.Lock()
+
+
+def _mylist_fresh():
+    import time as _t
+    cached = _mylist_cache["items"]
+    if cached is not None and (_t.monotonic() - _mylist_cache["ts"]) < _MYLIST_TTL_SECONDS:
+        return cached
+    return None
 
 
 def list_torrents(timeout: int = 30, force_refresh: bool = False) -> list[dict]:
     """Return TorBox mylist (all pages), cached for ~45s."""
-    import time as _t
     if not force_refresh:
-        cached = _mylist_cache["items"]
-        if cached is not None and (_t.monotonic() - _mylist_cache["ts"]) < _MYLIST_TTL_SECONDS:
-            return cached
+        fresh = _mylist_fresh()
+        if fresh is not None:
+            return fresh
+        # Stale but present, and another thread is already refreshing:
+        # serve the stale copy instead of stacking a duplicate fetch.
+        stale = _mylist_cache["items"]
+        if stale is not None and _mylist_refresh_lock.locked():
+            return stale
+    with _mylist_refresh_lock:
+        # Re-check: the thread we waited behind may have just refreshed.
+        if not force_refresh:
+            fresh = _mylist_fresh()
+            if fresh is not None:
+                return fresh
+        return _fetch_mylist(timeout)
+
+
+def _fetch_mylist(timeout: int) -> list[dict]:
+    import time as _t
     url = f"{_base_url().rstrip('/')}/torrents/mylist"
     all_items: list[dict] = []
     seen_ids: set[int] = set()

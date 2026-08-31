@@ -150,6 +150,10 @@ limiter = Limiter(
     key_func=get_remote_address,
     app=app,
     default_limits=[],  # opt-in per route
+    # memory:// keeps the counters in this process. Correct ONLY at
+    # gunicorn --workers 1 (see the Dockerfile CMD): with N workers each
+    # process counts independently and the login limit silently becomes
+    # 5*N/min. Multi-worker needs a shared backend (redis://).
     storage_uri="memory://",
 )
 
