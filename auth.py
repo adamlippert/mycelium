@@ -309,6 +309,10 @@ def install_before_request(app) -> None:
                 return None
         if path.startswith("/stream/") or path.startswith("/spore-stream/") or path.startswith("/spore-nfs/"):
             return None
+        # The Go streaming front's resolve calls arrive over loopback with no
+        # session; the route itself rejects anything not from 127.0.0.1.
+        if path.startswith("/internal/"):
+            return None
         if path.startswith("/dav"):
             return _enforce_basic_auth()
         if session.get("user"):

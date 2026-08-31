@@ -1574,145 +1574,83 @@ def spore_nfs_size(token: str):
     return jsonify({"size": int(size or 0)})
 
 
-@app.get("/spore-stream/<token>")
-def spore_stream_proxy(token: str):
-    """Plex Spore proxy: serves moov-first MP4 with Range support.
+def _build_then_probe(cdn_url_: str, tok: str) -> None:
+    """Build the .fsh moov-first cache, then ffprobe the CDN file once to
+    learn its real tracks. Runs on a background thread; never on the
+    serving path."""
+    import json as _json, subprocess as _sp
+    import strm_generator as _sg, db as _db, mp4_faststart as _fs
+    try:
+        ok = _fs.build_and_cache(cdn_url_, tok)
+        if not ok:
+            return
 
-    Cold cache: pass-through Range proxy to CDN while building .fsh in background.
-    Warm cache: serve virtual moov-first layout so FFmpeg never seeks 15GB.
+        # Skip if already probed and preferred_audio detection is done
+        existing = _db.load_spore_tracks(tok)
+        if existing and "preferred_audio_idx" in existing:
+            return
+
+        cp = _fs.extract_codec_private(tok)
+        v_extra_hex = cp.hex() if cp else ""
+
+        res = _sp.run(
+            ["ffprobe", "-v", "quiet", "-print_format", "json",
+             "-show_streams", "-show_format", cdn_url_],
+            capture_output=True, timeout=60,
+        )
+        if res.returncode != 0:
+            return
+        data    = _json.loads(res.stdout)
+        streams = data.get("streams", [])
+        audio   = [s for s in streams if s.get("codec_type") == "audio"]
+        subs    = [s for s in streams if s.get("codec_type") == "subtitle"]
+        dur     = float(data.get("format", {}).get("duration", 0) or 0)
+        preferred_idx = _sg._preferred_audio_index(audio)
+        _db.save_spore_tracks(tok, {
+            "audio": audio, "subs": subs, "duration_s": dur,
+            "video_extradata_hex": v_extra_hex,
+            "preferred_audio_idx": preferred_idx,
+        })
+        if audio or subs or dur or v_extra_hex:
+            _sg.update_stub_from_probe(tok, audio, subs, duration_s=dur or None)
+        if preferred_idx > 0:
+            _sg.update_minfo_preferred_audio(tok, preferred_idx)
+            log.info("spore-stream: preferred_audio=%d for token=%s (TrueHD -> fallback)",
+                     preferred_idx, tok)
+    except Exception as exc:
+        log.warning("spore-stream: post-build probe failed for %s: %s", tok, exc)
+    finally:
+        _spore_probing.discard(tok)
+
+
+def _resolve_stream_mode(token: str) -> dict:
+    """Everything /spore-stream decides BEFORE any byte is served, shared by
+    the Flask route below and by /internal/stream-resolve, which the Go
+    streaming front calls so it can do the byte-shoveling itself. All side
+    effects live here too: materialize, background .fsh builds and probes,
+    the CDN liveness check for the MKV redirect.
+
+    Returns one of:
+      {"error": 404 | 502, "reason": str}
+      {"mode": "redirect", "url": cdn_url}                        MKV/other
+      {"mode": "cold", "cdn_url": ..., "size": n}                 passthrough
+      {"mode": "warm", "cdn_url": ..., "cdn_size": n,
+       "fsh_path": ..., "info": <mp4_faststart.load dict>}        moov-first
     """
     import time as _t
     import mp4_faststart
 
-    started = _t.monotonic()
-    ua  = request.headers.get("User-Agent", "?")[:80]
-    rng = request.headers.get("Range", "-")
-
     url = catbox.materialize(token)
     if not url:
-        log.warning("spore-stream: materialize FAILED token=%s ua=%r range=%s (%.1fs)",
-                    token, ua, rng, _t.monotonic() - started)
-        abort(404)
+        return {"error": 404, "reason": "materialize failed"}
 
     info = mp4_faststart.load(token)
-
     cdn_url = url
 
-    def _build_then_probe(cdn_url_: str, tok: str) -> None:
-        import json as _json, subprocess as _sp
-        import strm_generator as _sg, db as _db, mp4_faststart as _fs
-        try:
-            ok = mp4_faststart.build_and_cache(cdn_url_, tok)
-            if not ok:
-                return
-
-            # Skip if already probed and preferred_audio detection is done
-            existing = _db.load_spore_tracks(tok)
-            if existing and "preferred_audio_idx" in existing:
-                return
-
-            cp = _fs.extract_codec_private(tok)
-            v_extra_hex = cp.hex() if cp else ""
-
-            res = _sp.run(
-                ["ffprobe", "-v", "quiet", "-print_format", "json",
-                 "-show_streams", "-show_format", cdn_url_],
-                capture_output=True, timeout=60,
-            )
-            if res.returncode != 0:
-                return
-            data    = _json.loads(res.stdout)
-            streams = data.get("streams", [])
-            audio   = [s for s in streams if s.get("codec_type") == "audio"]
-            subs    = [s for s in streams if s.get("codec_type") == "subtitle"]
-            dur     = float(data.get("format", {}).get("duration", 0) or 0)
-            preferred_idx = _sg._preferred_audio_index(audio)
-            _db.save_spore_tracks(tok, {
-                "audio": audio, "subs": subs, "duration_s": dur,
-                "video_extradata_hex": v_extra_hex,
-                "preferred_audio_idx": preferred_idx,
-            })
-            if audio or subs or dur or v_extra_hex:
-                _sg.update_stub_from_probe(tok, audio, subs, duration_s=dur or None)
-            if preferred_idx > 0:
-                _sg.update_minfo_preferred_audio(tok, preferred_idx)
-                log.info("spore-stream: preferred_audio=%d for token=%s (TrueHD -> fallback)",
-                         preferred_idx, tok)
-        except Exception as exc:
-            log.warning("spore-stream: post-build probe failed for %s: %s", tok, exc)
-        finally:
-            _spore_probing.discard(tok)
-
-    def _cold_proxy_response(file_size: int):
-        """Range-passthrough straight to the CDN. Used both while the .fsh
-        cache is still building and for the already-fast-start case below,
-        where we still proxy (rather than 302) so Plex never caches the raw
-        CDN URL."""
-        if not file_size:
-            abort(502)
-
-        range_hdr = request.headers.get("Range")
-        if range_hdr:
-            try:
-                r_start, r_end = _parse_byte_range(range_hdr, file_size)
-            except Exception:
-                abort(416)
-            r_end  = min(r_end, file_size - 1)
-            status = 206
-        else:
-            r_start, r_end, status = 0, file_size - 1, 200
-
-        length = r_end - r_start + 1
-
-        def _gen_passthrough():
-            CHUNK = 2 << 20
-            pos = r_start
-            while pos <= r_end:
-                end = min(pos + CHUNK - 1, r_end)
-                try:
-                    # Route through mp4_faststart's _get() instead of a raw
-                    # requests.get(): it already validates the CDN status
-                    # code (retries on 429, raises on anything else) before
-                    # returning bytes. A bare requests.get() here previously
-                    # had no status check at all, so a CDN error body would
-                    # get piped to the client as if it were video data.
-                    # This runs inline on a live gunicorn request thread
-                    # (small, fixed pool -- see Dockerfile), so it gets the
-                    # same reduced retry budget as mp4_faststart.serve_bytes.
-                    data = mp4_faststart._get(
-                        cdn_url, pos, end,
-                        max_retries=mp4_faststart._LIVE_REQUEST_MAX_429_RETRIES,
-                    )
-                    yield data
-                    pos = end + 1
-                except Exception as exc:
-                    log.warning("spore-stream cold proxy: error pos=%d token=%s: %s",
-                                pos, token, exc)
-                    break
-
-        resp = Response(
-            stream_with_context(_gen_passthrough()),
-            status=status,
-            mimetype="video/mp4",
-            direct_passthrough=True,
-        )
-        resp.headers["Accept-Ranges"]  = "bytes"
-        resp.headers["Content-Length"] = str(length)
-        if status == 206:
-            resp.headers["Content-Range"] = f"bytes {r_start}-{r_end}/{file_size}"
-        log.info("spore-stream: token=%s cold-proxy bytes=%d-%d/%d ua=%r",
-                 token, r_start, r_end, file_size, ua)
-
-        # Remove cold size once .fsh is ready so next request uses warm path
-        if mp4_faststart.load(token) is not None:
-            _spore_cold_sizes.pop(token, None)
-
-        return resp
-
     if info is None:
-        # Cold cache: build .fsh in background, immediately proxy Range requests
-        # to CDN so FFmpeg doesn't stall. _spore_cold_sizes caches file_size so
-        # repeated Range requests (FFmpeg seeks) skip the HEAD round-trip.
+        # Cold cache: build .fsh in background, serve Range passthrough
+        # meanwhile. _spore_cold_sizes caches file_size so repeated Range
+        # requests (FFmpeg seeks) skip the HEAD round-trip.
         if token not in _spore_cold_sizes:
             threading.Thread(
                 target=_build_then_probe,
@@ -1726,17 +1664,22 @@ def spore_stream_proxy(token: str):
                 _spore_cold_sizes[token] = int(head.headers.get("Content-Length", 0))
             except Exception as exc:
                 log.warning("spore-stream: HEAD failed for cold token=%s: %s", token, exc)
-                abort(502)
-
-        return _cold_proxy_response(_spore_cold_sizes.get(token, 0))
+                return {"error": 502, "reason": "HEAD failed"}
+        size = _spore_cold_sizes.get(token, 0)
+        if not size:
+            return {"error": 502, "reason": "no file size"}
+        # Remove the cold size once .fsh is ready so the next request warms up
+        if mp4_faststart.load(token) is not None:
+            _spore_cold_sizes.pop(token, None)
+        return {"mode": "cold", "cdn_url": cdn_url, "size": size}
 
     # CDN file is already moov-first (or MKV redirect sentinel).
-    # MKV files (ftyp_size == 0): redirect to CDN — FFmpeg reads MKV from byte 0,
+    # MKV files (ftyp_size == 0): redirect to CDN - FFmpeg reads MKV from byte 0,
     #   no seeking needed, and CDN redirect avoids unnecessary proxy bandwidth.
     # Already fast-start MP4 (ftyp_size > 0): proxy bytes through our server so
     #   Plex Server cannot cache the raw CDN URL. Plex stores our /spore-stream/
     #   URL instead; when any client (MiTV, Shield, etc.) plays, they always hit
-    #   our server which resolves a fresh CDN URL — expired URLs never reach clients.
+    #   our server which resolves a fresh CDN URL - expired URLs never reach clients.
     if info.get("already_fast"):
         existing = db.load_spore_tracks(token)
         if (not existing or "preferred_audio_idx" not in existing) and token not in _spore_probing:
@@ -1776,16 +1719,116 @@ def spore_stream_proxy(token: str):
                 _spore_alive_cache.pop(cdn_url, None)
                 fresh = catbox.materialize(token)
                 if not fresh:
-                    abort(502)
+                    return {"error": 502, "reason": "re-resolve failed"}
                 cdn_url = fresh
             _spore_cold_sizes.pop(token, None)
-            log.info("spore-stream: token=%s non-MP4 sentinel, 302 to CDN", token)
-            return redirect(cdn_url, code=302)
+            return {"mode": "redirect", "url": cdn_url}
         # Already fast-start MP4: proxy bytes; Plex stores our URL not the CDN URL.
         log.info("spore-stream: token=%s already fast-start MP4, proxying bytes", token)
         _spore_cold_sizes[token] = info["cdn_size"]
-        return _cold_proxy_response(info["cdn_size"])
+        return {"mode": "cold", "cdn_url": cdn_url, "size": info["cdn_size"]}
 
+    return {"mode": "warm", "cdn_url": cdn_url, "cdn_size": info["cdn_size"],
+            "fsh_path": str(mp4_faststart._cache_path(token)), "info": info}
+
+
+def _cold_proxy_response(file_size: int, cdn_url: str, token: str, ua: str):
+    """Range-passthrough straight to the CDN. Used both while the .fsh
+    cache is still building and for the already-fast-start case, where we
+    still proxy (rather than 302) so Plex never caches the raw CDN URL."""
+    import mp4_faststart
+
+    if not file_size:
+        abort(502)
+
+    range_hdr = request.headers.get("Range")
+    if range_hdr:
+        try:
+            r_start, r_end = _parse_byte_range(range_hdr, file_size)
+        except Exception:
+            abort(416)
+        r_end  = min(r_end, file_size - 1)
+        status = 206
+    else:
+        r_start, r_end, status = 0, file_size - 1, 200
+
+    length = r_end - r_start + 1
+
+    def _gen_passthrough():
+        CHUNK = 2 << 20
+        pos = r_start
+        while pos <= r_end:
+            end = min(pos + CHUNK - 1, r_end)
+            try:
+                # Route through mp4_faststart's _get() instead of a raw
+                # requests.get(): it already validates the CDN status
+                # code (retries on 429, raises on anything else) before
+                # returning bytes. A bare requests.get() here previously
+                # had no status check at all, so a CDN error body would
+                # get piped to the client as if it were video data.
+                # This runs inline on a live gunicorn request thread
+                # (small, fixed pool -- see Dockerfile), so it gets the
+                # same reduced retry budget as mp4_faststart.serve_bytes.
+                data = mp4_faststart._get(
+                    cdn_url, pos, end,
+                    max_retries=mp4_faststart._LIVE_REQUEST_MAX_429_RETRIES,
+                )
+                yield data
+                pos = end + 1
+            except Exception as exc:
+                log.warning("spore-stream cold proxy: error pos=%d token=%s: %s",
+                            pos, token, exc)
+                break
+
+    resp = Response(
+        stream_with_context(_gen_passthrough()),
+        status=status,
+        mimetype="video/mp4",
+        direct_passthrough=True,
+    )
+    resp.headers["Accept-Ranges"]  = "bytes"
+    resp.headers["Content-Length"] = str(length)
+    if status == 206:
+        resp.headers["Content-Range"] = f"bytes {r_start}-{r_end}/{file_size}"
+    log.info("spore-stream: token=%s cold-proxy bytes=%d-%d/%d ua=%r",
+             token, r_start, r_end, file_size, ua)
+    return resp
+
+
+@app.get("/spore-stream/<token>")
+def spore_stream_proxy(token: str):
+    """Serves moov-first MP4 with Range support (all clients).
+
+    In the default deployment the Go streaming front (spore-stream/) owns
+    this path and only calls /internal/stream-resolve below; this Flask
+    route is the complete fallback for STREAM_FRONT_ENABLED=false.
+
+    Cold cache: pass-through Range proxy to CDN while building .fsh in background.
+    Warm cache: serve virtual moov-first layout so FFmpeg never seeks 15GB.
+    """
+    import time as _t
+    import mp4_faststart
+
+    started = _t.monotonic()
+    ua  = request.headers.get("User-Agent", "?")[:80]
+    rng = request.headers.get("Range", "-")
+
+    res = _resolve_stream_mode(token)
+    if "error" in res:
+        if res["error"] == 404:
+            log.warning("spore-stream: materialize FAILED token=%s ua=%r range=%s (%.1fs)",
+                        token, ua, rng, _t.monotonic() - started)
+        abort(res["error"])
+
+    if res["mode"] == "redirect":
+        log.info("spore-stream: token=%s non-MP4 sentinel, 302 to CDN", token)
+        return redirect(res["url"], code=302)
+
+    cdn_url = res["cdn_url"]
+    if res["mode"] == "cold":
+        return _cold_proxy_response(res["size"], cdn_url, token, ua)
+
+    info = res["info"]
     file_size = info["cdn_size"]
     range_hdr = request.headers.get("Range")
 
@@ -1829,6 +1872,25 @@ def spore_stream_proxy(token: str):
     log.info("spore-stream: token=%s bytes=%d-%d/%d (%.1fs) ua=%r",
              token, v_start, v_end, file_size, _t.monotonic() - started, ua)
     return resp
+
+
+@app.get("/internal/stream-resolve/<token>")
+def internal_stream_resolve(token: str):
+    """Decision endpoint for the Go streaming front (same container). The
+    front owns the byte transfer; Python keeps every decision: materialize,
+    the TorBox budget, liveness checks, background .fsh builds.
+
+    Loopback-only: the front talks to gunicorn over 127.0.0.1, and when the
+    front is disabled gunicorn is exposed directly, where this must not be
+    reachable (the CDN URLs it returns are unauthenticated capability links).
+    The Go front additionally refuses to proxy /internal/* at all."""
+    if request.remote_addr not in ("127.0.0.1", "::1"):
+        abort(403)
+    res = _resolve_stream_mode(token)
+    if "error" in res:
+        return jsonify(error=res.get("reason", "")), res["error"]
+    res.pop("info", None)  # bytes payload; the front reads the .fsh itself
+    return jsonify(res)
 
 
 @app.get("/ui/api/virtual-items")

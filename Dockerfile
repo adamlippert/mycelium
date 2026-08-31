@@ -15,6 +15,13 @@ RUN go mod download
 COPY spore-nfs/main.go ./
 RUN CGO_ENABLED=0 go build -o /spore-nfs .
 
+# -- Stage 2b: build spore-stream, the Go streaming front ------------------------------
+FROM golang:1.25-alpine AS spore-stream
+WORKDIR /src
+COPY spore-stream/go.mod spore-stream/go.sum* ./
+COPY spore-stream/*.go ./
+RUN CGO_ENABLED=0 go build -o /spore-stream .
+
 # -- Stage 3: build spore-smb (Rust) ---------------------------------------------------
 FROM rust:slim AS spore-smb
 RUN apt-get update -qq && apt-get install -y -qq pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
@@ -70,6 +77,7 @@ COPY --from=frontend /static/app/ ./static/app/
 COPY static/ ./static/
 COPY --from=spore-nfs /spore-nfs /usr/local/bin/spore-nfs
 COPY --from=spore-smb /spore-smb /usr/local/bin/spore-smb
+COPY --from=spore-stream /spore-stream /usr/local/bin/spore-stream
 
 # SMB's port 445 is below 1024, so opening it normally requires root. Marking
 # the binary itself lets it bind that port at any user id, which keeps the
@@ -94,10 +102,19 @@ sys.exit(0 if r.status==200 else 1)" || exit 1
 # --workers MUST stay 1: catbox's single-flight token locks, the scan-burst
 # detector, mp4_faststart's build locks, Flask-Limiter's memory:// login
 # counters and several caches all live in process memory and are only correct
-# in a single process. Concurrency comes from --threads instead: streaming
-# responses hold their thread for the whole transfer (I/O-bound waits, not
-# CPU), so the thread count is the ceiling on simultaneous open streams.
+# in a single process. Streaming concurrency comes from the Go front
+# (spore-stream) instead: it owns /spore-stream/* where each open stream is a
+# goroutine, and reverse-proxies everything else to gunicorn, whose threads
+# then only serve short-lived requests. STREAM_FRONT_ENABLED=false reverts to
+# gunicorn on the exposed port with its own (complete) /spore-stream route,
+# where --threads is once again the ceiling on simultaneous open streams.
 CMD ["sh", "-c", "\
 ( LISTEN_ADDR=:2049 spore-nfs; echo \"[mycelium] spore-nfs exited (status $?); the NFS share is now unavailable\" >&2 ) & \
 ( LISTEN_ADDR=0.0.0.0:445 spore-smb; echo \"[mycelium] spore-smb exited (status $?); the SMB share is now unavailable\" >&2 ) & \
-exec gunicorn --bind ${LISTEN_HOST}:${LISTEN_PORT} --workers 1 --threads ${GUNICORN_THREADS:-64} --access-logfile - app:app"]
+if [ \"${STREAM_FRONT_ENABLED:-true}\" = \"true\" ]; then \
+  ( while true; do STREAM_LISTEN=${LISTEN_HOST}:${LISTEN_PORT} STREAM_UPSTREAM=http://127.0.0.1:${GUNICORN_PORT:-8090} spore-stream; \
+      echo \"[mycelium] spore-stream exited (status $?); restarting in 1s\" >&2; sleep 1; done ) & \
+  exec gunicorn --bind 127.0.0.1:${GUNICORN_PORT:-8090} --workers 1 --threads ${GUNICORN_THREADS:-64} --access-logfile - app:app; \
+else \
+  exec gunicorn --bind ${LISTEN_HOST}:${LISTEN_PORT} --workers 1 --threads ${GUNICORN_THREADS:-64} --access-logfile - app:app; \
+fi"]

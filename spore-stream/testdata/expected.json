@@ -1,0 +1,107 @@
+{
+ "ftyp_size": 16,
+ "moov_size": 100,
+ "cdn_size": 1000,
+ "moov_offset": 600,
+ "file_size": 1000,
+ "ranges": [
+  {
+   "start": 0,
+   "end": 999,
+   "body_b64": "ZmCX6Cjh0Cu7onTXhk6Iwg0UGyIpMDc+RUxTWmFob3Z9hIuSmaCnrrW8w8rR2N/m7fT7AgkQFx4lLDM6QUhPVl1ka3J5gIeOlZyjqrG4v8bN1Nvi6fD3/gUMExohKC82PURLUllgZ251fIOKkZifpq20u8IZQjFyDWSoOunOMpnCrONq99ulo3vkiSpGjLCmKw2py04/cV/nFp7WXL/pIKs52QdXMwrIDB0/c/TV8YQWrSjscjv4nCNhHroqpU4mYffdla6T4uPmws50kc66uUz088QsBfaWDvPiKo2cHZRWgwExORrBT/3EOkzSb7Bs/Y6t7E3ZxpW0JmCmP2cnfOraSi9CjXGV9XVwvLtPx8E6p84anyNnAh4CyrenfdkgjzY68le+bteNVjURgA9XROOZv3gHTszQ5rgh93U+yEiK46hIDhrDaJnE+koFnIaue2/JOVHwPxIiU9VXsdzzdBYDTT+vF2qMq6hL0SiVF7t923d6mXlqmrXq6AbeV+Pno9rK5jdX9+GhqsdihCfnboWtroPCqc9YKQGvcAFUohpBdeXx7sAIeSzjg2mNIEzqnHALuYji2EN1Ah7n3tI/fZieiP9IY6ozY3byakW0mOfAVAO9HdNuEwtToH24uo0goby2QakjlBNE8vcWqRfkYldfpYeC2r48Mpf7SNfi0/qRa5sUOgb7ZQBJxYX8vBDDwKa7d3HD9HPC+GQMRDKYH4IVRUuQWu1s/FHy9//b3lD6txZVNpqzw5Kjg+oL4vXB8iYCVZZeAzlgAipwpTtloHOMBDR1vouTiNydIwEsEJFGcoqcaBp6HYXZZxSOsYgDuLj0TheweemySPXTW1n9ok0ka4BLpMHCL442mSIo2zp4R9v8v/7YedAvmff0iY6OaElm/nai3XjhAyWbiAlWm42EO8DhoMme+nWedyhVoanG1Kg79uCXbGIhRgMmD08mPMnVEMbjob5B/wDawUGyDj48ofeVEg4Vt8lpJOGhCn6xk6q+sZKaT/c4XvL5khLoYSoLDgYEwl8yToCLobSNBYu/MWg4Y4WnfAz7KBX5ETI4hj6b2bmb2nkkNIWVoXQbUKjFOwyPAKNWbpsURHwuGE+hOyg1+TnjUPsm6BuXPY5Tim09hg+9N3yrlBQ725P5q4noWHDa5jHQzIUkSaDdGo910oN7vlUhzD1wzP1grdm4nRSmGftzTU6uRbAsgREnjnaGM4XxkCrJbs1dVd7GLT3+7T0+8bafL4hSpaDnWtETwDZHk8LnYwo8Dl/dk3d1GChlLgfjrsHPtU8EgC9crLtxsTGsopPdT7Qxm35mvfSpHy+GcgN4dg=="
+  },
+  {
+   "start": 0,
+   "end": 15,
+   "body_b64": "ZmCX6Cjh0Cu7onTXhk6Iwg=="
+  },
+  {
+   "start": 0,
+   "end": 115,
+   "body_b64": "ZmCX6Cjh0Cu7onTXhk6Iwg0UGyIpMDc+RUxTWmFob3Z9hIuSmaCnrrW8w8rR2N/m7fT7AgkQFx4lLDM6QUhPVl1ka3J5gIeOlZyjqrG4v8bN1Nvi6fD3/gUMExohKC82PURLUllgZ251fIOKkZifpq20u8I="
+  },
+  {
+   "start": 10,
+   "end": 200,
+   "body_b64": "dNeGTojCDRQbIikwNz5FTFNaYWhvdn2Ei5KZoKeutbzDytHY3+bt9PsCCRAXHiUsMzpBSE9WXWRrcnmAh46VnKOqsbi/xs3U2+Lp8Pf+BQwTGiEoLzY9REtSWWBnbnV8g4qRmJ+mrbS7whlCMXINZKg66c4ymcKs42r326Wje+SJKkaMsKYrDanLTj9xX+cWntZcv+kgqznZB1czCsgMHT9z9NXxhBatKOxyO/icI2EeuiqlTiZh992VrpPi4+Y="
+  },
+  {
+   "start": 115,
+   "end": 117,
+   "body_b64": "whlC"
+  },
+  {
+   "start": 116,
+   "end": 116,
+   "body_b64": "GQ=="
+  },
+  {
+   "start": 200,
+   "end": 699,
+   "body_b64": "5sLOdJHOurlM9PPELAX2lg7z4iqNnB2UVoMBMTkawU/9xDpM0m+wbP2OrexN2caVtCZgpj9nJ3zq2kovQo1xlfV1cLy7T8fBOqfOGp8jZwIeAsq3p33ZII82OvJXvm7XjVY1EYAPV0Tjmb94B07M0Oa4Ifd1PshIiuOoSA4aw2iZxPpKBZyGrntvyTlR8D8SIlPVV7Hc83QWA00/rxdqjKuoS9EolRe7fdt3epl5apq16ugG3lfj56PayuY3V/fhoarHYoQn526Fra6DwqnPWCkBr3ABVKIaQXXl8e7ACHks44NpjSBM6pxwC7mI4thDdQIe597SP32Ynoj/SGOqM2N28mpFtJjnwFQDvR3TbhMLU6B9uLqNIKG8tkGpI5QTRPL3FqkX5GJXX6WHgtq+PDKX+0jX4tP6kWubFDoG+2UAScWF/LwQw8Cmu3dxw/RzwvhkDEQymB+CFUVLkFrtbPxR8vf/295Q+rcWVTaas8OSo4PqC+L1wfImAlWWXgM5YAIqcKU7ZaBzjAQ0db6Lk4jcnSMBLBCRRnKKnGgaeh2F2WcUjrGIA7i49E4XsHnpskj101tZ/aJNJGuAS6TBwi+ONpkiKNs6eEfb/L/+2HnQL5n39ImOjmhJZv52ot144QMlm4gJVpuNhDvA4aDJnvp1nnc="
+  },
+  {
+   "start": 650,
+   "end": 750,
+   "body_b64": "NpkiKNs6eEfb/L/+2HnQL5n39ImOjmhJZv52ot144QMlm4gJVpuNhDvA4aDJnvp1nncoVaGpxtSoO/bgl2xiIUYDJg9PJjzJ1RDG46G+Qf8A2sFBsg4+PKH3lRIOFbfJaSThoQo="
+  },
+  {
+   "start": 700,
+   "end": 999,
+   "body_b64": "KFWhqcbUqDv24JdsYiFGAyYPTyY8ydUQxuOhvkH/ANrBQbIOPjyh95USDhW3yWkk4aEKfrGTqr6xkppP9zhe8vmSEuhhKgsOBgTCXzJOgIuhtI0Fi78xaDhjhad8DPsoFfkRMjiGPpvZuZvaeSQ0hZWhdBtQqMU7DI8Ao1ZumxREfC4YT6E7KDX5OeNQ+yboG5c9jlOKbT2GD703fKuUFDvbk/mriehYcNrmMdDMhSRJoN0aj3XSg3u+VSHMPXDM/WCt2bidFKYZ+3NNTq5FsCyBESeOdoYzhfGQKsluzV1V3sYtPf7tPT7xtp8viFKloOda0RPANkeTwudjCjwOX92Td3UYKGUuB+Ouwc+1TwSAL1ysu3GxMayik91PtDGbfma99KkfL4ZyA3h2"
+  },
+  {
+   "start": 999,
+   "end": 999,
+   "body_b64": "dg=="
+  }
+ ],
+ "range_headers": [
+  {
+   "header": "bytes=0-499",
+   "ok": true,
+   "start": 0,
+   "end": 499
+  },
+  {
+   "header": "bytes=500-",
+   "ok": true,
+   "start": 500,
+   "end": 999
+  },
+  {
+   "header": "bytes=-500",
+   "ok": true,
+   "start": 500,
+   "end": 999
+  },
+  {
+   "header": "bytes=-2000",
+   "ok": true,
+   "start": 0,
+   "end": 999
+  },
+  {
+   "header": "bytes=999-",
+   "ok": true,
+   "start": 999,
+   "end": 999
+  },
+  {
+   "header": "bytes=1000-",
+   "ok": false
+  },
+  {
+   "header": "bytes=5-2",
+   "ok": false
+  },
+  {
+   "header": "bytes=",
+   "ok": false
+  },
+  {
+   "header": "bytes=abc-def",
+   "ok": false
+  }
+ ]
+}
