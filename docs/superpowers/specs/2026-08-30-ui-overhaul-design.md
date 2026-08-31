@@ -233,7 +233,8 @@ Making it reachable is part of the flagged cutover below.
 ### Admin
 
 Eight Jinja tabs, six mockup tabs, and they are not the same six. Reconciled to
-eight React tabs, dropping nothing:
+nine React tabs, dropping nothing (the original count of eight omitted a home
+for the runtime settings editor, found during Plan 3 preparation):
 
 | React tab | Source |
 |---|---|
@@ -245,6 +246,7 @@ eight React tabs, dropping nothing:
 | Logs | Jinja `logs` |
 | Maintenance | Jinja `maintenance`, whose lower half is the repair history |
 | Blacklist | Jinja `blacklist` |
+| Settings | Jinja `settings`: the runtime settings editor over `settings.all_for_ui()`, minus the `filter_rules` group which becomes its own tab |
 
 `Admin.tsx` (745 lines) becomes one file per tab under
 `frontend/src/pages/admin/`, with a shared `AdminLayout.tsx` holding the tab
