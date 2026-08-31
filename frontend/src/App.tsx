@@ -8,7 +8,7 @@ import Requests from './pages/Requests';
 import Wanted from './pages/Wanted';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
-import AdminTabs from './pages/AdminTabs';
+import AdminLayout from './pages/admin/AdminLayout';
 
 export default function App() {
   return (
@@ -22,7 +22,7 @@ export default function App() {
         <Route path="requests" element={<Requests />} />
         <Route path="wanted" element={<Wanted />} />
         <Route path="settings" element={<Settings />} />
-        <Route path="admin" element={<AdminTabs />} />
+        <Route path="admin" element={<AdminLayout />} />
         <Route path="manual" element={
           <iframe src="/docs/install-guide.html" className="w-full border-0" style={{ height: 'calc(100vh - 57px)' }} />
         } />
