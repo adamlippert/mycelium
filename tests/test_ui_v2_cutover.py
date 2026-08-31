@@ -19,14 +19,16 @@ def _src(name):
         return f.read()
 
 
-def test_the_flag_defaults_off_and_parses_truthy_values(monkeypatch):
+def test_the_flag_defaults_on_and_parses_falsy_values(monkeypatch):
+    """The SPA shell is the default since 0.9.0; UI_V2=false is the escape
+    hatch back to the Jinja views."""
     import config
     monkeypatch.delenv("UI_V2", raising=False)
     importlib.reload(config)
-    assert config.UI_V2 is False
-    monkeypatch.setenv("UI_V2", "true")
-    importlib.reload(config)
     assert config.UI_V2 is True
+    monkeypatch.setenv("UI_V2", "false")
+    importlib.reload(config)
+    assert config.UI_V2 is False
     monkeypatch.delenv("UI_V2", raising=False)
     importlib.reload(config)
 

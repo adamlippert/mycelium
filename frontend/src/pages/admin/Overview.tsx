@@ -171,6 +171,17 @@ export default function Overview() {
                   <span className="ml-auto text-muted">{s.status}</span>
                 </div>
               ))}
+              <div
+                data-testid="health-stream-front"
+                className="flex items-center gap-2 text-xs"
+                title="Which process serves streams. Toggled with the STREAM_FRONT_ENABLED environment variable (Coolify), takes effect on container restart."
+              >
+                <StatusDot tone={healthQ.data?.stream_front ? 'ok' : 'warn'} />
+                <span className="text-body">Streaming front</span>
+                <span className="ml-auto text-muted">
+                  {healthQ.data?.stream_front ? 'Go (active)' : 'Python fallback'}
+                </span>
+              </div>
             </div>
           )}
         </Card>

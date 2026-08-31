@@ -1176,7 +1176,11 @@ def ui_api_series_backfill():
 
 @app.get("/ui/api/health")
 def ui_api_health():
-    return jsonify(services=health.check_all())
+    # stream_front is live truth, not an env echo: the Go front stamps
+    # X-Stream-Front on everything it proxies (and overwrites any client-sent
+    # value), so if this request carries it, streams are being served by Go.
+    return jsonify(services=health.check_all(),
+                   stream_front=request.headers.get("X-Stream-Front") == "1")
 
 
 @app.get("/ui/api/webhook-secret")

@@ -23,6 +23,7 @@ vi.mock('../../api', async () => {
           { name: 'Zilean', status: 'disabled' },
           { name: 'Torrentio', status: 'down' },
         ],
+        stream_front: true,
       }),
       activity: () => Promise.resolve({
         events: [
@@ -114,6 +115,15 @@ describe('Overview tab', () => {
       expect(screen.getByText('movies/Foo (2024)')).toBeInTheDocument();
       expect(screen.getByText('Library health')).toBeInTheDocument();
       expect(screen.getByText('300')).toBeInTheDocument();
+    });
+  });
+
+  it('shows the streaming-front indicator from the health payload', async () => {
+    renderIt();
+    await waitFor(() => {
+      const row = screen.getByTestId('health-stream-front');
+      expect(row).toHaveTextContent('Streaming front');
+      expect(row).toHaveTextContent('Go (active)');
     });
   });
 

@@ -289,7 +289,7 @@ export const api = {
     }),
 
   // Admin: Overview tab
-  health: () => http<{ services: HealthService[] }>('/ui/api/health'),
+  health: () => http<{ services: HealthService[]; stream_front?: boolean }>('/ui/api/health'),
   activity: () => http<{ events: ActivityEvent[] }>('/ui/api/activity'),
   webhookSecret: () => http<{ secret: string; source: string }>('/ui/api/webhook-secret'),
   torboxList: () => http<{ torrents: TorboxTorrent[] }>('/ui/api/torbox-list'),

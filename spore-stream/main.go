@@ -47,6 +47,9 @@ func main() {
 			pr.Out.Header["X-Forwarded-For"] = pr.In.Header["X-Forwarded-For"]
 			pr.Out.Header["X-Forwarded-Proto"] = pr.In.Header["X-Forwarded-Proto"]
 			pr.Out.Header["X-Forwarded-Host"] = pr.In.Header["X-Forwarded-Host"]
+			// Overwrites any client-sent value: requests through the front
+			// carry it, so Flask can report "front active" as live truth.
+			pr.Out.Header.Set("X-Stream-Front", "1")
 		},
 		// Flush every write immediately: gunicorn streams some responses
 		// (server-sent progress, chunked JSON) and buffering would stall them.
