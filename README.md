@@ -240,6 +240,14 @@ Stream directly in the browser - no Jellyfin client needed.
 
 ## 🍄 Mycelium Spore *(experimental  -  work in progress)*
 
+> **Status (August 2026):** Spore was built and used in production on a
+> Synology-based deployment through mid-2026. The code ships and its tests
+> run in CI, but the reference deployment has since moved to a VPS without
+> Plex, so the end-to-end flow (stub scan, transcoder wrapper, first-play
+> probe) is **not currently verified against a live Plex server**. Treat the
+> setup below as a working recipe from that earlier deployment, expect rough
+> edges, and please open an issue with your results if you run it.
+
 **Mycelium Spore** is a custom-built Plex integration developed specifically for Mycelium. Unlike solutions that require rclone, FUSE mounts, or virtual filesystems, Spore works entirely through a lightweight transcoder wrapper  -  no kernel modules, no extra daemons, no local storage.
 
 Plex streams directly from TorBox CDN on demand.
