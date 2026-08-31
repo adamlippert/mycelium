@@ -68,6 +68,15 @@ A control the map does not name gets the best-fitting tab plus a
 - [ ] Requests: Pending requests table + Approve/Deny -> Jinja `loadUsersTab()`'s "Pending requests" table (`approveReq`/`denyReq`, `POST /ui/api/user-requests/<id>/approve|deny`) **and** Admin.tsx's "Pending requests" section (`approveMut`/`denyMut`, same endpoints) -> planned home: Requests (map: "+ Admin.tsx pending approvals"; note the Jinja version currently lives inside the *Users* tab-pane, not Requests - the map moves it)
 - [ ] Requests: Auto-approve genre rules editor (Admin.tsx `AutoApprovePanel`: per-rule enabled toggle, media-type + genre selects, year-from/year-to, add rule, save rules, run now) -> `api.autoApproveGenreRules` / `setAutoApproveGenreRules` / `runAutoApproveNow` -> planned home: Requests (map: "+ Admin.tsx AutoApprovePanel")
 
+## Users
+
+- [ ] Users: Create user card (username, password, role select user/admin, auto-approve select) -> Jinja `createUser()` (`POST /ui/api/users/create`) **and** Admin.tsx `CreateUserForm` (username/password inputs, role select, auto-approve checkbox, same endpoint via `api.createUser`) -> planned home: Users (map: "Admin.tsx users CRUD"; dual source, one line)
+- [ ] Users: all-users table (username, role, auto-approve indicator, enabled indicator, last login) -> Jinja `loadUsersTab()` (`GET /ui/api/users`) **and** Admin.tsx's users table (`useQuery(api.users)`) -> planned home: Users (dual source)
+- [ ] Users: Auto-approve toggle per user -> Jinja `toggleAutoApprove()` **and** Admin.tsx `Toggle` component wired to `updateMut` -> both call `POST /ui/api/users/<id>/update` -> planned home: Users (dual source; route is a template-literal fetch, `` `/ui/api/users/${id}/update` ``, in both sources)
+- [ ] Users: Enabled toggle per user -> Jinja `toggleEnabled()` **and** Admin.tsx `Toggle` component wired to `updateMut` -> both call `POST /ui/api/users/<id>/update` -> planned home: Users (dual source)
+- [ ] Users: plugin-contributed per-user field toggles (dynamic columns from `GET /ui/api/plugins` `user_fields`/`admin_fields`) -> Jinja `togglePluginField()` **and** Admin.tsx's `pluginUserFields` toggle cells wired to `updateMut` -> both call `POST /ui/api/users/<id>/update` -> planned home: Users (dual source)
+- [ ] Users: Delete user button (confirm) -> Jinja `deleteUser()` (invoked via a single-quoted `onclick='deleteUser(...)'` attribute so it does not match the brief's double-quote grep) **and** Admin.tsx's Delete button wired to `deleteMut` -> both call `POST /ui/api/users/<id>/delete` -> planned home: Users (dual source; route is a template-literal fetch in both sources)
+
 ## Filter rules
 
 - [ ] Filter rules: RESOLUTION category editor (strict toggle, add-to-state select, remove chip, reorder within Preferred, expand/collapse, "+N more" overflow) -> `static/admin/filter_rules.js` `initFilterRules()` -> planned home: Filter rules
@@ -248,28 +257,41 @@ grep -oE "'/ui/api/[a-z/-]+'" frontend/src/api.ts | sort -u
 Both are intentionally narrow (no dynamic segments, no multi-level `/ui/api/...`
 paths on the app.py side) and were only a starting point. The orphan list above
 comes from a fuller pass: every `@app.get(...)`/`@app.post(...)` decorator whose
-path starts with `/ui/` was extracted (routes are defined with `@app.get`/
-`@app.post`, not `@app.route`, so a plain `@app.route` grep finds nothing), and
-each was grepped individually against `templates/ui.html` and all of
-`frontend/src` before being called reachable or orphaned.
+path starts with `/ui/` was extracted (140 routes total; routes are defined
+with `@app.get`/`@app.post`, not `@app.route`, so a plain `@app.route` grep
+finds nothing), and each was grepped individually against `templates/ui.html`
+and all of `frontend/src` before being called reachable or orphaned.
+
+A fix-round correction to this method: a route or function call can be quoted
+three different ways in this codebase (double quotes, single quotes, or a
+backtick template literal for anything with an interpolated id), and grepping
+for only one style silently drops real matches - `deleteUser()` in
+`templates/ui.html` is invoked via a single-quoted `onclick='deleteUser(...)'`
+attribute, and both `/ui/api/users/<id>/update` and `/ui/api/users/<id>/delete`
+are only ever called as backtick template literals
+(`` `/ui/api/users/${id}/update` ``) in both `templates/ui.html` and
+`frontend/src/api.ts`. The reachability sweep behind every line in this
+document (not just Users) was re-run checking all three quote styles, so a
+missing control in the sections above means it is genuinely absent, not an
+artifact of one quote style.
 
 ## Summary
 
-Total controls inventoried: **91** (76 from the Step 1/2 walk + 15 orphan routes
+Total controls inventoried: **93** (78 from the Step 1/2 walk + 15 orphan routes
 from Step 3). Every line above has a planned home; none are left unplaced.
 
 | Planned tab    | Walked (Step 1/2) | Orphans (Step 3) | Total |
 |----------------|-------------------|------------------|-------|
 | Overview       | 17                | 4                | 21    |
 | Requests       | 6                 | 1                | 7     |
-| Users          | 4                 | 1                | 5     |
+| Users          | 6                 | 1                | 7     |
 | Filter rules   | 7                 | 0                | 7     |
 | Scrapers       | 1                 | 0                | 1     |
 | Logs           | 2                 | 0                | 2     |
 | Maintenance    | 30                | 7                | 37    |
 | Blacklist      | 2                 | 0                | 2     |
 | Settings       | 7                 | 2                | 9     |
-| **Total**      | **76**            | **15**           | **91**|
+| **Total**      | **78**            | **15**           | **93**|
 
 `(placement chosen by inventory)` markers used: 6 (Overview theme toggle,
 Overview keyboard shortcuts, Maintenance force-rescan, Maintenance manual
