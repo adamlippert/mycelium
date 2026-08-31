@@ -228,6 +228,10 @@ export const api = {
   torboxList: () => http<{ torrents: TorboxTorrent[] }>('/ui/api/torbox-list'),
   retryQueue: () => http<{ items: unknown[] }>('/ui/api/retry-queue'),
   releases: () => http<{ releases: Release[] }>('/ui/api/releases'),
+  torboxQuota: () => http<TorboxQuota>('/ui/api/torbox-quota'),
+  metricsSummary: () => http<MetricsSummary>('/ui/api/metrics-summary'),
+  storage: () => http<{ folders: StorageFolder[] }>('/ui/api/storage'),
+  libraryHealth: () => http<LibraryHealth>('/ui/api/orphans'),
 
   // Arr import
   arrTest: (kind: 'radarr' | 'sonarr') =>
@@ -403,6 +407,34 @@ export type TorboxTorrent = {
 };
 
 export type Release = { version: string; date: string; notes: string[] };
+
+export type TorboxQuota = {
+  count: number;
+  limit: number;
+  window_sec: number;
+  by_reason: Record<string, number>;
+  oldest_ts: number | null;
+  resets_in_sec: number;
+};
+
+export type MetricRow = { label: string; count: number; avg_real: number | null; sum_int: number | null };
+
+export type MetricsSummary = {
+  quality: MetricRow[];
+  sources: MetricRow[];
+  unique_sources: MetricRow[];
+  latency: MetricRow[];
+  failures: MetricRow[];
+};
+
+export type StorageFolder = { path: string; count: number };
+
+export type LibraryHealth = {
+  strm_count: number;
+  db_count: number;
+  strm_without_db: number;
+  db_without_strm: number;
+};
 
 export interface SettingItem {
   key: string;

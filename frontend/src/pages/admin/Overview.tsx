@@ -14,6 +14,13 @@ function healthTone(status: string): 'ok' | 'warn' | 'danger' {
   return 'warn';
 }
 
+function formatCountdown(sec: number): string {
+  if (sec <= 0) return 'now';
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
 export default function Overview() {
   // Refresh cadence matches the Jinja dashboard: stats + health poll every
   // 30s, everything else loads once and refreshes only on remount.
@@ -24,9 +31,17 @@ export default function Overview() {
   const retryQueueQ = useQuery({ queryKey: ['admin-retry-queue'], queryFn: api.retryQueue, retry: false });
   const webhookQ = useQuery({ queryKey: ['admin-webhook-secret'], queryFn: api.webhookSecret, retry: false });
   const releasesQ = useQuery({ queryKey: ['admin-releases'], queryFn: api.releases });
+  // Load-once cards (fix round 1): no refetchInterval, they refresh on remount only.
+  const quotaQ = useQuery({ queryKey: ['admin-torbox-quota'], queryFn: api.torboxQuota, retry: false });
+  const metricsQ = useQuery({ queryKey: ['admin-metrics-summary'], queryFn: api.metricsSummary, retry: false });
+  const storageQ = useQuery({ queryKey: ['admin-storage'], queryFn: api.storage, retry: false });
+  const libHealthQ = useQuery({ queryKey: ['admin-library-health'], queryFn: api.libraryHealth, retry: false });
 
   const stats = statsQ.data;
   const requests = stats?.requests;
+  // Fix round 1: a tile labelled "7d" must show a 7d number - succeeded + failed
+  // over the last 7 days, not requests.total (all-time request count).
+  const requests7d = (requests?.succeeded_7d ?? 0) + (requests?.failed_7d ?? 0);
   const activeWanted = stats?.wanted.active ?? 0;
   const qualities: Record<string, number> = stats?.qualities ?? {};
   const qualityEntries = Object.entries(qualities).sort((a, b) => b[1] - a[1]);
@@ -46,11 +61,22 @@ export default function Overview() {
   const events = activityQ.data?.events ?? [];
   const releases = releasesQ.data?.releases ?? [];
 
+  const folders = storageQ.data?.folders ?? [];
+
+  const metrics = metricsQ.data;
+  const latencyRows = metrics?.latency ?? [];
+  const qualityRows = metrics?.quality ?? [];
+  const sourceRows = metrics?.sources ?? [];
+  const failureRows = metrics?.failures ?? [];
+  const uniqueSourceMap = new Map((metrics?.unique_sources ?? []).map((r) => [r.label, r.count]));
+  const noMetrics =
+    latencyRows.length === 0 && qualityRows.length === 0 && sourceRows.length === 0 && failureRows.length === 0;
+
   return (
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
-          value={statsQ.isLoading ? '-' : String(requests?.total ?? 0)}
+          value={statsQ.isLoading ? '-' : String(requests7d)}
           label="Requests 7d"
           sub={requests ? `${requests.succeeded_7d} ok / ${requests.failed_7d} fail` : undefined}
         />
@@ -116,6 +142,113 @@ export default function Overview() {
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
+          <div className="mb-3 text-sm font-semibold text-body">TorBox quota</div>
+          {quotaQ.isLoading ? (
+            <p className="text-xs text-muted">Loading…</p>
+          ) : !quotaQ.data ? (
+            <p className="text-xs text-muted">unavailable</p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between text-xs">
+                <span className="text-muted">createtorrent / hour</span>
+                <span className="font-mono text-body">
+                  {quotaQ.data.count} / {quotaQ.data.limit}
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
+                <div
+                  className="h-full rounded-full bg-accent"
+                  style={{
+                    width: `${Math.min(100, Math.round((100 * quotaQ.data.count) / (quotaQ.data.limit || 1)))}%`,
+                  }}
+                />
+              </div>
+              <div className="text-[11px] text-muted">resets in {formatCountdown(quotaQ.data.resets_in_sec)}</div>
+              {Object.keys(quotaQ.data.by_reason).length > 0 && (
+                <div className="space-y-1 pt-1">
+                  {Object.entries(quotaQ.data.by_reason)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([reason, n]) => (
+                      <div key={reason} className="flex items-center justify-between text-xs">
+                        <span className="text-muted">{reason}</span>
+                        <span className="font-mono text-body">{n}</span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+
+        <Card>
+          <div className="mb-3 text-sm font-semibold text-body">Metrics (30d)</div>
+          {metricsQ.isLoading ? (
+            <p className="text-xs text-muted">Loading…</p>
+          ) : noMetrics ? (
+            <p className="text-xs text-muted">No data yet</p>
+          ) : (
+            <div className="space-y-3">
+              {latencyRows.length > 0 && (
+                <div>
+                  <div className="mb-1 text-[11px] uppercase tracking-wide text-muted">Latency</div>
+                  <div className="space-y-1">
+                    {latencyRows.map((r) => (
+                      <div key={r.label} className="flex items-center justify-between text-xs">
+                        <span className="text-muted">{r.label}</span>
+                        <span className="font-mono text-body">{r.avg_real != null ? `${r.avg_real.toFixed(1)}s` : '-'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {qualityRows.length > 0 && (
+                <div>
+                  <div className="mb-1 text-[11px] uppercase tracking-wide text-muted">Quality added</div>
+                  <div className="space-y-1">
+                    {qualityRows.map((r) => (
+                      <div key={r.label} className="flex items-center justify-between text-xs">
+                        <span className="text-muted">{r.label}</span>
+                        <span className="font-mono text-body">{r.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {sourceRows.length > 0 && (
+                <div>
+                  <div className="mb-1 text-[11px] uppercase tracking-wide text-muted">Source win rate</div>
+                  <div className="space-y-1">
+                    {sourceRows.map((r) => (
+                      <div key={r.label} className="flex items-center justify-between text-xs">
+                        <span className="text-muted">{r.label}</span>
+                        <span className="font-mono text-body">
+                          {r.count} <span className="text-muted">({uniqueSourceMap.get(r.label) ?? 0} uniq)</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {failureRows.length > 0 && (
+                <div>
+                  <div className="mb-1 text-[11px] uppercase tracking-wide text-muted">Failures</div>
+                  <div className="space-y-1">
+                    {failureRows.map((r) => (
+                      <div key={r.label} className="flex items-center justify-between text-xs">
+                        <span className="text-muted">{r.label}</span>
+                        <span className="font-mono text-danger">{r.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
           <div className="mb-3 text-sm font-semibold text-body">Recent activity</div>
           {activityQ.isLoading ? (
             <p className="text-xs text-muted">Loading…</p>
@@ -152,6 +285,58 @@ export default function Overview() {
               >
                 Copy
               </button>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <div className="mb-3 text-sm font-semibold text-body">Top folders</div>
+          {storageQ.isLoading ? (
+            <p className="text-xs text-muted">Loading…</p>
+          ) : folders.length === 0 ? (
+            <p className="text-xs text-muted">Empty</p>
+          ) : (
+            <div className="space-y-1">
+              {folders.slice(0, 15).map((f) => (
+                <div key={f.path} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate text-muted">{f.path}</span>
+                  <span className="font-mono text-body">{f.count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card>
+          <div className="mb-3 text-sm font-semibold text-body">Library health</div>
+          {libHealthQ.isLoading ? (
+            <p className="text-xs text-muted">Loading…</p>
+          ) : !libHealthQ.data ? (
+            <p className="text-xs text-muted">unavailable</p>
+          ) : (
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <div className="font-mono text-lg text-body">{libHealthQ.data.strm_count}</div>
+                <div className="text-[11px] text-muted">.strm files</div>
+              </div>
+              <div>
+                <div className="font-mono text-lg text-body">{libHealthQ.data.db_count}</div>
+                <div className="text-[11px] text-muted">DB items</div>
+              </div>
+              <div>
+                <div className={`font-mono text-lg ${libHealthQ.data.strm_without_db > 0 ? 'text-warn' : 'text-ok'}`}>
+                  {libHealthQ.data.strm_without_db}
+                </div>
+                <div className="text-[11px] text-muted">strm w/o DB</div>
+              </div>
+              <div>
+                <div className={`font-mono text-lg ${libHealthQ.data.db_without_strm > 0 ? 'text-warn' : 'text-ok'}`}>
+                  {libHealthQ.data.db_without_strm}
+                </div>
+                <div className="text-[11px] text-muted">DB w/o strm</div>
+              </div>
             </div>
           )}
         </Card>

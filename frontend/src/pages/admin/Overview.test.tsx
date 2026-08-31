@@ -43,6 +43,27 @@ vi.mock('../../api', async () => {
           { version: '0.7.6', date: '2026-08-10', notes: ['Earlier release'] },
         ],
       }),
+      torboxQuota: () => Promise.resolve({
+        count: 5, limit: 60, window_sec: 3600,
+        by_reason: { webhook: 3, manual: 9 },
+        oldest_ts: 1700000000, resets_in_sec: 125,
+      }),
+      metricsSummary: () => Promise.resolve({
+        quality: [{ label: '1080p', count: 4, avg_real: null, sum_int: null }],
+        sources: [{ label: 'Zilean', count: 10, avg_real: null, sum_int: null }],
+        unique_sources: [{ label: 'Zilean', count: 3, avg_real: null, sum_int: null }],
+        latency: [{ label: 'movie', count: 1, avg_real: 12.34, sum_int: null }],
+        failures: [],
+      }),
+      storage: () => Promise.resolve({
+        folders: [
+          { path: 'movies/Foo (2024)', count: 42 },
+          { path: 'series/Bar', count: 17 },
+        ],
+      }),
+      libraryHealth: () => Promise.resolve({
+        strm_count: 300, db_count: 295, strm_without_db: 5, db_without_strm: 0,
+      }),
       session: () => Promise.resolve({ authenticated: true, user: { username: 'adam', role: 'admin' } }),
     },
   };
@@ -57,8 +78,9 @@ describe('Overview tab', () => {
   it('renders the four metric tiles with real, substituted values', async () => {
     renderIt();
     await waitFor(() => {
-      // Requests 7d: total as the value, succeeded/failed as the sub-line
-      expect(screen.getByText('55')).toBeInTheDocument();
+      // Requests 7d: succeeded_7d + failed_7d as the value (fix round 1;
+      // requests.total is all-time, not a 7d figure), sub-line unchanged.
+      expect(screen.getByText('48')).toBeInTheDocument();
       expect(screen.getByText('41 ok / 7 fail')).toBeInTheDocument();
       // Queue depth: retry-queue rows (3) + active wanted (9)
       expect(screen.getByText('12')).toBeInTheDocument();
@@ -72,9 +94,23 @@ describe('Overview tab', () => {
 
   it('never resurrects the dropped mockup tiles', async () => {
     renderIt();
-    await waitFor(() => expect(screen.getByText('55')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('48')).toBeInTheDocument());
     expect(screen.queryByText(/Active streams/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Cache hit rate/i)).not.toBeInTheDocument();
+  });
+
+  it('ports the four fix-round-1 cards: TorBox quota, metrics, storage, library health', async () => {
+    renderIt();
+    await waitFor(() => {
+      expect(screen.getByText('TorBox quota')).toBeInTheDocument();
+      expect(screen.getByText('5 / 60')).toBeInTheDocument();
+      expect(screen.getByText('Metrics (30d)')).toBeInTheDocument();
+      expect(screen.getByText('12.3s')).toBeInTheDocument();
+      expect(screen.getByText('Top folders')).toBeInTheDocument();
+      expect(screen.getByText('movies/Foo (2024)')).toBeInTheDocument();
+      expect(screen.getByText('Library health')).toBeInTheDocument();
+      expect(screen.getByText('300')).toBeInTheDocument();
+    });
   });
 
   it('shows one status dot per health service', async () => {
