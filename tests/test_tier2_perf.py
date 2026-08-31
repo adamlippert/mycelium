@@ -117,6 +117,17 @@ def test_reconcile_is_debounced_between_calls():
     assert db.reconcile_wanted_episodes(force=True) == 1
 
 
+def test_reconcile_is_due_even_at_low_machine_uptime(monkeypatch):
+    """monotonic() is seconds since boot. With a 0.0 "never ran" sentinel the
+    first reconcile after a fresh boot fell inside the debounce window and
+    was skipped, which is how CI (fresh VMs) caught what weeks-of-uptime dev
+    machines never would."""
+    monkeypatch.setattr(db.time, "monotonic", lambda: 5.0)
+    db._reconcile_last.clear()
+    assert db._reconcile_due("episodes", False) is True
+    assert db._reconcile_due("episodes", False) is False
+
+
 def test_reconcile_movies_is_debounced_too():
     assert db.reconcile_wanted_movies() == 0
     src = _src("db.py")

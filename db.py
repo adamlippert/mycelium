@@ -679,7 +679,12 @@ def _reconcile_due(key: str, force: bool) -> bool:
         return True
     with _reconcile_lock:
         now = time.monotonic()
-        if now - _reconcile_last.get(key, 0.0) < _RECONCILE_DEBOUNCE_SEC:
+        # None means "never ran". A 0.0 sentinel would compare against
+        # monotonic time, which is seconds since BOOT: on a machine up for
+        # less than the debounce window, the very first reconcile would be
+        # wrongly skipped (caught by CI, whose runners boot fresh).
+        last = _reconcile_last.get(key)
+        if last is not None and now - last < _RECONCILE_DEBOUNCE_SEC:
             return False
         _reconcile_last[key] = now
         return True
