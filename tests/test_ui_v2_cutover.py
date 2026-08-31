@@ -85,3 +85,54 @@ def test_spa_index_embeds_login_flags_for_the_pre_auth_login_page():
     body = m.group(0)
     for meta in ("oidc-enabled", "oidc-provider", "password-enabled", "app-version"):
         assert meta in body, f"_spa_index does not inject the {meta} meta tag"
+
+
+def test_spa_index_placeholders_survive_in_both_built_and_source_html():
+    """_spa_index() injects five values into the SPA shell with a literal
+    str.replace() against exact meta-tag placeholders. Nothing asserts those
+    placeholders survive a Vite upgrade or a reformatted <head>: if a rebuild
+    changes whitespace, attribute order, or self-closing style on any of
+    these tags, every replace() call silently becomes a no-op. Flag-on, that
+    means the csrf-token meta stays empty and every POST /login 400s, with
+    the only recovery being the /login/classic escape hatch. This test reads
+    _spa_index() to derive the exact placeholder literals it replaces, then
+    asserts each one appears verbatim in both frontend/index.html (the
+    source Vite builds from) and static/app/index.html (the checked-in
+    build Docker actually serves), so a drift between the two - or a
+    reformatting build - fails loudly here instead of silently in
+    production.
+    """
+    app_src = _src("app.py")
+    m = re.search(r"def _spa_index\(.*?\n(?=@app\.|\ndef )", app_src, re.S)
+    assert m, "_spa_index"
+    body = m.group(0)
+
+    placeholders = re.findall(r"html\.replace\(\s*\n\s*(['\"].*?['\"]),", body)
+    assert len(placeholders) == 5, (
+        f"expected 5 html.replace() calls in _spa_index, found {len(placeholders)}"
+    )
+    literals = [eval(p) for p in placeholders]  # noqa: S307 - trusted literal from our own source
+
+    expected = [
+        '<meta name="csrf-token" content="" />',
+        '<meta name="oidc-enabled" content="false" />',
+        '<meta name="oidc-provider" content="" />',
+        '<meta name="password-enabled" content="true" />',
+        '<meta name="app-version" content="" />',
+    ]
+    assert sorted(literals) == sorted(expected), (
+        "the placeholder literals in _spa_index() changed; update this "
+        "test's expected list to match"
+    )
+
+    for name in ("frontend/index.html", "static/app/index.html"):
+        html = _src(name)
+        for literal in literals:
+            assert literal in html, (
+                f"{name} is missing the exact placeholder {literal!r} that "
+                "_spa_index() replaces - a rebuild reformatted the head, "
+                "and every str.replace() in _spa_index() will now silently "
+                "no-op. With UI_V2 on this leaves the csrf-token meta "
+                "empty and every POST /login returns 400, recoverable "
+                "only via /login/classic."
+            )

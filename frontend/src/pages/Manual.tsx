@@ -70,7 +70,7 @@ function headingText(el: Element): string {
  * Deep-clones the fetched document's content into a live DOM node, node by
  * node, rather than assigning a serialized string via innerHTML. This drops
  * <script>/<style> elements outright, strips on* handler attributes and
- * javascript: URLs from everything else, and skips the install guide's
+ * javascript: URLs from href/src attributes, and skips the install guide's
  * Dutch/NAS toggle variants: the source page's own script defaulted to
  * English + Proxmox on load (`setLang('en'); setPlatform('proxmox')`), and
  * since that script is stripped we bake the same default in statically
