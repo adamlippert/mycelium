@@ -1,5 +1,6 @@
 import logging
-from datetime import datetime, timedelta
+import threading
+import time
 from pathlib import Path
 
 import db
@@ -7,59 +8,64 @@ from config import MEDIA_PATH
 
 log = logging.getLogger(__name__)
 
-
-def _parse_ts(ts: str | None) -> datetime | None:
-    if not ts:
-        return None
-    try:
-        return datetime.strptime(ts[:19], "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        return None
+# The admin Overview polls the overview every 30s and the Library page loads
+# it too; the media-tree walk below is the single most expensive per-call
+# piece of work in the app, so all pollers share one cached result.
+OVERVIEW_CACHE_TTL_SEC = 60
+_overview_cache: dict = {"ts": 0.0, "data": None}
+_overview_lock = threading.Lock()
 
 
-def get_overview() -> dict:
-    requests = db.get_recent(1000)
-    monitored = db.get_all_monitored_series()
-    wanted = db.get_all_wanted_episodes()
-    movies = db.get_media_items("movie")
+def _count_strms(base: Path) -> int:
+    if not base.exists():
+        return 0
+    return sum(1 for _ in base.rglob("*.strm"))
 
+
+def _build_overview() -> dict:
     media = Path(MEDIA_PATH)
-    movie_strms = list((media / "movies").rglob("*.strm")) if (media / "movies").exists() else []
-    series_strms = list((media / "series").rglob("*.strm")) if (media / "series").exists() else []
-
-    # Success rate over last 7 days
-    cutoff = datetime.utcnow() - timedelta(days=7)
-    recent = [r for r in requests if (_parse_ts(r.get("created_at")) or datetime.min) > cutoff]
-    succeeded = sum(1 for r in recent if r["status"] == "success")
-    failed = sum(1 for r in recent if r["status"] == "failed")
-    success_rate = round(100 * succeeded / max(1, succeeded + failed), 1)
-
-    # Quality distribution
-    quality_counts: dict[str, int] = {}
-    for r in requests:
-        if r["status"] == "success" and r.get("quality"):
-            quality_counts[r["quality"]] = quality_counts.get(r["quality"], 0) + 1
+    req = db.get_request_stats(days=7)
+    wanted = db.count_wanted_episodes_by_status()
+    success_rate = round(
+        100 * req["succeeded"] / max(1, req["succeeded"] + req["failed"]), 1)
 
     return {
         "library": {
-            "movie_count": len(movie_strms),
-            "episode_count": len(series_strms),
-            "series_count": len(monitored),
+            "movie_count": _count_strms(media / "movies"),
+            "episode_count": _count_strms(media / "series"),
+            "series_count": db.count_monitored_series(),
         },
         "requests": {
-            "total": len(requests),
-            "succeeded_7d": succeeded,
-            "failed_7d": failed,
+            "total": req["total"],
+            "succeeded_7d": req["succeeded"],
+            "failed_7d": req["failed"],
             "success_rate_7d": success_rate,
         },
         "wanted": {
-            "active": len([w for w in wanted if w["status"] == "wanted"]),
-            "found": len([w for w in wanted if w["status"] == "found"]),
-            "give_up": len([w for w in wanted if w["status"] == "give_up"]),
+            "active": wanted.get("wanted", 0),
+            "found": wanted.get("found", 0),
+            "give_up": wanted.get("give_up", 0),
         },
-        "movies_pending": len([m for m in movies if not m.get("strm_found")]),
-        "qualities": quality_counts,
+        "movies_pending": db.count_media_items_pending("movie"),
+        "qualities": req["qualities"],
     }
+
+
+def get_overview(force: bool = False) -> dict:
+    now = time.monotonic()
+    if not force and _overview_cache["data"] is not None \
+            and now - _overview_cache["ts"] < OVERVIEW_CACHE_TTL_SEC:
+        return _overview_cache["data"]
+    with _overview_lock:
+        # Re-check under the lock: another poller may have just rebuilt it.
+        now = time.monotonic()
+        if not force and _overview_cache["data"] is not None \
+                and now - _overview_cache["ts"] < OVERVIEW_CACHE_TTL_SEC:
+            return _overview_cache["data"]
+        data = _build_overview()
+        _overview_cache["data"] = data
+        _overview_cache["ts"] = time.monotonic()
+        return data
 
 
 def get_storage_breakdown(limit: int = 20) -> list[dict]:

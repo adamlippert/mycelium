@@ -2,6 +2,16 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **The stats overview is computed from aggregate SQL and cached for 60 seconds.** It loaded four entire tables into Python and walked the whole media tree twice per call, and the admin Overview polls it every 30 seconds; all pollers now share one cached result. Two displayed numbers get more accurate along the way: the total request count and the quality histogram were both silently capped at the 1,000 most recent requests and now cover everything.
+- **`virtual_items` is indexed on the columns it is filtered on** (`imdb_id` plus `media_type`, and `info_hash`), and `media_items` on `media_type`. Several repair and reconcile paths ran full-table scans per item without these.
+- **Wanted-episode reconciliation is batched and debounced.** The connection runs in autocommit mode, so its per-episode UPDATE loop took the writer lock once per episode inside a GET handler; the loop now runs inside one transaction. Both reconcile functions also run at most once per minute no matter how many users are loading the Library, since they are repair work rather than something a page load needs freshly computed.
+- **The series-episodes endpoint caches its response for 30 seconds** instead of walking every show and season folder on disk for every viewer, and a purge invalidates the cache immediately so removed titles do not linger.
+- **The strm repair job scales linearly.** Pass 2 checked each `.strm` file's token with its own SELECT; it now checks against one snapshot query, falling back to the database on a miss so tokens created mid-run are not misread as orphaned. Pass 1 re-listed the entire library root for every folder that had lost its `.strm`, which went quadratic when a batch broke at once; it now consults a sibling map built in a single pass.
+
 ## [0.8.5] - 2026-08-31
 
 ### Changed

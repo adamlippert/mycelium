@@ -2223,20 +2223,18 @@ def _repair_expired_strms_locked(media_type: str = "movie") -> dict:
             return False
 
     # ── Pass 1: folders with NO .strm file ────────────────────────────────────
-    for movie_dir in root.iterdir():
-        if not movie_dir.is_dir():
-            continue
+    # One listing of root up front: which normalised titles already own a
+    # .strm. Re-walking the whole root per strm-less folder went quadratic
+    # the moment a batch of folders broke at once.
+    root_dirs = [d for d in root.iterdir() if d.is_dir()]
+    strm_norms = {_norm_title(d.name) for d in root_dirs if any(d.glob("*.strm"))}
+    for movie_dir in root_dirs:
         strms = list(movie_dir.glob("*.strm"))
         if strms:
             continue  # has at least one .strm  -  handled in pass 2
         # Skip if a sibling folder with the same normalised title already has a .strm.
         norm = _norm_title(movie_dir.name)
-        if any(
-            sib.is_dir() and sib != movie_dir
-            and _norm_title(sib.name) == norm
-            and any(sib.glob("*.strm"))
-            for sib in root.iterdir()
-        ):
+        if norm in strm_norms:
             log.debug("repair_strms: skipping %s  -  duplicate of sibling with .strm", movie_dir.name)
             skipped += 1
             continue
@@ -2250,12 +2248,18 @@ def _repair_expired_strms_locked(media_type: str = "movie") -> dict:
         expected_strm = movie_dir / f"{movie_dir.name}.strm"
         if _relink(imdb_id, expected_strm):
             relinked += 1
+            # This folder now owns a .strm; later duplicates of it skip.
+            strm_norms.add(norm)
         else:
             log.info("repair_strms: no virtual_item for %s  -  requeuing", movie_dir.name)
             _requeue(imdb_id, movie_dir.name, None)
             requeued += 1
 
     # ── Pass 2: existing .strm files that are broken ──────────────────────────
+    # Token validity is checked against one snapshot instead of one SELECT
+    # per file; a miss re-checks the DB so tokens created mid-run (by the
+    # requeue threads above) are not misread as orphaned.
+    valid_tokens = db.get_all_virtual_item_tokens()
     for strm_path in root.rglob("*.strm"):
         scanned += 1
         try:
@@ -2268,7 +2272,7 @@ def _repair_expired_strms_locked(media_type: str = "movie") -> dict:
         if url.startswith(catbox_base):
             m = _re.search(r"/stream/([a-f0-9]{16})$", url)
             token = m.group(1) if m else None
-            if token and db.get_virtual_item(token):
+            if token and (token in valid_tokens or db.get_virtual_item(token)):
                 ok += 1
                 continue
             orphaned += 1

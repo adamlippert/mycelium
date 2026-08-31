@@ -4,6 +4,7 @@ import logging
 import os.path as _path
 import re
 import threading
+import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, Response, abort, flash, jsonify, redirect, render_template, request, stream_with_context, url_for
@@ -2231,6 +2232,7 @@ def ui_api_purge_request(row_id: int):
     imdb_id = rows[0]["imdb_id"]
     import cleanup
     result = cleanup.purge_title(imdb_id, row_id=row_id)
+    invalidate_series_episodes_cache()
     db.log_activity("purged", rows[0]["title"],
                     f"{result['strms']} strm(s) removed ({imdb_id})", True)
     return jsonify(ok=True, **result)
@@ -2853,9 +2855,37 @@ def ui_api_library_movies():
                    page=page, page_size=page_size)
 
 
+# The series tree walk below touches every show and season folder on disk,
+# so concurrent viewers share one result instead of each walking the tree.
+_SERIES_EPISODES_TTL_SEC = 30
+_series_episodes_cache: dict = {"ts": 0.0, "data": None}
+_series_episodes_lock = threading.Lock()
+
+
+def invalidate_series_episodes_cache() -> None:
+    _series_episodes_cache["data"] = None
+    _series_episodes_cache["ts"] = 0.0
+
+
 @app.get("/ui/api/library/series-episodes")
 def ui_api_library_series_episodes():
     """Return available episodes per series with wanted info."""
+    now = time.monotonic()
+    if _series_episodes_cache["data"] is not None \
+            and now - _series_episodes_cache["ts"] < _SERIES_EPISODES_TTL_SEC:
+        return jsonify(series=_series_episodes_cache["data"])
+    with _series_episodes_lock:
+        now = time.monotonic()
+        if _series_episodes_cache["data"] is not None \
+                and now - _series_episodes_cache["ts"] < _SERIES_EPISODES_TTL_SEC:
+            return jsonify(series=_series_episodes_cache["data"])
+        out = _build_series_episodes()
+        _series_episodes_cache["data"] = out
+        _series_episodes_cache["ts"] = time.monotonic()
+        return jsonify(series=out)
+
+
+def _build_series_episodes() -> list[dict]:
     db.reconcile_wanted_episodes()
     import re as _re
     from pathlib import Path as _Path
@@ -2882,7 +2912,7 @@ def ui_api_library_series_episodes():
 
     out = []
     if not series_dir.is_dir():
-        return jsonify(series=[])
+        return []
     for show in sorted(series_dir.iterdir()):
         if not show.is_dir():
             continue
@@ -2942,7 +2972,7 @@ def ui_api_library_series_episodes():
                 "seasons": seasons,
                 "missing": missing,
             })
-    return jsonify(series=out)
+    return out
 
 
 @app.get("/ui/api/torbox-quota")

@@ -1,6 +1,7 @@
 import logging
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 
 from config import DB_PATH
@@ -211,6 +212,8 @@ CREATE INDEX IF NOT EXISTS idx_wanted_imdb                ON wanted_episodes(imd
 CREATE INDEX IF NOT EXISTS idx_media_items_status         ON media_items(status);
 CREATE INDEX IF NOT EXISTS idx_failed_hashes_failcount    ON failed_hashes(fail_count);
 CREATE INDEX IF NOT EXISTS idx_virtual_items_torbox       ON virtual_items(torbox_id);
+CREATE INDEX IF NOT EXISTS idx_virtual_items_info_hash    ON virtual_items(info_hash);
+CREATE INDEX IF NOT EXISTS idx_media_items_type           ON media_items(media_type);
 CREATE INDEX IF NOT EXISTS idx_virtual_items_lastplayed   ON virtual_items(last_played);
 CREATE INDEX IF NOT EXISTS idx_metric_events_metric_time  ON metric_events(metric, created_at);
 CREATE INDEX IF NOT EXISTS idx_metric_events_created      ON metric_events(created_at);
@@ -360,6 +363,10 @@ def _migrate() -> None:
                     log.info("Migration: added virtual_items.%s", col)
                 except Exception as _e:
                     log.warning("Migration: could not add virtual_items.%s: %s", col, _e)
+        # imdb_id is a migrated column, so its index is created here rather
+        # than in the base DDL (which runs before this on a fresh database).
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_virtual_items_imdb_media "
+                     "ON virtual_items(imdb_id, media_type)")
 
         req_cols = {r["name"] for r in conn.execute("PRAGMA table_info(requests)")}
         if "tmdb_id" not in req_cols:
@@ -613,8 +620,75 @@ def count_wanted_episodes() -> int:
         return row["n"]
 
 
-def reconcile_wanted_movies() -> int:
+def count_wanted_episodes_by_status() -> dict[str, int]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT status, COUNT(*) AS n FROM wanted_episodes GROUP BY status"
+        ).fetchall()
+        return {r["status"]: r["n"] for r in rows}
+
+
+def count_monitored_series() -> int:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) AS n FROM monitored_series").fetchone()["n"]
+
+
+def count_media_items_pending(media_type: str = "movie") -> int:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) AS n FROM media_items "
+            "WHERE media_type=? AND strm_found=0",
+            (media_type,),
+        ).fetchone()["n"]
+
+
+def get_request_stats(days: int = 7) -> dict:
+    """Aggregates for the stats overview: total request count, the succeeded/
+    failed split inside the window, and the quality histogram of successes."""
+    with _connect() as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) AS n FROM requests").fetchone()["n"]
+        row = conn.execute(
+            "SELECT COALESCE(SUM(status='success'), 0) AS s, "
+            "COALESCE(SUM(status='failed'), 0) AS f "
+            "FROM requests WHERE created_at > datetime('now', ?)",
+            (f"-{days} days",),
+        ).fetchone()
+        qualities = {
+            r["quality"]: r["n"] for r in conn.execute(
+                "SELECT quality, COUNT(*) AS n FROM requests "
+                "WHERE status='success' AND quality IS NOT NULL AND quality != '' "
+                "GROUP BY quality"
+            ).fetchall()
+        }
+        return {"total": total, "succeeded": row["s"], "failed": row["f"],
+                "qualities": qualities}
+
+
+# Reconciliation runs from GET handlers on the busiest Library/Wanted pages.
+# It is repair work, not something a page load needs freshly computed, so it
+# runs at most once per window regardless of how many users are navigating.
+_RECONCILE_DEBOUNCE_SEC = 60
+_reconcile_last: dict[str, float] = {}
+_reconcile_lock = threading.Lock()
+
+
+def _reconcile_due(key: str, force: bool) -> bool:
+    if force:
+        return True
+    with _reconcile_lock:
+        now = time.monotonic()
+        if now - _reconcile_last.get(key, 0.0) < _RECONCILE_DEBOUNCE_SEC:
+            return False
+        _reconcile_last[key] = now
+        return True
+
+
+def reconcile_wanted_movies(force: bool = False) -> int:
     """Mark wanted movies as success if they already have a virtual_item (strm)."""
+    if not _reconcile_due("movies", force):
+        return 0
     with _connect() as conn:
         cur = conn.execute(
             "UPDATE requests SET status='success' "
@@ -626,8 +700,10 @@ def reconcile_wanted_movies() -> int:
         return cur.rowcount
 
 
-def reconcile_wanted_episodes() -> int:
+def reconcile_wanted_episodes(force: bool = False) -> int:
     """Mark wanted episodes as found if a matching strm file exists in virtual_items."""
+    if not _reconcile_due("episodes", force):
+        return 0
     import re as _re
     _EP_RE = _re.compile(r'[Ss](\d{1,2})[Ee](\d{1,3})')
     with _connect() as conn:
@@ -642,16 +718,18 @@ def reconcile_wanted_episodes() -> int:
                 have.add((v["imdb_id"], int(m.group(1)), int(m.group(2))))
         if not have:
             return 0
-        updated = 0
-        for imdb_id, season, episode in have:
-            cur = conn.execute(
-                "UPDATE wanted_episodes SET status='found' "
-                "WHERE imdb_id=? AND season=? AND episode=? AND status='wanted'",
-                (imdb_id, season, episode),
-            )
-            updated += cur.rowcount
-        conn.commit()
-        return updated
+        # The connection is in autocommit mode; without an explicit
+        # transaction every UPDATE takes the writer lock and syncs the WAL
+        # on its own, which serialized the whole app behind this loop.
+        before = conn.total_changes
+        conn.execute("BEGIN IMMEDIATE")
+        conn.executemany(
+            "UPDATE wanted_episodes SET status='found' "
+            "WHERE imdb_id=? AND season=? AND episode=? AND status='wanted'",
+            list(have),
+        )
+        conn.execute("COMMIT")
+        return conn.total_changes - before
 
 
 # ── monitored_series ──────────────────────────────────────────────────────────
@@ -1002,6 +1080,14 @@ def get_upgradeable_virtual_items() -> list[dict]:
         ).fetchall()
     ranks = {"2160p": 4, "1080p": 3, "720p": 2, "480p": 1}
     return [dict(r) for r in rows if ranks.get((r["quality"] or "?"), 0) < 4]
+
+
+def get_all_virtual_item_tokens() -> set[str]:
+    """Every token, as a set. One query for jobs that would otherwise look
+    tokens up one .strm file at a time."""
+    with _connect() as conn:
+        rows = conn.execute("SELECT token FROM virtual_items").fetchall()
+        return {r["token"] for r in rows}
 
 
 def get_virtual_item(token: str) -> dict | None:
