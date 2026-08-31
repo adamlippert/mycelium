@@ -1156,6 +1156,16 @@ def ui_api_scraper_health():
     return jsonify(scrapers=scraper_metrics.get_health(active))
 
 
+@app.get("/ui/api/logs")
+def ui_api_logs():
+    """Structured log feed for the admin Logs tab; polls at 5s while visible."""
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    limit = request.args.get("limit", default=200, type=int)
+    level = request.args.get("level") or None
+    return jsonify(lines=log_buffer.get_structured(limit=limit, min_level=level))
+
+
 @app.get("/ui/api/torbox-list")
 def ui_api_torbox_list():
     try:

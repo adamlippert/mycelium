@@ -213,6 +213,13 @@ export const api = {
   myRequests: () => http<{ items: any[] }>('/ui/api/user-requests?mine=1'),
   myQuota: () => http<QuotaInfo>('/ui/api/me/quota'),
   scraperHealth: () => http<ScraperHealth>('/ui/api/scraper-health'),
+  adminLogs: (limit?: number, level?: string) => {
+    const params = new URLSearchParams();
+    if (limit !== undefined) params.set('limit', String(limit));
+    if (level) params.set('level', level);
+    const qs = params.toString();
+    return http<{ lines: LogLine[] }>(`/ui/api/logs${qs ? `?${qs}` : ''}`);
+  },
 
   // Arr import
   arrTest: (kind: 'radarr' | 'sonarr') =>
@@ -362,6 +369,8 @@ export type ScraperHealth = {
     samples: number;
   }[];
 };
+
+export type LogLine = { time: string; level: string; name: string; msg: string };
 
 export interface SettingItem {
   key: string;
