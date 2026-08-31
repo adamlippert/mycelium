@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import Users from './Users';
 
 function Stub() {
   return <p className="text-muted text-sm">Coming in this plan.</p>;
@@ -7,7 +8,7 @@ function Stub() {
 
 export const ADMIN_TABS: { id: string; label: string; component: ComponentType }[] = [
   { id: 'overview', label: 'Overview', component: Stub },
-  { id: 'users', label: 'Users', component: Stub },
+  { id: 'users', label: 'Users', component: Users },
   { id: 'requests', label: 'Requests', component: Stub },
   { id: 'filter-rules', label: 'Filter rules', component: Stub },
   { id: 'scrapers', label: 'Scrapers', component: Stub },

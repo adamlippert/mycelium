@@ -70,12 +70,12 @@ A control the map does not name gets the best-fitting tab plus a
 
 ## Users
 
-- [ ] Users: Create user card (username, password, role select user/admin, auto-approve select) -> Jinja `createUser()` (`POST /ui/api/users/create`) **and** Admin.tsx `CreateUserForm` (username/password inputs, role select, auto-approve checkbox, same endpoint via `api.createUser`) -> planned home: Users (map: "Admin.tsx users CRUD"; dual source, one line)
-- [ ] Users: all-users table (username, role, auto-approve indicator, enabled indicator, last login) -> Jinja `loadUsersTab()` (`GET /ui/api/users`) **and** Admin.tsx's users table (`useQuery(api.users)`) -> planned home: Users (dual source)
-- [ ] Users: Auto-approve toggle per user -> Jinja `toggleAutoApprove()` **and** Admin.tsx `Toggle` component wired to `updateMut` -> both call `POST /ui/api/users/<id>/update` -> planned home: Users (dual source; route is a template-literal fetch, `` `/ui/api/users/${id}/update` ``, in both sources)
-- [ ] Users: Enabled toggle per user -> Jinja `toggleEnabled()` **and** Admin.tsx `Toggle` component wired to `updateMut` -> both call `POST /ui/api/users/<id>/update` -> planned home: Users (dual source)
-- [ ] Users: plugin-contributed per-user field toggles (dynamic columns from `GET /ui/api/plugins` `user_fields`/`admin_fields`) -> Jinja `togglePluginField()` **and** Admin.tsx's `pluginUserFields` toggle cells wired to `updateMut` -> both call `POST /ui/api/users/<id>/update` -> planned home: Users (dual source)
-- [ ] Users: Delete user button (confirm) -> Jinja `deleteUser()` (invoked via a single-quoted `onclick='deleteUser(...)'` attribute so it does not match the brief's double-quote grep) **and** Admin.tsx's Delete button wired to `deleteMut` -> both call `POST /ui/api/users/<id>/delete` -> planned home: Users (dual source; route is a template-literal fetch in both sources)
+- [x] Users: Create user card (username, password, role select user/admin, auto-approve select) -> Jinja `createUser()` (`POST /ui/api/users/create`) **and** Admin.tsx `CreateUserForm` (username/password inputs, role select, auto-approve checkbox, same endpoint via `api.createUser`) -> planned home: Users (map: "Admin.tsx users CRUD"; dual source, one line)
+- [x] Users: all-users table (username, role, auto-approve indicator, enabled indicator, last login) -> Jinja `loadUsersTab()` (`GET /ui/api/users`) **and** Admin.tsx's users table (`useQuery(api.users)`) -> planned home: Users (dual source)
+- [x] Users: Auto-approve toggle per user -> Jinja `toggleAutoApprove()` **and** Admin.tsx `Toggle` component wired to `updateMut` -> both call `POST /ui/api/users/<id>/update` -> planned home: Users (dual source; route is a template-literal fetch, `` `/ui/api/users/${id}/update` ``, in both sources)
+- [x] Users: Enabled toggle per user -> Jinja `toggleEnabled()` **and** Admin.tsx `Toggle` component wired to `updateMut` -> both call `POST /ui/api/users/<id>/update` -> planned home: Users (dual source)
+- [x] Users: plugin-contributed per-user field toggles (dynamic columns from `GET /ui/api/plugins` `user_fields`/`admin_fields`) -> Jinja `togglePluginField()` **and** Admin.tsx's `pluginUserFields` toggle cells wired to `updateMut` -> both call `POST /ui/api/users/<id>/update` -> planned home: Users (dual source)
+- [x] Users: Delete user button (confirm) -> Jinja `deleteUser()` (invoked via a single-quoted `onclick='deleteUser(...)'` attribute so it does not match the brief's double-quote grep) **and** Admin.tsx's Delete button wired to `deleteMut` -> both call `POST /ui/api/users/<id>/delete` -> planned home: Users (dual source; route is a template-literal fetch in both sources)
 
 ## Filter rules
 

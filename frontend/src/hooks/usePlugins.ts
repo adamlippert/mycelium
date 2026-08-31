@@ -38,6 +38,7 @@ export interface PluginMeta {
   version:           string
   description:       string
   user_fields:       string[]
+  admin_fields?:     string[]
   user_field_labels: Record<string, string>
   settings_ui?:      PluginSettingsUi
 }
