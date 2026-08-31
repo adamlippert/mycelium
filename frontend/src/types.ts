@@ -95,6 +95,9 @@ export interface UserRequest {
 export interface SessionInfo {
   authenticated: boolean;
   jellyfin_url?: string | null;
+  oidc_enabled?: boolean;
+  oidc_provider?: string;
+  password_enabled?: boolean;
   user?: {
     id: number;
     username: string;

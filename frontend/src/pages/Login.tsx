@@ -1,80 +1,128 @@
-import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { api, csrfToken } from '../api';
+
+/** The ?next= param, sanitised the same way the server sanitises the
+ * submitted "next" form field (login_submit in app.py): must start with a
+ * single "/", otherwise treated as absent. Returns '' when absent so the
+ * OIDC link can tell "no next" apart from "next is /". */
+function rawNext(search: string): string {
+  const raw = new URLSearchParams(search).get('next') || '';
+  if (!raw.startsWith('/') || raw.startsWith('//')) return '';
+  return raw;
+}
+
+/** Mirrors templates/login.html: error=oidc gets its own message, any other
+ * truthy error value is a generic invalid-credentials banner. */
+function errorMessage(search: string): string | null {
+  const err = new URLSearchParams(search).get('error');
+  if (!err) return null;
+  if (err === 'oidc') return 'SSO sign-in failed. Try again or use password.';
+  return 'Invalid credentials.';
+}
 
 export default function Login() {
-  const [error, setError] = useState<string | null>(null);
-  const params = new URLSearchParams(window.location.search);
-  const errFromQuery = params.get('error');
+  const location = useLocation();
+  const raw = rawNext(location.search);
+  const next = raw || '/';
+  const error = errorMessage(location.search);
+  const flags = api.loginFlags();
+  const oidcHref = raw ? `/login/oidc?next=${encodeURIComponent(raw)}` : '/login/oidc';
+  const showOrDivider = flags.oidcEnabled && flags.passwordEnabled;
+  const showPasswordForm = flags.passwordEnabled || !flags.oidcEnabled;
+
   return (
-    <div className="min-h-screen bg-bg flex items-center justify-center p-6">
-      <div className="w-full max-w-sm bg-card rounded-2xl border border-border p-8 shadow-2xl">
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <svg width="32" height="32" viewBox="0 0 40 40" aria-hidden="true">
-            <g stroke="#22d3ee" strokeWidth="1.5" opacity="0.7" fill="none">
-              <line x1="10" y1="20" x2="30" y2="10"/>
-              <line x1="10" y1="20" x2="30" y2="30"/>
-              <line x1="30" y1="10" x2="30" y2="30"/>
-              <line x1="20" y1="5"  x2="10" y2="20"/>
-              <line x1="20" y1="35" x2="10" y2="20"/>
-            </g>
-            <circle cx="10" cy="20" r="3.5" fill="#0d9488"/>
-            <circle cx="30" cy="10" r="3"   fill="#22d3ee"/>
-            <circle cx="30" cy="30" r="3"   fill="#22d3ee"/>
-            <circle cx="20" cy="5"  r="2.2" fill="#5eead4"/>
-            <circle cx="20" cy="35" r="2.2" fill="#5eead4"/>
-          </svg>
-          <span className="font-mono font-bold text-2xl tracking-wide text-white">
-            myc<span className="text-[#22d3ee]">3</span>l<span className="text-[#22d3ee]">1</span>um
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-6">
+      <div className="pointer-events-none absolute inset-0 opacity-25 blur-3xl" aria-hidden="true">
+        <div className="absolute left-[22%] top-[28%] h-72 w-72 rounded-full bg-accent" />
+        <div className="absolute right-[18%] top-[8%] h-72 w-72 rounded-full bg-accent-light" />
+        <div className="absolute bottom-[6%] left-[42%] h-72 w-72 rounded-full bg-danger" />
+      </div>
+
+      <div className="relative w-full max-w-sm rounded-2xl border border-border bg-card/90 p-8 shadow-2xl backdrop-blur">
+        <div className="mb-6 flex flex-col items-center gap-3 text-center">
+          <span className="font-mono text-2xl font-bold tracking-wide text-white">
+            myc<span className="text-accent-pale">3</span>l<span className="text-accent-pale">1</span>um
           </span>
+          <span className="text-xs text-muted">the hidden network beneath your media library</span>
         </div>
-        <h1 className="text-lg font-semibold text-center mb-6">Sign in</h1>
-        {(error || errFromQuery) && (
-          <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded p-3 mb-4">
-            {error || errFromQuery}
+
+        {error && (
+          <div className="mb-4 rounded border border-danger/30 bg-danger/10 p-3 text-sm text-danger">
+            {error}
           </div>
         )}
-        <form method="post" action="/login" className="space-y-3">
-          <input type="hidden" name="next" value="/" />
-          <input
-            type="hidden"
-            name="csrf_token"
-            value={document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || ''}
-          />
-          <div>
-            <label className="block text-[10px] uppercase tracking-wider text-muted mb-1 font-semibold">
-              Username
-            </label>
-            <input
-              type="text"
-              name="username"
-              required
-              autoFocus
-              className="w-full bg-bg border border-border rounded-lg px-4 py-2.5 text-sm
-                          focus:outline-none focus:border-accent"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] uppercase tracking-wider text-muted mb-1 font-semibold">
-              Password
-            </label>
-            <input
-              type="password"
-              name="password"
-              required
-              className="w-full bg-bg border border-border rounded-lg px-4 py-2.5 text-sm
-                          focus:outline-none focus:border-accent"
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full bg-accent hover:bg-accent/90 py-2.5 rounded-lg font-semibold text-sm"
-          >
-            Sign in
-          </button>
-        </form>
-        <div className="text-center mt-4">
-          <a href="/login/oidc" className="text-xs text-muted hover:text-white">
-            Sign in with SSO
-          </a>
+
+        {flags.oidcEnabled && (
+          <>
+            <a
+              href={oidcHref}
+              className="mb-4 block rounded-lg border border-border bg-card-raised py-2.5 text-center
+                         text-sm font-semibold text-body hover:bg-card-raised/80"
+            >
+              Continue with {flags.oidcProvider}
+            </a>
+            {showOrDivider && (
+              <div className="mb-4 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                <span className="h-px flex-1 bg-border" />
+                or
+                <span className="h-px flex-1 bg-border" />
+              </div>
+            )}
+          </>
+        )}
+
+        {showPasswordForm && (
+          <form method="post" action="/login" className="space-y-3">
+            <input type="hidden" name="csrf_token" value={csrfToken()} />
+            <input type="hidden" name="next" value={next} />
+            <div>
+              <label
+                htmlFor="login-username"
+                className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted"
+              >
+                Username
+              </label>
+              <input
+                id="login-username"
+                type="text"
+                name="username"
+                autoComplete="username"
+                autoFocus
+                required
+                className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-white
+                           outline-none focus:border-accent"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="login-password"
+                className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted"
+              >
+                Password
+              </label>
+              <input
+                id="login-password"
+                type="password"
+                name="password"
+                autoComplete="current-password"
+                required
+                className="w-full rounded-lg border border-border bg-bg px-4 py-2.5 text-sm text-white
+                           outline-none focus:border-accent"
+              />
+            </div>
+            <button
+              type="submit"
+              className="mt-1 w-full rounded-lg bg-accent py-2.5 text-sm font-semibold text-white
+                         hover:bg-accent/90"
+            >
+              Sign in
+            </button>
+          </form>
+        )}
+
+        <div className="mt-6 flex items-center justify-center gap-2 font-mono text-[10px] text-muted">
+          <span className="h-1.5 w-1.5 rounded-full bg-ok" />
+          <span>mycelium{flags.appVersion ? ` v${flags.appVersion}` : ''} &middot; self-hosted</span>
         </div>
       </div>
     </div>

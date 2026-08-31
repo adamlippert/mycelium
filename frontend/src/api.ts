@@ -16,6 +16,27 @@ export const csrfToken = (): string => {
   return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '';
 };
 
+const metaContent = (name: string): string =>
+  document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)?.content || '';
+
+export interface LoginFlags {
+  oidcEnabled: boolean;
+  oidcProvider: string;
+  passwordEnabled: boolean;
+  appVersion: string;
+}
+
+/** Whether OIDC / password login are available, read from the meta tags
+ * _spa_index() embeds in the served HTML (see app.py). GET /ui/api/session
+ * cannot be the source here: it 401s for a logged-out visitor, which is
+ * exactly who the login page is for. */
+export const loginFlags = (): LoginFlags => ({
+  oidcEnabled: metaContent('oidc-enabled') === 'true',
+  oidcProvider: metaContent('oidc-provider'),
+  passwordEnabled: metaContent('password-enabled') !== 'false',
+  appVersion: metaContent('app-version'),
+});
+
 async function http<T>(url: string, init: RequestInit = {}): Promise<T> {
   const method = (init.method || 'GET').toUpperCase();
   const headers: Record<string, string> = {
@@ -228,6 +249,7 @@ export const api = {
 
   // Library / dashboard
   session: () => http<SessionInfo>('/ui/api/session'),
+  loginFlags,
   stats: () => http<any>('/ui/api/stats'),
   libraryStatusMap: () => http<Record<string, string>>('/ui/api/library/status-map'),
   libraryMovies: () => http<{ items: any[] }>('/ui/api/library/movies'),

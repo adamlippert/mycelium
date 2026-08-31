@@ -59,3 +59,29 @@ def test_the_auth_gate_redirect_targets_are_flag_agnostic():
     off it serves Jinja. The gate itself must not hardcode a classic path."""
     src = _src("auth.py")
     assert "/login/classic?" not in src.replace('"/login/classic"', "")
+
+
+def test_session_endpoint_exposes_login_flags():
+    """The React login page needs to know whether OIDC / password login are
+    available, same as templates/login.html does. /ui/api/session is behind
+    auth.py's before_request gate (401s for a logged-out visitor), so the
+    SPA login page actually reads these from meta tags _spa_index() embeds
+    (see _login_flags()) - but the session endpoint carries the same flags
+    for any consumer that already holds a session."""
+    src = _src("app.py")
+    m = re.search(r"def ui_api_session\(.*?\n(?=@app\.|\ndef )", src, re.S)
+    assert m, "ui_api_session"
+    body = m.group(0)
+    for flag in ("oidc_enabled", "oidc_provider", "password_enabled"):
+        assert flag in body, f"ui_api_session does not expose {flag}"
+
+
+def test_spa_index_embeds_login_flags_for_the_pre_auth_login_page():
+    """_spa_index() must inject the login flags as meta tags: it is the only
+    place the SPA gets them before a session cookie exists."""
+    src = _src("app.py")
+    m = re.search(r"def _spa_index\(.*?\n(?=@app\.|\ndef )", src, re.S)
+    assert m, "_spa_index"
+    body = m.group(0)
+    for meta in ("oidc-enabled", "oidc-provider", "password-enabled", "app-version"):
+        assert meta in body, f"_spa_index does not inject the {meta} meta tag"

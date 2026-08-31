@@ -162,14 +162,24 @@ auth.install_before_request(app)
 oidc.install(app)
 
 
+def _login_flags() -> dict:
+    """Whether OIDC / password login are available, and which provider.
+    Shared by the classic Jinja login page and the SPA (embedded as meta
+    tags by _spa_index, since /ui/api/session requires a session and this
+    is needed precisely when there isn't one yet)."""
+    return {
+        "oidc_enabled": oidc.is_enabled(),
+        "oidc_provider": oidc.provider_name(),
+        "password_enabled": bool(cfg.AUTH_ENABLED or
+                                  __import__("settings").get("AUTH_PASSWORD_HASH", "")),
+    }
+
+
 def _login_page():
     return render_template("login.html",
                             error=request.args.get("error"),
                             next=request.args.get("next", ""),
-                            oidc_enabled=oidc.is_enabled(),
-                            oidc_provider=oidc.provider_name(),
-                            password_enabled=bool(cfg.AUTH_ENABLED or
-                                                   __import__("settings").get("AUTH_PASSWORD_HASH", "")))
+                            **_login_flags())
 
 
 @app.get("/login")
@@ -2914,10 +2924,15 @@ def ui_api_torbox_quota():
 
 @app.get("/ui/api/session")
 def ui_api_session():
-    """Current session info: who am I, what role, do I have auto_approve."""
+    """Current session info: who am I, what role, do I have auto_approve.
+    Also carries the login flags (oidc_enabled, oidc_provider,
+    password_enabled) for consumers that already hold a session; the React
+    login page itself cannot rely on this endpoint (it 401s pre-auth) and
+    reads the same flags from the SPA index's meta tags instead, see
+    _login_flags() / _spa_index()."""
     rec = auth.current_user_record()
     if not rec:
-        return jsonify(authenticated=False, user=None)
+        return jsonify(authenticated=False, user=None, **_login_flags())
     import settings as _settings
     user: dict = {
         "id": rec.get("id"),
@@ -2931,7 +2946,8 @@ def ui_api_session():
     }
     user.update(plugin_loader.session_fields(rec))
     jellyfin_url = (_settings.get("JELLYFIN_URL") or cfg.JELLYFIN_URL or "").rstrip("/")
-    return jsonify(authenticated=True, user=user, jellyfin_url=jellyfin_url or None)
+    return jsonify(authenticated=True, user=user, jellyfin_url=jellyfin_url or None,
+                   **_login_flags())
 
 
 @app.get("/ui/api/plugins")
@@ -3369,8 +3385,11 @@ _SPA_ASSET_DIR = _os.path.join(_SPA_DIR, "assets")
 
 
 def _spa_index():
-    """Serve the SPA index with a fresh CSRF meta tag injected.
+    """Serve the SPA index with a fresh CSRF meta tag injected, plus the
+    login flags (oidc/password availability, app version) the React login
+    page needs before there is a session to read them from.
     Falls back to a friendly message if the build is missing."""
+    from markupsafe import escape
     index_path = _os.path.join(_SPA_DIR, "index.html")
     if not _os.path.exists(index_path):
         return (
@@ -3385,6 +3404,23 @@ def _spa_index():
     html = html.replace(
         '<meta name="csrf-token" content="" />',
         f'<meta name="csrf-token" content="{token}" />',
+    )
+    flags = _login_flags()
+    html = html.replace(
+        '<meta name="oidc-enabled" content="false" />',
+        f'<meta name="oidc-enabled" content="{str(flags["oidc_enabled"]).lower()}" />',
+    )
+    html = html.replace(
+        '<meta name="oidc-provider" content="" />',
+        f'<meta name="oidc-provider" content="{escape(flags["oidc_provider"])}" />',
+    )
+    html = html.replace(
+        '<meta name="password-enabled" content="true" />',
+        f'<meta name="password-enabled" content="{str(flags["password_enabled"]).lower()}" />',
+    )
+    html = html.replace(
+        '<meta name="app-version" content="" />',
+        f'<meta name="app-version" content="{escape(APP_VERSION)}" />',
     )
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
