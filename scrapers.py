@@ -10,6 +10,7 @@ import logging
 
 import debridio
 import health_cache
+import scraper_metrics
 import settings as _settings
 import torrentio
 import zilean
@@ -98,7 +99,8 @@ def merge_candidates(media_type: str, imdb_id: str, season: int | None = None,
     results: dict[str, list[Stream]] = {name: [] for name, _ in active}
     failed = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(active)) as ex:
-        futures = {ex.submit(fn, media_type, imdb_id, season, episode, timeout): name
+        futures = {ex.submit(scraper_metrics.timed(name, fn),
+                             media_type, imdb_id, season, episode, timeout): name
                    for name, fn in active}
         for future in concurrent.futures.as_completed(futures):
             name = futures[future]

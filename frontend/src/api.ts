@@ -212,6 +212,7 @@ export const api = {
   recent: () => http<{ items: any[] }>('/ui/api/activity'),
   myRequests: () => http<{ items: any[] }>('/ui/api/user-requests?mine=1'),
   myQuota: () => http<QuotaInfo>('/ui/api/me/quota'),
+  scraperHealth: () => http<ScraperHealth>('/ui/api/scraper-health'),
 
   // Arr import
   arrTest: (kind: 'radarr' | 'sonarr') =>
@@ -352,6 +353,15 @@ export type ShellSummary = {
 };
 
 export type QuotaInfo = { used: number; limit: number; resets_at: string; unlimited: boolean };
+
+export type ScraperHealth = {
+  scrapers: {
+    name: string;
+    latency_ms: number | null;
+    state: 'ok' | 'slow' | 'down' | 'unknown';
+    samples: number;
+  }[];
+};
 
 export interface SettingItem {
   key: string;

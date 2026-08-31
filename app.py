@@ -27,6 +27,7 @@ import processor
 import quota
 import recovery
 import retry_queue
+import scraper_metrics
 import scrapers
 import shell_summary
 import stats
@@ -1143,6 +1144,16 @@ def ui_api_shell_summary():
 def ui_api_me_quota():
     """Monthly request quota for the current user, for the Requests page."""
     return jsonify(quota.get_quota(auth.current_user_record()))
+
+
+@app.get("/ui/api/scraper-health")
+def ui_api_scraper_health():
+    """Rolling latency and state per active scraper, for the admin tab."""
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import scrapers as _scrapers
+    active = [name for name, _ in _scrapers._active()]
+    return jsonify(scrapers=scraper_metrics.get_health(active))
 
 
 @app.get("/ui/api/torbox-list")
