@@ -14,6 +14,15 @@ function healthTone(status: string): 'ok' | 'warn' | 'danger' {
   return 'warn';
 }
 
+function formatUsageSize(totalGb: number): string {
+  if (totalGb > 1000) return `${(totalGb / 1000).toFixed(1)} TB`;
+  return `${totalGb.toFixed(1)} GB`;
+}
+
+function humanizeState(state: string): string {
+  return state.replace(/_/g, ' ');
+}
+
 function formatCountdown(sec: number): string {
   if (sec <= 0) return 'now';
   const m = Math.floor(sec / 60);
@@ -53,6 +62,7 @@ export default function Overview() {
   // Load-once cards (fix round 1): no refetchInterval, they refresh on remount only.
   const quotaQ = useQuery({ queryKey: ['admin-torbox-quota'], queryFn: api.torboxQuota, retry: false });
   const metricsQ = useQuery({ queryKey: ['admin-metrics-summary'], queryFn: api.metricsSummary, retry: false });
+  const torboxUsageQ = useQuery({ queryKey: ['admin-torbox-usage'], queryFn: api.torboxUsage, retry: false });
   const storageQ = useQuery({ queryKey: ['admin-storage'], queryFn: api.storage, retry: false });
   const libHealthQ = useQuery({ queryKey: ['admin-library-health'], queryFn: api.libraryHealth, retry: false });
 
@@ -92,6 +102,10 @@ export default function Overview() {
   const uniqueSourceMap = new Map((metrics?.unique_sources ?? []).map((r) => [r.label, r.count]));
   const noMetrics =
     latencyRows.length === 0 && qualityRows.length === 0 && sourceRows.length === 0 && failureRows.length === 0;
+
+  const usage = torboxUsageQ.data?.usage;
+  const usageStateEntries = Object.entries(usage?.states ?? {}).sort((a, b) => b[1] - a[1]);
+  const usagePlan = torboxUsageQ.data?.plan ?? null;
 
   return (
     <div className="space-y-6">
@@ -186,7 +200,7 @@ export default function Overview() {
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-3">
         <Card>
           <div className="mb-3 text-sm font-semibold text-body">TorBox quota</div>
           {quotaQ.isLoading ? (
@@ -220,6 +234,42 @@ export default function Overview() {
                         <span className="font-mono text-body">{n}</span>
                       </div>
                     ))}
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+
+        <Card>
+          <div className="mb-3 text-sm font-semibold text-body">TorBox Usage</div>
+          {torboxUsageQ.isLoading ? (
+            <p className="text-xs text-muted">Loading…</p>
+          ) : torboxUsageQ.isError || !usage ? (
+            <p className="text-xs text-muted">unavailable</p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between text-xs">
+                <span className="text-muted">torrents</span>
+                <span className="font-mono text-body">{usage.torrent_count}</span>
+              </div>
+              <div className="flex items-baseline justify-between text-xs">
+                <span className="text-muted">total size</span>
+                <span className="font-mono text-body">{formatUsageSize(usage.total_gb)}</span>
+              </div>
+              {usagePlan && (
+                <div className="flex items-baseline justify-between text-xs">
+                  <span className="text-muted">plan</span>
+                  <span className="text-body">{usagePlan}</span>
+                </div>
+              )}
+              {usageStateEntries.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  {usageStateEntries.map(([state, n]) => (
+                    <div key={state} className="flex items-center justify-between text-xs">
+                      <span className="text-muted">{humanizeState(state)}</span>
+                      <span className="font-mono text-body">{n}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

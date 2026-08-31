@@ -285,6 +285,7 @@ export const api = {
   retryQueue: () => http<{ items: unknown[] }>('/ui/api/retry-queue'),
   releases: () => http<{ releases: Release[] }>('/ui/api/releases'),
   torboxQuota: () => http<TorboxQuota>('/ui/api/torbox-quota'),
+  torboxUsage: () => http<TorBoxUsage>('/ui/api/torbox-usage'),
   metricsSummary: () => http<MetricsSummary>('/ui/api/metrics-summary'),
   storage: () => http<{ folders: StorageFolder[] }>('/ui/api/storage'),
   libraryHealth: () => http<LibraryHealth>('/ui/api/orphans'),
@@ -552,6 +553,16 @@ export type TorboxQuota = {
   by_reason: Record<string, number>;
   oldest_ts: number | null;
   resets_in_sec: number;
+};
+
+export type TorBoxUsage = {
+  usage: {
+    torrent_count: number;
+    total_bytes: number;
+    total_gb: number;
+    states: Record<string, number>;
+  };
+  plan: string | null;
 };
 
 export type MetricRow = { label: string; count: number; avg_real: number | null; sum_int: number | null };

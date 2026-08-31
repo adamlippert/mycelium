@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi } from 'vitest';
 import Overview from './Overview';
+import { api } from '../../api';
 
 vi.mock('../../api', async () => {
   const actual = await vi.importActual<typeof import('../../api')>('../../api');
@@ -41,6 +42,15 @@ vi.mock('../../api', async () => {
         count: 5, limit: 60, window_sec: 3600,
         by_reason: { webhook: 3, manual: 9 },
         oldest_ts: 1700000000, resets_in_sec: 125,
+      }),
+      torboxUsage: () => Promise.resolve({
+        usage: {
+          torrent_count: 77,
+          total_bytes: 107374182400,
+          total_gb: 100.5,
+          states: { downloading: 21, uploading: 44, meta_dl: 8 },
+        },
+        plan: 'Pro',
       }),
       metricsSummary: () => Promise.resolve({
         quality: [{ label: '1080p', count: 4, avg_real: null, sum_int: null }],
@@ -145,5 +155,29 @@ describe('Overview tab', () => {
       expect(screen.getAllByText('Copy').length).toBeGreaterThanOrEqual(4);
     });
     expect(screen.queryByText('Releases')).not.toBeInTheDocument();
+  });
+
+  it('renders the TorBox Usage card: count, size, plan, humanised state rows', async () => {
+    renderIt();
+    await waitFor(() => {
+      expect(screen.getByText('TorBox Usage')).toBeInTheDocument();
+      expect(screen.getByText('77')).toBeInTheDocument();
+      expect(screen.getByText('100.5 GB')).toBeInTheDocument();
+      expect(screen.getByText('Pro')).toBeInTheDocument();
+      expect(screen.getByText('downloading')).toBeInTheDocument();
+      expect(screen.getByText('uploading')).toBeInTheDocument();
+      expect(screen.getByText('meta dl')).toBeInTheDocument();
+    });
+  });
+
+  it('omits the plan line when plan is null', async () => {
+    vi.spyOn(api, 'torboxUsage').mockResolvedValueOnce({
+      usage: { torrent_count: 3, total_bytes: 0, total_gb: 0, states: {} },
+      plan: null,
+    });
+    renderIt();
+    await waitFor(() => expect(screen.getByText('TorBox Usage')).toBeInTheDocument());
+    expect(screen.queryByText('plan')).not.toBeInTheDocument();
+    expect(screen.queryByText('null')).not.toBeInTheDocument();
   });
 });
