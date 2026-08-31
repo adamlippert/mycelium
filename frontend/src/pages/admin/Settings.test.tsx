@@ -100,4 +100,30 @@ describe('Settings tab', () => {
 
     fetchSpy.mockRestore();
   });
+
+  it('shows the Legacy password card', async () => {
+    renderIt();
+    await waitFor(() => expect(screen.getByText('Group One')).toBeInTheDocument());
+    expect(screen.getByLabelText(/legacy password/i)).toBeInTheDocument();
+  });
+
+  it('posts the legacy password field to /ui/set-password', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response('', { status: 302 }),
+    );
+
+    renderIt();
+    await waitFor(() => expect(screen.getByText('Group One')).toBeInTheDocument());
+
+    await userEvent.type(screen.getByLabelText(/legacy password/i), 'newpassword');
+    await userEvent.click(screen.getByRole('button', { name: /update legacy password/i }));
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    const call = fetchSpy.mock.calls.find(([url]) => String(url).includes('/ui/set-password'));
+    expect(call).toBeTruthy();
+    const init = call![1] as RequestInit;
+    expect(String(init.body)).toContain('password=newpassword');
+
+    fetchSpy.mockRestore();
+  });
 });

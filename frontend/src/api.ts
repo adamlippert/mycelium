@@ -477,6 +477,11 @@ export const api = {
   // and redirects back to the dashboard rather than returning JSON, same
   // shape as the maintenance routes above, so this goes through formPost.
   saveSettings: (fields: Record<string, string>) => formPost('/ui/settings', fields),
+  // The legacy shared fallback password (`POST /ui/set-password`, admin-only,
+  // no current-password check) - distinct from a user's own password, which
+  // goes through the JSON `changePassword` above with a current-password
+  // check. Same form-post/redirect shape as saveSettings.
+  setLegacyPassword: (password: string) => formPost('/ui/set-password', { password }),
 
   // Application shell (nav counts + TorBox pill)
   shellSummary: () => http<ShellSummary>('/ui/api/shell-summary'),

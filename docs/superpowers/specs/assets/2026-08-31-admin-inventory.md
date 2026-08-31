@@ -172,7 +172,7 @@ decorator in `app.py` for a `/ui/...` path (the brief's literal
 misses most of these - see "Cross-check method" below) and grepping each
 candidate against `templates/ui.html` and all of `frontend/src`.
 
-- [ ] `POST /ui/set-password` (admin resets the logged-in admin's own password via a legacy form) -> planned home: Users (orphan route, verify before porting - likely superseded by the already-used `POST /ui/api/me/password`, but semantics were not diffed)
+- [x] `POST /ui/set-password` (admin resets the single shared fallback password via a legacy form) -> planned home: Users (Task 5: ported as a "Legacy password" card in admin Settings, not Users - semantics diffed against `POST /ui/api/me/password`: `set-password` calls `auth.set_password`, writing the global `AUTH_PASSWORD_HASH` setting with no current-password check, admin-only via `auth.require_auth` + `auth.is_admin()`; `/ui/api/me/password` is per-user, calls `auth.change_user_password(user_id, ...)` and requires the caller's current password via `auth._verify_hashed`. Not a duplicate of the per-user "Change password" card already in `frontend/src/pages/Settings.tsx`)
 - [ ] `POST /ui/submit` (manual "add title by IMDB id + seasons" admin form) -> planned home: Maintenance (orphan route, verify before porting)
 - [ ] `POST /ui/search-episode` (manual per-episode search trigger) -> planned home: Maintenance (orphan route, verify before porting)
 - [ ] `POST /ui/download-movie` (manual movie download trigger) -> planned home: Maintenance (orphan route, verify before porting)

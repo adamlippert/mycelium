@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api';
 import type { GenreRule, RequestRow } from '../../api';
 import type { UserRequest } from '../../types';
-import { Card, DataTable, Pill, statusLabel, statusToPillState } from '../../components/primitives';
+import { Card, DataTable, GenreRuleRows, Pill, statusLabel, statusToPillState } from '../../components/primitives';
 import type { Column } from '../../components/primitives';
 
 export default function Requests() {
@@ -279,84 +279,5 @@ function AutoApprovePanel() {
         {msg && <div className="font-mono text-xs text-muted">{msg}</div>}
       </Card>
     </section>
-  );
-}
-
-function GenreRuleRows({
-  rules,
-  movieGenres,
-  tvGenres,
-  onUpdate,
-  onRemove,
-}: {
-  rules: GenreRule[];
-  movieGenres: Array<{ id: number; name: string }>;
-  tvGenres: Array<{ id: number; name: string }>;
-  onUpdate: (i: number, patch: Partial<GenreRule>) => void;
-  onRemove: (i: number) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      {rules.map((rule, i) => {
-        const genres = rule.media_type === 'movie' ? movieGenres : tvGenres;
-        return (
-          <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg bg-bg p-2">
-            <button
-              type="button"
-              onClick={() => onUpdate(i, { enabled: !rule.enabled })}
-              className={`flex h-5 w-9 flex-shrink-0 items-center rounded-full px-0.5 transition-colors
-                ${rule.enabled ? 'bg-accent' : 'bg-border'}`}
-            >
-              <div className={`h-4 w-4 rounded-full bg-white shadow transition-transform
-                ${rule.enabled ? 'translate-x-4' : 'translate-x-0'}`} />
-            </button>
-            <select
-              value={rule.media_type}
-              onChange={(e) => {
-                const mt = e.target.value as 'movie' | 'tv';
-                const g = (mt === 'movie' ? movieGenres : tvGenres)?.[0];
-                onUpdate(i, { media_type: mt, genre_id: g?.id || 0, genre_name: g?.name || '' });
-              }}
-              className="rounded border border-border bg-card px-2 py-1 text-xs"
-            >
-              <option value="movie">Movies</option>
-              <option value="tv">Shows</option>
-            </select>
-            <select
-              value={rule.genre_id}
-              onChange={(e) => {
-                const g = genres.find((x) => x.id === Number(e.target.value));
-                onUpdate(i, { genre_id: g?.id || 0, genre_name: g?.name || '' });
-              }}
-              className="rounded border border-border bg-card px-2 py-1 text-xs"
-            >
-              {genres.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
-            <input
-              type="number"
-              placeholder="From year"
-              value={rule.year_from ?? ''}
-              onChange={(e) => onUpdate(i, { year_from: e.target.value ? Number(e.target.value) : null })}
-              className="w-24 rounded border border-border bg-card px-2 py-1 text-xs"
-            />
-            <span className="text-xs text-muted">to</span>
-            <input
-              type="number"
-              placeholder="To year"
-              value={rule.year_to ?? ''}
-              onChange={(e) => onUpdate(i, { year_to: e.target.value ? Number(e.target.value) : null })}
-              className="w-24 rounded border border-border bg-card px-2 py-1 text-xs"
-            />
-            <button
-              type="button"
-              onClick={() => onRemove(i)}
-              className="ml-auto rounded px-2 py-1 text-xs text-danger hover:bg-danger/10"
-            >
-              Remove
-            </button>
-          </div>
-        );
-      })}
-    </div>
   );
 }

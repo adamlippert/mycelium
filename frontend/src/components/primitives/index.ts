@@ -5,6 +5,7 @@ export { StatusDot } from './StatusDot';
 export { Card } from './Card';
 export { Chip } from './Chip';
 export { Toggle } from './Toggle';
+export { GenreRuleRows } from './GenreRuleRows';
 export { StatTile } from './StatTile';
 export { DataTable } from './DataTable';
 export type { Column } from './DataTable';

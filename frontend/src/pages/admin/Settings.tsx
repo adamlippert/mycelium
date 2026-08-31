@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api';
 import type { GenreRule, SettingItem } from '../../api';
 import { Card } from '../../components/primitives/Card';
+import { GenreRuleRows } from '../../components/primitives/GenreRuleRows';
 import { Toggle } from '../../components/primitives/Toggle';
 
 type SettingsGroup = { id: string; title: string; items: SettingItem[] };
@@ -187,89 +188,6 @@ function GroupCard({
   );
 }
 
-function GenreRuleRows({
-  rules,
-  movieGenres,
-  tvGenres,
-  onUpdate,
-  onRemove,
-}: {
-  rules: GenreRule[];
-  movieGenres: Array<{ id: number; name: string }>;
-  tvGenres: Array<{ id: number; name: string }>;
-  onUpdate: (i: number, patch: Partial<GenreRule>) => void;
-  onRemove: (i: number) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      {rules.map((rule, i) => {
-        const genres = rule.media_type === 'movie' ? movieGenres : tvGenres;
-        return (
-          <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg bg-bg p-2">
-            <button
-              type="button"
-              onClick={() => onUpdate(i, { enabled: !rule.enabled })}
-              className={`flex h-5 w-9 flex-none items-center rounded-full px-0.5 transition-colors ${
-                rule.enabled ? 'bg-accent' : 'bg-border'
-              }`}
-            >
-              <div
-                className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                  rule.enabled ? 'translate-x-4' : 'translate-x-0'
-                }`}
-              />
-            </button>
-            <select
-              value={rule.media_type}
-              onChange={(e) => {
-                const mt = e.target.value as 'movie' | 'tv';
-                const g = (mt === 'movie' ? movieGenres : tvGenres)?.[0];
-                onUpdate(i, { media_type: mt, genre_id: g?.id || 0, genre_name: g?.name || '' });
-              }}
-              className="rounded border border-border bg-card px-2 py-1 text-xs"
-            >
-              <option value="movie">Movies</option>
-              <option value="tv">Shows</option>
-            </select>
-            <select
-              value={rule.genre_id}
-              onChange={(e) => {
-                const g = genres.find((x) => x.id === Number(e.target.value));
-                onUpdate(i, { genre_id: g?.id || 0, genre_name: g?.name || '' });
-              }}
-              className="rounded border border-border bg-card px-2 py-1 text-xs"
-            >
-              {genres.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
-            <input
-              type="number"
-              placeholder="From year"
-              value={rule.year_from ?? ''}
-              onChange={(e) => onUpdate(i, { year_from: e.target.value ? Number(e.target.value) : null })}
-              className="w-24 rounded border border-border bg-card px-2 py-1 text-xs"
-            />
-            <span className="text-xs text-muted">to</span>
-            <input
-              type="number"
-              placeholder="To year"
-              value={rule.year_to ?? ''}
-              onChange={(e) => onUpdate(i, { year_to: e.target.value ? Number(e.target.value) : null })}
-              className="w-24 rounded border border-border bg-card px-2 py-1 text-xs"
-            />
-            <button
-              type="button"
-              onClick={() => onRemove(i)}
-              className="ml-auto rounded px-2 py-1 text-xs text-danger hover:bg-danger/10"
-            >
-              Remove
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 /** Ported from the pre-native-admin `frontend/src/pages/Admin.tsx`
  * `DiscoverGenreTabsPanel`, restyled onto the shared `Card` primitive. */
 function DiscoverGenreTabsPanel() {
@@ -341,6 +259,59 @@ function DiscoverGenreTabsPanel() {
       </div>
 
       {msg && <div className="font-mono text-xs text-muted">{msg}</div>}
+    </Card>
+  );
+}
+
+/** `POST /ui/set-password`: the legacy admin-only shared fallback password
+ * (`auth.set_password`, no current-password check). Distinct from a user's
+ * own password, changed under Settings > Account via `POST
+ * /ui/api/me/password` (which does require the current password). */
+function LegacyPasswordCard() {
+  const [password, setPassword] = useState('');
+  const [msg, setMsg] = useState('');
+
+  const mutation = useMutation({
+    mutationFn: (pw: string) => api.setLegacyPassword(pw),
+    onSuccess: () => { setMsg('Updated.'); setPassword(''); },
+    onError: (e: Error) => setMsg(`Error: ${e.message}`),
+  });
+
+  const submit = () => {
+    if (password.length < 6) {
+      setMsg('Password must be at least 6 characters');
+      return;
+    }
+    mutation.mutate(password);
+  };
+
+  return (
+    <Card>
+      <div className="mb-2 text-sm font-semibold">Legacy password</div>
+      <p className="mb-3 text-xs text-muted">
+        Sets the single shared fallback password used for password login. Distinct
+        from each user&apos;s own password under Settings &gt; Account.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="password"
+          aria-label="Legacy password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="New password (min 6 characters)"
+          autoComplete="new-password"
+          className="w-full max-w-xs rounded border border-border bg-bg px-2 py-1 text-xs"
+        />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={mutation.isPending}
+          className="rounded bg-accent px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+        >
+          {mutation.isPending ? 'Saving...' : 'Update legacy password'}
+        </button>
+      </div>
+      {msg && <p className="mt-2 text-xs text-muted">{msg}</p>}
     </Card>
   );
 }
@@ -458,6 +429,8 @@ export default function Settings() {
       </Card>
 
       <DiscoverGenreTabsPanel />
+
+      <LegacyPasswordCard />
 
       <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-bg/95 px-1 py-3 backdrop-blur">
         <span className="text-xs text-muted">
