@@ -7,6 +7,7 @@ import Maintenance from './Maintenance';
 import Blacklist from './Blacklist';
 import Scrapers from './Scrapers';
 import Logs from './Logs';
+import Releases from './Releases';
 import FilterRules from './FilterRules';
 import Settings from './Settings';
 
@@ -17,6 +18,7 @@ export const ADMIN_TABS: { id: string; label: string; component: ComponentType }
   { id: 'filter-rules', label: 'Filter rules', component: FilterRules },
   { id: 'scrapers', label: 'Scrapers', component: Scrapers },
   { id: 'logs', label: 'Logs', component: Logs },
+  { id: 'releases', label: 'Releases', component: Releases },
   { id: 'maintenance', label: 'Maintenance', component: Maintenance },
   { id: 'blacklist', label: 'Blacklist', component: Blacklist },
   { id: 'settings', label: 'Settings', component: Settings },

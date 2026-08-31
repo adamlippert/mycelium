@@ -20,10 +20,10 @@ function renderIt(hash = '') {
 }
 
 describe('AdminLayout', () => {
-  it('declares the nine tabs in order', () => {
+  it('declares the ten tabs in order', () => {
     expect(ADMIN_TABS.map((t) => t.id)).toEqual([
       'overview', 'users', 'requests', 'filter-rules', 'scrapers',
-      'logs', 'maintenance', 'blacklist', 'settings',
+      'logs', 'releases', 'maintenance', 'blacklist', 'settings',
     ]);
   });
 

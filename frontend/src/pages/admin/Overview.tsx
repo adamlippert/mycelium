@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api';
-import { Card, Pill, StatTile, StatusDot } from '../../components/primitives';
+import { Card, StatTile, StatusDot } from '../../components/primitives';
 
 const GIB = 1024 ** 3;
 
@@ -21,6 +21,26 @@ function formatCountdown(sec: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
+function EndpointRow({ label, hint, value }: { label: string; hint: string; value: string }) {
+  return (
+    <div>
+      <div className="mb-1 text-[11px] text-muted">
+        {label} ({hint})
+      </div>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 truncate rounded bg-white/5 px-2 py-1.5 text-xs text-body">{value}</code>
+        <button
+          type="button"
+          onClick={() => navigator.clipboard.writeText(value)}
+          className="rounded border border-border px-2 py-1 text-xs text-muted transition hover:text-white"
+        >
+          Copy
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Overview() {
   // Refresh cadence matches the Jinja dashboard: stats + health poll every
   // 30s, everything else loads once and refreshes only on remount.
@@ -30,7 +50,6 @@ export default function Overview() {
   const torboxQ = useQuery({ queryKey: ['admin-torbox-list'], queryFn: api.torboxList, retry: false });
   const retryQueueQ = useQuery({ queryKey: ['admin-retry-queue'], queryFn: api.retryQueue, retry: false });
   const webhookQ = useQuery({ queryKey: ['admin-webhook-secret'], queryFn: api.webhookSecret, retry: false });
-  const releasesQ = useQuery({ queryKey: ['admin-releases'], queryFn: api.releases });
   // Load-once cards (fix round 1): no refetchInterval, they refresh on remount only.
   const quotaQ = useQuery({ queryKey: ['admin-torbox-quota'], queryFn: api.torboxQuota, retry: false });
   const metricsQ = useQuery({ queryKey: ['admin-metrics-summary'], queryFn: api.metricsSummary, retry: false });
@@ -58,8 +77,10 @@ export default function Overview() {
   const torboxCount = torrents?.length ?? 0;
   const torboxBytes = (torrents ?? []).reduce((sum, t) => sum + (t.size || 0), 0);
 
+  const library = stats?.library;
+  const successRate7d = requests ? Math.round(requests.success_rate_7d) : null;
+
   const events = activityQ.data?.events ?? [];
-  const releases = releasesQ.data?.releases ?? [];
 
   const folders = storageQ.data?.folders ?? [];
 
@@ -94,6 +115,31 @@ export default function Overview() {
           value={statsQ.isLoading ? '-' : String(requests?.failed_7d ?? 0)}
           label="Failures 7d"
           glow={requests && requests.failed_7d > 0 ? 'danger' : undefined}
+        />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <StatTile
+          value={statsQ.isLoading ? '-' : String(library?.movie_count ?? 0)}
+          label="Movies"
+        />
+        <StatTile
+          value={statsQ.isLoading ? '-' : String(library?.episode_count ?? 0)}
+          label="Episodes"
+        />
+        <StatTile
+          value={statsQ.isLoading ? '-' : String(library?.series_count ?? 0)}
+          label="Series"
+        />
+        <StatTile
+          value={statsQ.isLoading ? '-' : String(activeWanted)}
+          label="Wanted"
+        />
+        <StatTile
+          value={statsQ.isLoading || successRate7d === null ? '-' : `${successRate7d}%`}
+          label="Success rate 7d"
+          sub={requests ? `${requests.succeeded_7d} ok - ${requests.failed_7d} fail` : undefined}
+          glow="ok"
         />
       </div>
 
@@ -268,25 +314,45 @@ export default function Overview() {
         </Card>
 
         <Card>
-          <div className="mb-3 text-sm font-semibold text-body">Webhook secret</div>
-          {webhookQ.isLoading ? (
-            <p className="text-xs text-muted">Loading…</p>
-          ) : webhookQ.isError || !webhookQ.data ? (
-            <p className="text-xs text-muted">unavailable</p>
-          ) : (
-            <div className="flex items-center gap-2">
-              <code className="flex-1 truncate rounded bg-white/5 px-2 py-1.5 text-xs text-body">
-                {webhookQ.data.secret}
-              </code>
-              <button
-                type="button"
-                onClick={() => navigator.clipboard.writeText(webhookQ.data!.secret)}
-                className="rounded border border-border px-2 py-1 text-xs text-muted transition hover:text-white"
-              >
-                Copy
-              </button>
+          <div className="mb-3 text-sm font-semibold text-body">Integration endpoints</div>
+          <div className="space-y-3">
+            <EndpointRow
+              label="Seerr webhook URL"
+              hint="already configured"
+              value={`${window.location.origin}/webhook`}
+            />
+            <EndpointRow
+              label="TorBox push notification URL"
+              hint="configure in TorBox settings to skip polling"
+              value={`${window.location.origin}/torbox-webhook`}
+            />
+            <EndpointRow
+              label="Catbox stream prefix"
+              hint=".strm files contain proxy URLs starting with this"
+              value={`${window.location.origin}/stream/<token>`}
+            />
+            <div>
+              <div className="mb-1 text-[11px] text-muted">Webhook secret (send as header X-Webhook-Secret)</div>
+              {webhookQ.isLoading ? (
+                <p className="text-xs text-muted">Loading…</p>
+              ) : webhookQ.isError || !webhookQ.data ? (
+                <p className="text-xs text-muted">unavailable</p>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 truncate rounded bg-white/5 px-2 py-1.5 text-xs text-body">
+                    {webhookQ.data.secret}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(webhookQ.data!.secret)}
+                    className="rounded border border-border px-2 py-1 text-xs text-muted transition hover:text-white"
+                  >
+                    Copy
+                  </button>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </Card>
       </div>
 
@@ -341,34 +407,6 @@ export default function Overview() {
           )}
         </Card>
       </div>
-
-      <Card>
-        <div className="mb-3 text-sm font-semibold text-body">Releases</div>
-        {releasesQ.isLoading ? (
-          <p className="text-xs text-muted">Loading…</p>
-        ) : releases.length === 0 ? (
-          <p className="text-xs text-muted">No releases yet</p>
-        ) : (
-          <div className="space-y-3">
-            {releases.map((rel, i) => (
-              <div key={rel.version} className="text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-semibold text-body">v{rel.version}</span>
-                  <span className="text-muted">{rel.date}</span>
-                  {i === 0 && <Pill state="ready">current</Pill>}
-                </div>
-                {rel.notes.length > 0 && (
-                  <ul className="mt-1 list-disc space-y-0.5 pl-4 text-muted">
-                    {rel.notes.map((note, j) => (
-                      <li key={j}>{note}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Library from './Library';
 
 vi.mock('../api', async () => {
@@ -43,5 +44,49 @@ describe('Library stat tiles', () => {
     const { container } = renderPage();
     await waitFor(() => expect(screen.getByText('16')).toBeInTheDocument());
     expect(container.textContent).not.toMatch(/this week/);
+  });
+});
+
+describe('Library series search', () => {
+  const seriesPayload = {
+    series: [
+      {
+        title: 'Alpha Show',
+        imdb_id: 'tt1000001',
+        seasons: [{ season: 1, year: 2020, episodes: [1, 2] }],
+        missing: [],
+      },
+      {
+        title: 'Beta Show',
+        imdb_id: 'tt1000002',
+        seasons: [{ season: 1, year: 2021, episodes: [1] }],
+        missing: [],
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (String(url).includes('/ui/api/library/series-episodes')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(seriesPayload) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('hides a non-matching series when searching', async () => {
+    renderPage();
+    await userEvent.click(screen.getByRole('button', { name: 'Series' }));
+    await waitFor(() => expect(screen.getByText('Alpha Show')).toBeInTheDocument());
+    expect(screen.getByText('Beta Show')).toBeInTheDocument();
+
+    await userEvent.type(screen.getByPlaceholderText('Search series...'), 'alpha');
+
+    expect(screen.getByText('Alpha Show')).toBeInTheDocument();
+    expect(screen.queryByText('Beta Show')).not.toBeInTheDocument();
   });
 });

@@ -269,6 +269,7 @@ function LibraryPosterCard({ movie, onClick }: { movie: any; onClick: () => void
 
 function SeriesPanel() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
   const { data, isLoading } = useQuery({
     queryKey: ['library-series-episodes'],
     queryFn: () => fetch('/ui/api/library/series-episodes').then(r => {
@@ -297,8 +298,14 @@ function SeriesPanel() {
     [watchedEpsData],
   );
 
+  const allSeries: any[] = useMemo(() => data?.series || [], [data]);
+  const series = useMemo(() => {
+    if (!search.trim()) return allSeries;
+    const q = search.trim().toLowerCase();
+    return allSeries.filter((s: any) => (s.title || '').toLowerCase().includes(q));
+  }, [allSeries, search]);
+
   if (isLoading) return <div className="text-muted">Loading...</div>;
-  const series: any[] = data?.series || [];
 
   const toggle = (title: string) => {
     setExpanded(prev => {
@@ -311,7 +318,20 @@ function SeriesPanel() {
   return (
     <>
     <div>
-      <p className="text-muted text-sm mb-4">{series.length} series in library</p>
+      <div className="flex flex-col sm:flex-row gap-3 mb-3">
+        <input
+          type="search"
+          placeholder="Search series..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="flex-1 bg-card border border-border rounded-lg px-3 py-2 text-sm
+                     placeholder:text-muted focus:outline-none focus:border-accent"
+        />
+      </div>
+      <p className="text-muted text-sm mb-4">{allSeries.length} series in library</p>
+      {series.length === 0 ? (
+        <p className="text-muted text-sm py-8 text-center">No series found.</p>
+      ) : (
       <div className="space-y-1">
         {series.map((s: any) => {
           const isOpen = expanded.has(s.title);
@@ -413,6 +433,7 @@ function SeriesPanel() {
           );
         })}
       </div>
+      )}
     </div>
 
     {playEp && PlayerModal && (

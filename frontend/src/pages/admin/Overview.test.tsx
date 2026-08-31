@@ -35,14 +35,8 @@ vi.mock('../../api', async () => {
           { id: 2, name: 'b', hash: 'h2', size: 2147483648, download_state: 'completed', download_finished: true, progress: 1, created_at: '', file_count: 1 },
         ],
       }),
-      retryQueue: () => Promise.resolve({ items: [{ id: 1 }, { id: 2 }, { id: 3 }] }),
+      retryQueue: () => Promise.resolve({ items: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }] }),
       webhookSecret: () => Promise.resolve({ secret: 'super-secret-value', source: 'env' }),
-      releases: () => Promise.resolve({
-        releases: [
-          { version: '0.7.7', date: '2026-08-20', notes: ['Fixed streaming bug'] },
-          { version: '0.7.6', date: '2026-08-10', notes: ['Earlier release'] },
-        ],
-      }),
       torboxQuota: () => Promise.resolve({
         count: 5, limit: 60, window_sec: 3600,
         by_reason: { webhook: 3, manual: 9 },
@@ -82,8 +76,8 @@ describe('Overview tab', () => {
       // requests.total is all-time, not a 7d figure), sub-line unchanged.
       expect(screen.getByText('48')).toBeInTheDocument();
       expect(screen.getByText('41 ok / 7 fail')).toBeInTheDocument();
-      // Queue depth: retry-queue rows (3) + active wanted (9)
-      expect(screen.getByText('12')).toBeInTheDocument();
+      // Queue depth: retry-queue rows (4) + active wanted (9)
+      expect(screen.getByText('13')).toBeInTheDocument();
       // TorBox library: item count + summed size in GiB
       expect(screen.getByText('2')).toBeInTheDocument();
       expect(screen.getByText('6.0 GiB')).toBeInTheDocument();
@@ -120,10 +114,36 @@ describe('Overview tab', () => {
     });
   });
 
-  it('lists a version in the releases changelog', async () => {
+  it('renders the library tiles: movies, episodes, series, wanted, success rate', async () => {
     renderIt();
     await waitFor(() => {
-      expect(screen.getByText('v0.7.7')).toBeInTheDocument();
+      expect(screen.getByText('Movies')).toBeInTheDocument();
+      expect(screen.getByText('120')).toBeInTheDocument();
+      expect(screen.getByText('Episodes')).toBeInTheDocument();
+      expect(screen.getByText('340')).toBeInTheDocument();
+      expect(screen.getByText('Series')).toBeInTheDocument();
+      // series_count (12) is distinct from queue depth (13) now that the
+      // retry-queue mock has 4 rows, so this is an unambiguous match.
+      expect(screen.getByText('12')).toBeInTheDocument();
+      expect(screen.getByText('Wanted')).toBeInTheDocument();
+      expect(screen.getByText('Success rate 7d')).toBeInTheDocument();
+      expect(screen.getByText('85%')).toBeInTheDocument();
+      expect(screen.getByText('41 ok - 7 fail')).toBeInTheDocument();
     });
+  });
+
+  it('renders the four integration endpoint rows, no releases card', async () => {
+    renderIt();
+    await waitFor(() => {
+      expect(screen.getByText('Integration endpoints')).toBeInTheDocument();
+      // jsdom's location.origin varies by test runner config, so assert on
+      // the path suffix rather than pinning the origin.
+      expect(screen.getByText(/\/webhook$/)).toBeInTheDocument();
+      expect(screen.getByText(/\/torbox-webhook$/)).toBeInTheDocument();
+      expect(screen.getByText(/\/stream\/<token>$/)).toBeInTheDocument();
+      expect(screen.getByText('super-secret-value')).toBeInTheDocument();
+      expect(screen.getAllByText('Copy').length).toBeGreaterThanOrEqual(4);
+    });
+    expect(screen.queryByText('Releases')).not.toBeInTheDocument();
   });
 });
