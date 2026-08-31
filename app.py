@@ -7,7 +7,7 @@ import threading
 import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from flask import Flask, Response, abort, flash, jsonify, redirect, render_template, request, stream_with_context, url_for
+from flask import Flask, Response, abort, jsonify, redirect, request, stream_with_context, url_for
 
 import auto_approve
 import backup
@@ -169,9 +169,9 @@ oidc.install(app)
 
 def _login_flags() -> dict:
     """Whether OIDC / password login are available, and which provider.
-    Shared by the classic Jinja login page and the SPA (embedded as meta
-    tags by _spa_index, since /ui/api/session requires a session and this
-    is needed precisely when there isn't one yet)."""
+    Embedded as meta tags by _spa_index, since /ui/api/session requires a
+    session and the login page needs these precisely when there isn't one
+    yet."""
     return {
         "oidc_enabled": oidc.is_enabled(),
         "oidc_provider": oidc.provider_name(),
@@ -180,23 +180,9 @@ def _login_flags() -> dict:
     }
 
 
-def _login_page():
-    return render_template("login.html",
-                            error=request.args.get("error"),
-                            next=request.args.get("next", ""),
-                            **_login_flags())
-
-
 @app.get("/login")
 def login_view():
-    if cfg.UI_V2:
-        return _spa_index()
-    return _login_page()
-
-
-@app.get("/login/classic")
-def login_classic():
-    return _login_page()
+    return _spa_index()
 
 
 @app.post("/login")
@@ -228,10 +214,8 @@ def ui_set_password():
         return jsonify(error="admin required"), 403
     new_pw = request.form.get("password") or ""
     if len(new_pw) < 6:
-        flash("Password must be at least 6 characters", "err")
         return redirect(url_for("ui_dashboard") + "#settings")
     auth.set_password(new_pw)
-    flash("Password updated", "ok")
     return redirect(url_for("ui_dashboard") + "#settings")
 
 
@@ -673,16 +657,6 @@ def torbox_webhook():
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
-def _admin_page():
-    return render_template("ui.html",
-                            repair_items=db.get_repair_items(200),
-                            last_cleanup=db.get_last_cleanup_run(),
-                            activity=db.get_activity(50),
-                            config=cfg,
-                            app_version=APP_VERSION,
-                            releases=RELEASES)
-
-
 @app.get("/admin")
 def ui_dashboard():
     import settings as _settings
@@ -690,19 +664,7 @@ def ui_dashboard():
         return redirect(url_for("setup_wizard"))
     if not auth.is_admin():
         return redirect(url_for("login_view", next="/admin"))
-    if cfg.UI_V2:
-        return _spa_index()
-    return _admin_page()
-
-
-@app.get("/admin/classic")
-def ui_dashboard_classic():
-    import settings as _settings
-    if not _settings.get("SETUP_COMPLETE", False):
-        return redirect(url_for("setup_wizard"))
-    if not auth.is_admin():
-        return redirect(url_for("login_view", next="/admin/classic"))
-    return _admin_page()
+    return _spa_index()
 
 
 @app.get("/ui")
@@ -712,40 +674,18 @@ def ui_redirect():
 
 # ── Setup wizard ──────────────────────────────────────────────────────────────
 
-def _setup_page():
-    return render_template("setup.html")
-
-
 @app.get("/setup")
 def setup_wizard():
     import settings as _settings
     # First run: no users yet - always allow
     if db.user_count() == 0:
-        if cfg.UI_V2:
-            return _spa_index()
-        return _setup_page()
+        return _spa_index()
     # After first run: require admin login
     if not auth.is_admin():
         return redirect(url_for("login_view", next="/setup?rerun=1"))
     if _settings.get("SETUP_COMPLETE", False) and request.args.get("rerun") != "1":
         return redirect(url_for("ui_dashboard"))
-    if cfg.UI_V2:
-        return _spa_index()
-    return _setup_page()
-
-
-@app.get("/setup/classic")
-def setup_wizard_classic():
-    import settings as _settings
-    # First run: no users yet - always allow
-    if db.user_count() == 0:
-        return _setup_page()
-    # After first run: require admin login
-    if not auth.is_admin():
-        return redirect(url_for("login_view", next="/setup/classic?rerun=1"))
-    if _settings.get("SETUP_COMPLETE", False) and request.args.get("rerun") != "1":
-        return redirect(url_for("ui_dashboard"))
-    return _setup_page()
+    return _spa_index()
 
 
 @app.post("/setup/skip")
@@ -941,74 +881,11 @@ def setup_test(kind: str):
         return jsonify(ok=False, error=str(exc)[:120])
 
 
-@app.post("/ui/submit")
-def ui_submit():
-    if not auth.is_admin():
-        abort(403)
-    imdb_id = (request.form.get("imdb_id") or "").strip()
-    media_type = request.form.get("media_type", "movie")
-    seasons_raw = request.form.get("seasons", "1")
-
-    if not re.fullmatch(r"tt\d{6,10}", imdb_id):
-        flash("Invalid IMDB ID  -  must be tt followed by 6-10 digits.", "err")
-        return redirect(url_for("ui_dashboard"))
-    if media_type not in ("movie", "series"):
-        flash("Invalid media type.", "err")
-        return redirect(url_for("ui_dashboard"))
-
-    seasons = [int(s.strip()) for s in re.split(r"[,\s]+", seasons_raw) if s.strip().isdigit()]
-    if media_type == "series" and not seasons:
-        seasons = [1]
-
-    display_title = tmdb.display_title(imdb_id, media_type) or imdb_id
-    media_request = MediaRequest(
-        title=display_title, media_type=media_type, imdb_id=imdb_id, seasons=seasons,
-    )
-    threading.Thread(target=processor.process, args=(media_request,),
-                     name=f"manual-{imdb_id}", daemon=True).start()
-    flash(f"Queued: {display_title} ({media_type})", "ok")
-    return redirect(url_for("ui_dashboard"))
-
-
-@app.post("/ui/search-episode")
-def ui_search_episode():
-    if not auth.is_admin():
-        abort(403)
-    imdb_id = request.form.get("imdb_id", "")
-    title = request.form.get("title", imdb_id)
-    season = int(request.form.get("season", 1))
-    episode = int(request.form.get("episode", 1))
-    threading.Thread(
-        target=monitor.search_episode_now,
-        args=(imdb_id, title, season, episode),
-        name=f"ep-{imdb_id}-s{season}e{episode}", daemon=True,
-    ).start()
-    flash(f"Searching {title} S{season:02d}E{episode:02d}…", "ok")
-    return redirect(url_for("ui_dashboard") + "#wanted")
-
-
-@app.post("/ui/download-movie")
-def ui_download_movie():
-    if not auth.is_admin():
-        abort(403)
-    imdb_id = request.form.get("imdb_id", "")
-    display_title = tmdb.display_title(imdb_id, "movie") or imdb_id
-    media_request = MediaRequest(
-        title=display_title, media_type="movie", imdb_id=imdb_id, seasons=[],
-    )
-    db.update_media_item_status(imdb_id, "movie", "processing")
-    threading.Thread(target=processor.process, args=(media_request,),
-                     name=f"movie-{imdb_id}", daemon=True).start()
-    flash(f"Download queued for {display_title}", "ok")
-    return redirect(url_for("ui_dashboard") + "#movies")
-
-
 @app.post("/ui/sync-movies")
 def ui_sync_movies():
     if not auth.is_admin():
         abort(403)
     threading.Thread(target=monitor.sync_movies, name="movie-sync-manual", daemon=True).start()
-    flash("Movie sync started", "ok")
     return redirect(url_for("ui_dashboard") + "#movies")
 
 
@@ -1022,7 +899,6 @@ def ui_run_cleanup():
     if not auth.is_admin():
         abort(403)
     threading.Thread(target=cleanup.run_cleanup, name="cleanup-manual", daemon=True).start()
-    flash("Cleanup scan started  -  check Repair tab for results", "ok")
     return redirect(url_for("ui_dashboard") + "#repair")
 
 
@@ -1031,7 +907,6 @@ def ui_repair_all():
     if not auth.is_admin():
         abort(403)
     threading.Thread(target=cleanup.run_cleanup, name="repair-all-manual", daemon=True).start()
-    flash("Repair All started  -  check Repair tab for results", "ok")
     return redirect(url_for("ui_dashboard") + "#repair")
 
 
@@ -1040,7 +915,6 @@ def ui_refresh_images():
     if not auth.is_admin():
         abort(403)
     threading.Thread(target=jellyfin.refresh_missing_images, name="jf-images", daemon=True).start()
-    flash("Jellyfin image refresh started  -  missing posters will be fetched", "ok")
     return redirect(url_for("ui_dashboard") + "#repair")
 
 
@@ -1049,7 +923,6 @@ def ui_merge_series():
     if not auth.is_admin():
         abort(403)
     threading.Thread(target=cleanup.merge_series_duplicates, name="merge-series", daemon=True).start()
-    flash("Series merge started  -  duplicate folders will be consolidated", "ok")
     return redirect(url_for("ui_dashboard") + "#repair")
 
 
@@ -1078,7 +951,6 @@ def ui_generate_nfos():
         nfo_generator.generate_all()
         nfo_generator.fetch_local_images()
     threading.Thread(target=_run, name="nfo-manual", daemon=True).start()
-    flash("NFO + image download started  -  Jellyfin will pick up metadata on next scan", "ok")
     return redirect(url_for("ui_dashboard") + "#repair")
 
 
@@ -1289,10 +1161,8 @@ def ui_torbox_delete():
     if not torrent_id:
         return jsonify(error="missing torrent_id"), 400
     ok = torbox.delete_torrent(int(torrent_id))
-    if ok:
-        flash(f"Deleted torrent {torrent_id} from TorBox", "ok")
-    else:
-        flash(f"Failed to delete torrent {torrent_id}", "err")
+    if not ok:
+        log.warning("torbox-delete: failed to delete torrent %s", torrent_id)
     return redirect(url_for("ui_dashboard") + "#torbox")
 
 
@@ -1301,7 +1171,6 @@ def ui_strm_rescan():
     if not auth.is_admin():
         abort(403)
     threading.Thread(target=strm_generator.run_and_refresh, name="strm-manual", daemon=True).start()
-    flash("strm rescan started", "ok")
     return redirect(url_for("ui_dashboard"))
 
 
@@ -1349,34 +1218,13 @@ def ui_add_magnet():
         abort(403)
     magnet = (request.form.get("magnet") or "").strip()
     if not magnet.startswith("magnet:"):
-        flash("Not a magnet link", "err")
         return redirect(url_for("ui_dashboard") + "#search")
     try:
         torbox.add_magnet(magnet, reason="manual")
-        flash("Magnet added to TorBox  -  rescan will create .strm shortly", "ok")
         threading.Thread(target=strm_generator.run_and_refresh, name="strm-after-add", daemon=True).start()
     except Exception as exc:
-        flash(f"Add failed: {exc}", "err")
+        log.warning("add-magnet failed: %s", exc)
     return redirect(url_for("ui_dashboard") + "#search")
-
-
-@app.post("/ui/retry-request/<int:row_id>")
-def ui_retry_request(row_id: int):
-    if not auth.is_admin():
-        abort(403)
-    rows = [r for r in db.get_recent(1000) if r["id"] == row_id]
-    if not rows:
-        flash("Request not found", "err")
-        return redirect(url_for("ui_dashboard"))
-    r = rows[0]
-    seasons = [int(s) for s in (r.get("seasons") or "").split(",") if s.strip().isdigit()]
-    media_request = MediaRequest(
-        title=r["title"], media_type=r["media_type"], imdb_id=r["imdb_id"], seasons=seasons,
-    )
-    threading.Thread(target=processor.process, args=(media_request,),
-                     name=f"retry-{r['imdb_id']}", daemon=True).start()
-    flash(f"Retrying {r['title']}", "ok")
-    return redirect(url_for("ui_dashboard"))
 
 
 @app.get("/ui/api/poster/<imdb_id>")
@@ -2000,15 +1848,6 @@ def ui_api_zilean_import():
     return jsonify(ok=True, started=True)
 
 
-@app.post("/ui/catbox-gc")
-def ui_catbox_gc():
-    if not auth.is_admin():
-        abort(403)
-    n = catbox.release_idle()
-    flash(f"Released {n} idle torrent(s)", "ok")
-    return redirect(url_for("ui_dashboard") + "#catbox")
-
-
 @app.get("/ui/api/blacklist")
 def ui_api_blacklist():
     return jsonify(items=db.get_all_failed_hashes())
@@ -2019,15 +1858,7 @@ def ui_blacklist_clear(info_hash: str):
     if not auth.is_admin():
         abort(403)
     db.clear_failed_hash(info_hash)
-    flash(f"Cleared blacklist for {info_hash[:12]}…", "ok")
     return redirect(url_for("ui_dashboard") + "#blacklist")
-
-
-@app.post("/ui/backup-now")
-def ui_backup_now():
-    threading.Thread(target=backup.run, name="backup-manual", daemon=True).start()
-    flash("DB backup started", "ok")
-    return redirect(url_for("ui_dashboard"))
 
 
 @app.get("/ui/api/backups")
@@ -2041,9 +1872,7 @@ def ui_backup_restore():
         abort(403)
     name = request.form.get("name", "").strip()
     if not backup.restore(name):
-        flash(f"Restore failed for {name}", "err")
         return redirect(url_for("ui_dashboard") + "#catbox")
-    flash(f"Restored {name}. Restart the container to load the new DB.", "ok")
     return redirect(url_for("ui_dashboard") + "#catbox")
 
 
@@ -2054,7 +1883,6 @@ def ui_auto_upgrade():
     if not auth.is_admin():
         abort(403)
     threading.Thread(target=upgrader.run_auto_upgrade, name="upgrade-manual", daemon=True).start()
-    flash("Auto-upgrade scan started", "ok")
     return redirect(url_for("ui_dashboard") + "#overview")
 
 
@@ -2063,26 +1891,6 @@ def ui_pack_consolidate():
     if not auth.is_admin():
         abort(403)
     threading.Thread(target=upgrader.run_pack_consolidation, name="pack-manual", daemon=True).start()
-    flash("Season-pack consolidation started", "ok")
-    return redirect(url_for("ui_dashboard") + "#overview")
-
-
-@app.post("/ui/trending-now")
-def ui_trending_now():
-    if not auth.is_admin():
-        abort(403)
-    threading.Thread(target=trending.run, name="trending-manual", daemon=True).start()
-    flash("Trending pre-cache started", "ok")
-    return redirect(url_for("ui_dashboard") + "#overview")
-
-
-@app.post("/ui/continue-watching")
-def ui_continue_watching():
-    if not auth.is_admin():
-        abort(403)
-    threading.Thread(target=continue_watching.prioritize_next_episodes,
-                     name="cw-manual", daemon=True).start()
-    flash("Continue-watching scan started", "ok")
     return redirect(url_for("ui_dashboard") + "#overview")
 
 
@@ -2139,22 +1947,9 @@ def ui_save_settings():
                 settings.set(key, value)
             saved += 1
         except ValueError as exc:
-            flash(str(exc), "error")
-    flash(f"Saved {saved} setting(s). Hot-reload settings apply immediately; others need a restart.", "ok")
+            log.warning("settings save rejected %s: %s", key, exc)
     return redirect(url_for("ui_dashboard") + "#settings")
 
-
-@app.post("/ui/settings-reset/<key>")
-def ui_settings_reset(key: str):
-    if not auth.is_admin():
-        abort(403)
-    import settings
-    settings.set(key, None)
-    flash(f"Reset {key} to .env default", "ok")
-    return redirect(url_for("ui_dashboard") + "#settings")
-
-
-# ── Robustness endpoints ──────────────────────────────────────────────────────
 
 @app.get("/ui/api/orphans")
 def ui_api_orphans():
@@ -2175,7 +1970,6 @@ def ui_library_import():
         abort(403)
     threading.Thread(target=_library_import_and_resolve,
                      name="lib-import", daemon=True).start()
-    flash("Library import started  -  check Logs for progress", "ok")
     return redirect(url_for("ui_dashboard") + "#overview")
 
 
@@ -2184,7 +1978,6 @@ def ui_recovery():
     if not auth.is_admin():
         abort(403)
     threading.Thread(target=recovery.run, name="recovery-wizard", daemon=True).start()
-    flash("Recovery wizard started  -  runs integrity check + cleanup + import + strm scan", "ok")
     return redirect(url_for("ui_dashboard") + "#overview")
 
 
@@ -2193,32 +1986,8 @@ def ui_db_vacuum():
     if not auth.is_admin():
         abort(403)
     threading.Thread(target=db.vacuum, name="db-vacuum", daemon=True).start()
-    flash("DB vacuum started", "ok")
     return redirect(url_for("ui_dashboard") + "#overview")
 
-
-@app.post("/ui/db-prune")
-def ui_db_prune():
-    if not auth.is_admin():
-        abort(403)
-    threading.Thread(target=lambda: db.prune_old(90), name="db-prune", daemon=True).start()
-    flash("Pruning rows older than 90 days", "ok")
-    return redirect(url_for("ui_dashboard") + "#overview")
-
-
-@app.post("/ui/quota-check")
-def ui_quota_check():
-    if not auth.is_admin():
-        abort(403)
-    threading.Thread(
-        target=lambda: torbox.check_quota_and_warn(QUOTA_WARN_TORRENT_COUNT, QUOTA_WARN_SIZE_GB),
-        name="quota-manual", daemon=True,
-    ).start()
-    flash("Quota check started", "ok")
-    return redirect(url_for("ui_dashboard") + "#overview")
-
-
-# ── Retry queue + show overrides + metrics + TorBox usage ─────────────────────
 
 @app.post("/ui/api/retry-queue/clear")
 @auth.require_role("admin")
@@ -2337,7 +2106,6 @@ def ui_show_override():
         abort(403)
     imdb_id = (request.form.get("imdb_id") or "").strip()
     if not re.fullmatch(r"tt\d{6,10}", imdb_id):
-        flash("Invalid IMDB ID", "err")
         return redirect(url_for("ui_dashboard") + "#overrides")
     quality = request.form.get("quality_preference") or None
     allow_4k_raw = request.form.get("allow_4k")
@@ -2346,7 +2114,6 @@ def ui_show_override():
     prefer_hevc = None if not prefer_hevc_raw else prefer_hevc_raw == "true"
     notes = request.form.get("notes") or None
     db.upsert_show_override(imdb_id, quality, allow_4k, prefer_hevc, notes)
-    flash(f"Saved override for {imdb_id}", "ok")
     return redirect(url_for("ui_dashboard") + "#overrides")
 
 
@@ -2355,7 +2122,6 @@ def ui_show_override_delete(imdb_id: str):
     if not auth.is_admin():
         abort(403)
     db.delete_show_override(imdb_id)
-    flash(f"Cleared override for {imdb_id}", "ok")
     return redirect(url_for("ui_dashboard") + "#overrides")
 
 
@@ -2839,18 +2605,6 @@ def ui_api_wanted_recheck():
             logging.getLogger(__name__).error("wanted-recheck-manual failed: %s", exc)
     threading.Thread(target=_run, name="wanted-recheck-manual", daemon=True).start()
     return jsonify(ok=True, message="wanted recheck started")
-
-
-@app.post("/ui/search-all-wanted")
-def ui_search_all_wanted():
-    if not auth.is_admin():
-        abort(403)
-    def _run():
-        upgrader.recheck_wanted()
-        monitor.run_series_check()
-    threading.Thread(target=_run, name="wanted-search-all", daemon=True).start()
-    flash("Search all wanted started  -  this may take a while.", "info")
-    return redirect(url_for("ui_dashboard") + "#wanted")
 
 
 @app.get("/ui/api/wanted-episodes")
@@ -3556,8 +3310,7 @@ def _spa_index():
         return (
             "<h1>Mycelium SPA not built</h1>"
             "<p>Run <code>cd frontend && npm install && npm run build</code> "
-            "or rebuild the Docker image. The classic UI is at "
-            "<a href='/admin'>/admin</a>.</p>"
+            "or rebuild the Docker image.</p>"
         ), 503
     with open(index_path, encoding="utf-8") as f:
         html = f.read()

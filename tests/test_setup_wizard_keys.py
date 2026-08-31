@@ -1,4 +1,4 @@
-"""The setup wizard (templates/setup.html, frontend/src/pages/setup/) posts
+"""The setup wizard (frontend/src/pages/setup/) posts
 QUALITY_PREFERENCE/ALLOW_4K/PREFER_HEVC/AUDIO_LANGUAGE_PREFERENCE - keys the
 filter-rules model retired. migrate_filters.translate_wizard_keys() is the
 one place that maps those posted field names onto the rule-model keys the

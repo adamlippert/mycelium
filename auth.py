@@ -40,7 +40,6 @@ _PUBLIC_PATHS = (
     "/health",
     "/healthz",
     "/login",
-    "/login/classic",
     "/login/oidc",
     "/oidc/callback",
     "/logout",

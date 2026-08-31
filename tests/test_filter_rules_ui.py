@@ -153,25 +153,35 @@ def test_the_series_title_repair_is_reachable_from_the_ui():
     """
     import pathlib
     root = pathlib.Path(__file__).resolve().parent.parent
-    ui = (root / "templates" / "ui.html").read_text()
     app_src = (root / "app.py").read_text()
+    api = (root / "frontend" / "src" / "api.ts").read_text()
 
     assert "/ui/api/repair-tvshow-titles" in app_src, "endpoint disappeared"
-    assert "repairTvshowTitles" in ui, "no handler wired up in the admin UI"
-    assert "/ui/api/repair-tvshow-titles" in ui, "the button does not call the endpoint"
+    assert "/ui/api/repair-tvshow-titles" in api, "the SPA does not call the endpoint"
 
 
-def test_every_maintenance_button_calls_an_endpoint_that_exists():
-    """A renamed route leaves a button that fails only when someone clicks it."""
+def test_every_spa_url_calls_an_endpoint_that_exists():
+    """A renamed route leaves a button that fails only when someone clicks it.
+    Scans every string literal starting with /ui/ across the SPA source
+    (skipping template strings that interpolate ids) and requires app.py to
+    define each path."""
     import pathlib
     import re
     root = pathlib.Path(__file__).resolve().parent.parent
-    ui = (root / "templates" / "ui.html").read_text()
+    # Routes are defined in app.py and in plugin route modules (trakt,
+    # webplayer register their own /ui/api/ paths).
     app_src = (root / "app.py").read_text()
+    for f in (root / "plugins").rglob("*.py"):
+        app_src += f.read_text()
 
-    # Only whole literal URLs. A trailing slash means the JS concatenated an id
-    # onto it (`'/ui/api/requests/' + id + '/delete'`), which this cannot resolve.
-    called = {u for u in re.findall(r"fetch\(['\"](/ui/[^'\"?]+)['\"]", ui)
-              if not u.endswith("/")}
-    missing = sorted(u for u in called if f'"{u}"' not in app_src and f"'{u}'" not in app_src)
-    assert not missing, f"UI calls routes that app.py does not define: {missing}"
+    called = set()
+    for f in (root / "frontend" / "src").rglob("*.ts*"):
+        text = f.read_text()
+        for u in re.findall(r"['\"`](/ui/[^'\"`?]+)['\"`]", text):
+            if "${" in u or u.endswith("/"):
+                continue
+            called.add(u)
+    assert called, "no /ui/ URLs found in the SPA source at all"
+    missing = sorted(u for u in called
+                     if f'"{u}"' not in app_src and f"'{u}'" not in app_src)
+    assert not missing, f"the SPA calls routes app.py does not define: {missing}"

@@ -40,7 +40,7 @@ def test_base_url_has_a_default():
 
 
 def test_secrets_are_named_so_the_ui_masks_them():
-    # templates/ui.html:1233 masks a field when its key matches this pattern.
+    # The admin Settings page masks a field when its key matches this pattern.
     # A secret whose name misses it renders in plaintext, pre-filled.
     import re
     predicate = re.compile(r"KEY|TOKEN|SECRET|PASSWORD")

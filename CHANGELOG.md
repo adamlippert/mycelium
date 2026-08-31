@@ -4,6 +4,10 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Removed
+
+- **The Jinja UI is gone.** The React SPA has been the default since 0.9.0 and a full audit had already confirmed every control was rebuilt; maintaining two UIs meant building every feature twice. Deleted: the three templates (login, setup wizard, admin dashboard), the `/login/classic`, `/setup/classic` and `/admin/classic` escape hatches, the `UI_V2` flag (the SPA is simply the UI now), twelve form-POST routes that no surface had called since the redesign, and every `flash()` call - nothing rendered those messages any more, so they would have accumulated unread in the session cookie forever.
+
 ### Changed
 
 - **Debridio is queried as a plain scraper; your TorBox key is no longer sent to it.** The addon's config segment carried the key, but it never validated it: probing the live addon returned byte-identical results with the key present, omitted, blanked or filled with nonsense (538 streams, 538 hashes, 197 cached flags, in every shape). It was only used to build play URLs that Mycelium discards, since it keeps the info hash and resolves every release through its own TorBox client, exactly as it already did for Torrentio and Zilean. All three scrapers now see no debrid credentials at all. `DEBRIDIO_SEND_TORBOX_KEY=true` restores the old behaviour if a future addon version starts requiring it.

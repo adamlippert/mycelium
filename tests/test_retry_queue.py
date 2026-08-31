@@ -154,8 +154,8 @@ def test_the_clear_button_is_reachable():
     import pathlib
     root = pathlib.Path(__file__).resolve().parent.parent
     assert "/ui/api/retry-queue/clear" in (root / "app.py").read_text()
-    ui = (root / "templates" / "ui.html").read_text()
-    assert "clearRetryQueue" in ui and "/ui/api/retry-queue/clear" in ui
+    api = (root / "frontend" / "src" / "api.ts").read_text()
+    assert "/ui/api/retry-queue/clear" in api
 
 
 def test_migration_collapses_duplicates_on_a_legacy_database(tmp_path, monkeypatch):

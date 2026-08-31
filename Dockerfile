@@ -69,7 +69,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY *.py ./
 COPY releases.json ./
 COPY plugins/ ./plugins/
-COPY templates/ ./templates/
 COPY docs/ ./docs/
 # Built SPA from stage 1 (Vite writes to ../static/app relative to frontend/)
 COPY --from=frontend /static/app/ ./static/app/

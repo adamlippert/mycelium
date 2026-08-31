@@ -364,7 +364,7 @@ OIDC_PROVIDER_NAME = _env("OIDC_PROVIDER_NAME", "SSO")
 # pages. Env var, not a runtime setting: a runtime toggle is unreachable if
 # login is what broke. The Jinja pages stay reachable at /login/classic,
 # /setup/classic and /admin/classic regardless.
-UI_V2 = _env("UI_V2", "true").lower() in ("1", "true", "yes")
+# UI_V2 retired: the React SPA is the only UI since the Jinja views were removed.
 
 
 def configure_logging() -> None:
