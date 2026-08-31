@@ -2,6 +2,16 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **Preferences saved by the shared-password login persist now.** The legacy single-user login has no users-table row (its session record is a synthetic shim with id 0), so saving UI preferences or plugin toggles matched zero rows and silently reverted - the same bug class as the 0.8.3 region fix, on the two endpoints that fix recorded as follow-ups. They now persist in a settings blob the login's record reads back, so the session payload, plugin fields and webplayer checks all see them.
+
+### Added
+
+- **SECURITY.md**: private vulnerability reporting via GitHub, supported-version policy, and deployment scope notes (what is unauthenticated by design and why).
+
 ## [0.9.0] - 2026-08-31
 
 ### Changed

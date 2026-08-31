@@ -146,6 +146,32 @@ def current_user() -> str | None:
     return session.get("user") or _proxy_user()
 
 
+_LEGACY_PREFS_KEY = "LEGACY_USER_PREFS"
+
+
+def legacy_user_prefs() -> dict:
+    """Preferences saved by the legacy single-user login, which has no
+    users-table row to write to. Stored as one JSON object in settings."""
+    import json
+    import settings
+    raw = settings.get(_LEGACY_PREFS_KEY, "") or ""
+    try:
+        d = json.loads(raw) if isinstance(raw, str) else raw
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_legacy_user_prefs(fields: dict) -> None:
+    """Merge fields into the legacy login's settings-backed preferences.
+    Callers validate the fields; this only persists them."""
+    import json
+    import settings
+    prefs = legacy_user_prefs()
+    prefs.update(fields)
+    settings.set(_LEGACY_PREFS_KEY, json.dumps(prefs))
+
+
 def current_user_record() -> dict | None:
     """Return the full users-table row for the active session, or None.
 
@@ -166,9 +192,16 @@ def current_user_record() -> dict | None:
         return None
     legacy_role = session.get("role")
     if legacy_role:
-        # Legacy single-user AUTH_USERNAME/AUTH_PASSWORD login.
-        return {"id": 0, "username": user, "role": legacy_role, "auto_approve": 1,
-                "quota_monthly": 0, "enabled": 1, "webplayer_enabled": 1}
+        # Legacy single-user AUTH_USERNAME/AUTH_PASSWORD login. The synthetic
+        # id=0 record matches no users-table row, so preferences saved by
+        # this login live in a settings blob instead (same fix as
+        # LEGACY_USER_REGION); overlay them so every reader of the record -
+        # the session payload, plugin session_fields, webplayer checks -
+        # sees them without knowing where they came from.
+        rec = {"id": 0, "username": user, "role": legacy_role, "auto_approve": 1,
+               "quota_monthly": 0, "enabled": 1, "webplayer_enabled": 1}
+        rec.update(legacy_user_prefs())
+        return rec
     # OIDC / trusted-proxy login: resolve or auto-provision a real DB user.
     import db
     u = db.get_user_by_username(user)

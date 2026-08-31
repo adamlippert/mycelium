@@ -3171,6 +3171,13 @@ def ui_api_me_plugin_fields():
     fields = {k: (1 if v else 0) for k, v in p.items() if k in allowed}
     if not fields:
         return jsonify(error="no valid fields"), 400
+    if not rec.get("id"):
+        # Legacy single-user login: id=0 matches no users-table row, so
+        # db.update_user(0, ...) silently no-ops. Same fix as region
+        # (LEGACY_USER_REGION): persist in settings; the shim record in
+        # auth.current_user_record() reads it back.
+        auth.save_legacy_user_prefs(fields)
+        return jsonify(ok=True)
     db.update_user(rec["id"], **fields)
     return jsonify(ok=True)
 
@@ -3219,6 +3226,10 @@ def ui_api_me_preferences():
             fields[k] = ",".join(l.strip().lower() for l in str(v or "").split(",") if l.strip())
     if not fields:
         return jsonify(error="no valid fields"), 400
+    if not rec.get("id"):
+        # Legacy single-user login: see ui_api_me_plugin_fields above.
+        auth.save_legacy_user_prefs(fields)
+        return jsonify(ok=True)
     db.update_user(rec["id"], **fields)
     return jsonify(ok=True)
 
