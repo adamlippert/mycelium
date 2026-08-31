@@ -156,6 +156,94 @@ def migrate(dry_run: bool = False, force: bool = False) -> dict:
     return out
 
 
+# Keys the setup wizard still posts under their pre-rule-model names. Kept
+# in sync with the four inputs in templates/setup.html and
+# frontend/src/pages/setup/types.ts - both wizard UIs were deliberately left
+# posting these names (see app.setup_save), so this tuple is the only place
+# a fifth wizard field would need to be added.
+WIZARD_KEYS = ("QUALITY_PREFERENCE", "ALLOW_4K", "PREFER_HEVC", "AUDIO_LANGUAGE_PREFERENCE")
+
+
+def _truthy(raw) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _split(raw) -> list[str]:
+    if isinstance(raw, (list, tuple)):
+        return [str(v) for v in raw]
+    return str(raw).split(",")
+
+
+def translate_wizard_keys(form: dict) -> dict:
+    """Translate the four retired keys the setup wizard still posts (see
+    WIZARD_KEYS) into the rule-model keys that replace them.
+
+    migrate() runs once at first boot, before the wizard is ever reachable,
+    so its output is never what the wizard's own choices land in - a fresh
+    install's QUALITY_PREFERENCE/ALLOW_4K/PREFER_HEVC/
+    AUDIO_LANGUAGE_PREFERENCE posts to /setup/save would otherwise be dead
+    writes to keys the rule model does not read. This is the one place that
+    translates those four posted field names, called from app.setup_save, so
+    the mapping is not duplicated inline there.
+
+    Per-key semantics, each verified against migrate()'s own treatment of
+    the same retired key:
+
+    - QUALITY_PREFERENCE -> RESOLUTION_PREFERRED, only when the posted value
+      is non-empty (matches migrate()'s `if resolution_preferred: ...` -  an
+      empty field means "not touched", not "clear my preference").
+    - ALLOW_4K: only "false" produces a row, RESOLUTION_EXCLUDED=["2160p"].
+      "true" (or the key being absent from `form`) writes nothing, mirroring
+      migrate()'s one-directional `if ALLOW_4K is False: ...` - a wizard
+      rerun that flips 4K back on does not reach into RESOLUTION_EXCLUDED to
+      remove an entry an admin may since have added by hand in the rule
+      editor.
+    - PREFER_HEVC: only "true" produces a row, ENCODE_PREFERRED=["hevc"],
+      the same one-directional shape as ALLOW_4K, matching migrate()'s
+      `if PREFER_HEVC: out["ENCODE_PREFERRED"] = ...`.
+    - AUDIO_LANGUAGE_PREFERENCE -> LANGUAGE_PREFERRED, only when non-empty,
+      same reasoning as QUALITY_PREFERENCE.
+
+    Every value this returns is a full replacement of that rule-model key,
+    not an item-level merge with whatever is already stored: the wizard
+    field IS the whole preference list the user just typed, so replacing the
+    specific category they expressed a choice about this save is the
+    correct default. A category the caller left out of `form`, or posted
+    empty, gets no entry in the result at all, so it is never touched.
+
+    Returns only rule-model keys, never one of WIZARD_KEYS, so a caller can
+    write every entry of the result straight into settings without a
+    retired key slipping back into storage.
+    """
+    out: dict = {}
+
+    if form.get("QUALITY_PREFERENCE"):
+        resolution_preferred = _sanitise(
+            "RESOLUTION_PREFERRED", _split(form["QUALITY_PREFERENCE"]))
+        if resolution_preferred:
+            out["RESOLUTION_PREFERRED"] = resolution_preferred
+
+    if "ALLOW_4K" in form and not _truthy(form["ALLOW_4K"]):
+        resolution_excluded = _sanitise("RESOLUTION_EXCLUDED", ["2160p"])
+        if resolution_excluded:
+            out["RESOLUTION_EXCLUDED"] = resolution_excluded
+
+    if "PREFER_HEVC" in form and _truthy(form["PREFER_HEVC"]):
+        encode_preferred = _sanitise("ENCODE_PREFERRED", ["hevc"])
+        if encode_preferred:
+            out["ENCODE_PREFERRED"] = encode_preferred
+
+    if form.get("AUDIO_LANGUAGE_PREFERENCE"):
+        language_preferred = _sanitise(
+            "LANGUAGE_PREFERRED", _split(form["AUDIO_LANGUAGE_PREFERENCE"]))
+        if language_preferred:
+            out["LANGUAGE_PREFERRED"] = language_preferred
+
+    return out
+
+
 def warn_stale_env() -> list[str]:
     """Name retired keys the user actually set, so the warning means something.
 

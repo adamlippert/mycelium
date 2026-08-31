@@ -759,9 +759,30 @@ def setup_save():
     if db.user_count() > 0 and not auth.is_admin():
         return jsonify(error="unauthorized"), 401
     import settings as _settings
+    import migrate_filters
     _allowed_keys = {k for g in _settings.SETTING_GROUPS for k in g["keys"]} | {"SETUP_COMPLETE"}
     saved = 0
+
+    # Both wizard UIs (templates/setup.html, frontend/src/pages/setup/) still
+    # post QUALITY_PREFERENCE/ALLOW_4K/PREFER_HEVC/AUDIO_LANGUAGE_PREFERENCE -
+    # keys the filter-rules model retired. Translate them into the rule-model
+    # keys that replace them here, in one place, rather than storing values
+    # nothing reads; see migrate_filters.translate_wizard_keys for the mapping
+    # and why the wizard UIs were left posting the old names.
+    wizard_form = {k: v for k, v in request.form.items() if k in migrate_filters.WIZARD_KEYS}
+    if wizard_form:
+        for key, value in migrate_filters.translate_wizard_keys(wizard_form).items():
+            try:
+                _settings.set(key, value)
+                saved += 1
+            except ValueError as exc:
+                log.warning("setup_save: rejected translated value for %s: %s", key, exc)
+
     for key, value in request.form.items():
+        if key in migrate_filters.WIZARD_KEYS:
+            # Never store the retired key itself; translate_wizard_keys above
+            # already wrote whatever rule-model key(s) it maps to.
+            continue
         if key not in _allowed_keys:
             log.warning("setup_save: rejected unknown key %r", key)
             continue

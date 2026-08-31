@@ -8,7 +8,11 @@ interface TocEntry {
 
 const README_URL = 'https://github.com/adamlippert/mycelium#readme';
 
-const CONTENT_CLASSES = [
+// Exported for tests: asserting on class-list coverage of the source doc's
+// class names (.alert.danger, .comment-tree, ...) is cheaper and more
+// direct than rendering the sample doc and reading computed styles back out
+// of jsdom, which does not run the Tailwind build at all.
+export const CONTENT_CLASSES = [
   // Headings
   '[&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:text-body',
   '[&_h2]:mb-4 [&_h2]:mt-10 [&_h2]:flex [&_h2]:scroll-mt-6 [&_h2]:items-center [&_h2]:gap-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-body',
@@ -27,8 +31,24 @@ const CONTENT_CLASSES = [
   '[&_.cmd]:mb-3 [&_.cmd]:overflow-x-auto [&_.cmd]:rounded-md [&_.cmd]:border [&_.cmd]:border-border [&_.cmd]:bg-card-raised [&_.cmd]:p-4 [&_.cmd]:font-mono [&_.cmd]:text-xs [&_.cmd]:leading-loose [&_.cmd]:text-accent-pale',
   '[&_.cmd_code]:bg-transparent [&_.cmd_code]:p-0',
   '[&_.tree]:mb-3 [&_.tree]:overflow-x-auto [&_.tree]:rounded-md [&_.tree]:border [&_.tree]:border-border [&_.tree]:bg-card-raised [&_.tree]:p-4 [&_.tree]:font-mono [&_.tree]:text-xs [&_.tree]:leading-loose [&_.tree]:text-muted',
+  // .comment-tree annotates a line inside a .tree block (e.g. "<- Jellyfin
+  // config"); the [&_.tree] rule above only ever matched the box itself, so
+  // these inline comments rendered indistinguishable from the tree lines
+  // around them. Self-contained (font-mono/text-xs) rather than relying on
+  // inheritance from an ancestor .tree, matching the source doc's own
+  // `.tree .comment-tree { color: var(--text3); font-style: italic; }`.
+  '[&_.comment-tree]:font-mono [&_.comment-tree]:text-xs [&_.comment-tree]:italic [&_.comment-tree]:text-muted/70',
   // Callouts / badges / numbered markers, reusing the source doc's own class names
   '[&_.alert]:mb-3 [&_.alert]:flex [&_.alert]:gap-2 [&_.alert]:rounded-md [&_.alert]:border [&_.alert]:border-border [&_.alert]:bg-card-raised [&_.alert]:p-3 [&_.alert]:text-sm [&_.alert]:text-muted',
+  // Severity modifiers - source doc pairs each with its own tint (see its
+  // embedded .alert.info/.warn/.danger/.success rules); mapped onto our own
+  // token palette instead of the source's hardcoded hex. Higher selector
+  // specificity than the base .alert rule above (two classes vs one) wins
+  // regardless of array order.
+  '[&_.alert.info]:border-accent-light/25 [&_.alert.info]:bg-accent-light/10 [&_.alert.info]:text-accent-light',
+  '[&_.alert.warn]:border-warn/25 [&_.alert.warn]:bg-warn/10 [&_.alert.warn]:text-warn',
+  '[&_.alert.danger]:border-danger/25 [&_.alert.danger]:bg-danger/10 [&_.alert.danger]:text-danger',
+  '[&_.alert.success]:border-ok/25 [&_.alert.success]:bg-ok/10 [&_.alert.success]:text-ok',
   '[&_.badge]:mb-3 [&_.badge]:inline-block [&_.badge]:rounded-full [&_.badge]:border [&_.badge]:border-accent/30 [&_.badge]:bg-accent/10 [&_.badge]:px-2.5 [&_.badge]:py-1 [&_.badge]:font-mono [&_.badge]:text-xs [&_.badge]:text-accent-light',
   '[&_.section-num]:mr-2 [&_.section-num]:inline-flex [&_.section-num]:h-6 [&_.section-num]:w-6 [&_.section-num]:items-center [&_.section-num]:justify-center [&_.section-num]:rounded-full [&_.section-num]:bg-accent [&_.section-num]:text-xs [&_.section-num]:font-semibold [&_.section-num]:text-white',
   '[&_.section-opt]:mr-2 [&_.section-opt]:inline-flex [&_.section-opt]:h-6 [&_.section-opt]:w-6 [&_.section-opt]:items-center [&_.section-opt]:justify-center [&_.section-opt]:rounded-full [&_.section-opt]:border [&_.section-opt]:border-border [&_.section-opt]:bg-card-raised [&_.section-opt]:text-xs [&_.section-opt]:font-semibold [&_.section-opt]:text-muted',
@@ -36,6 +56,11 @@ const CONTENT_CLASSES = [
   '[&_.step]:mb-3 [&_.step]:flex [&_.step]:gap-3 [&_.step]:text-sm [&_.step]:text-muted',
   '[&_.service-grid]:mb-3 [&_.service-grid]:grid [&_.service-grid]:grid-cols-1 [&_.service-grid]:gap-3 sm:[&_.service-grid]:grid-cols-2',
   '[&_.service-card]:rounded-lg [&_.service-card]:border [&_.service-card]:border-border [&_.service-card]:bg-card-raised [&_.service-card]:p-3 [&_.service-card]:text-sm [&_.service-card]:text-muted',
+  // Flow diagram (setup pipeline: box -> box -> box). Unstyled, these three
+  // classes rendered as plain inline text with no visual grouping at all.
+  '[&_.flow]:mb-3 [&_.flow]:flex [&_.flow]:flex-wrap [&_.flow]:items-center [&_.flow]:gap-2',
+  '[&_.flow-box]:rounded-md [&_.flow-box]:border [&_.flow-box]:border-border [&_.flow-box]:bg-card-raised [&_.flow-box]:px-3.5 [&_.flow-box]:py-1.5 [&_.flow-box]:text-[13px] [&_.flow-box]:font-semibold [&_.flow-box]:text-body',
+  '[&_.flow-arrow]:text-lg [&_.flow-arrow]:text-muted',
   // Tables
   '[&_table]:mb-4 [&_table]:w-full [&_table]:border-collapse [&_table]:text-sm',
   '[&_th]:border [&_th]:border-border [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-body',
