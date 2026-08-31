@@ -162,8 +162,7 @@ auth.install_before_request(app)
 oidc.install(app)
 
 
-@app.get("/login")
-def login_view():
+def _login_page():
     return render_template("login.html",
                             error=request.args.get("error"),
                             next=request.args.get("next", ""),
@@ -171,6 +170,18 @@ def login_view():
                             oidc_provider=oidc.provider_name(),
                             password_enabled=bool(cfg.AUTH_ENABLED or
                                                    __import__("settings").get("AUTH_PASSWORD_HASH", "")))
+
+
+@app.get("/login")
+def login_view():
+    if cfg.UI_V2:
+        return _spa_index()
+    return _login_page()
+
+
+@app.get("/login/classic")
+def login_classic():
+    return _login_page()
 
 
 @app.post("/login")
@@ -647,6 +658,16 @@ def torbox_webhook():
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
+def _admin_page():
+    return render_template("ui.html",
+                            repair_items=db.get_repair_items(200),
+                            last_cleanup=db.get_last_cleanup_run(),
+                            activity=db.get_activity(50),
+                            config=cfg,
+                            app_version=APP_VERSION,
+                            releases=RELEASES)
+
+
 @app.get("/admin")
 def ui_dashboard():
     import settings as _settings
@@ -654,15 +675,19 @@ def ui_dashboard():
         return redirect(url_for("setup_wizard"))
     if not auth.is_admin():
         return redirect(url_for("login_view", next="/admin"))
-    return render_template(
-        "ui.html",
-        repair_items=db.get_repair_items(200),
-        last_cleanup=db.get_last_cleanup_run(),
-        activity=db.get_activity(50),
-        config=cfg,
-        app_version=APP_VERSION,
-        releases=RELEASES,
-    )
+    if cfg.UI_V2:
+        return _spa_index()
+    return _admin_page()
+
+
+@app.get("/admin/classic")
+def ui_dashboard_classic():
+    import settings as _settings
+    if not _settings.get("SETUP_COMPLETE", False):
+        return redirect(url_for("setup_wizard"))
+    if not auth.is_admin():
+        return redirect(url_for("login_view", next="/admin/classic"))
+    return _admin_page()
 
 
 @app.get("/ui")
@@ -672,18 +697,40 @@ def ui_redirect():
 
 # ── Setup wizard ──────────────────────────────────────────────────────────────
 
+def _setup_page():
+    return render_template("setup.html")
+
+
 @app.get("/setup")
 def setup_wizard():
     import settings as _settings
     # First run: no users yet - always allow
     if db.user_count() == 0:
-        return render_template("setup.html")
+        if cfg.UI_V2:
+            return _spa_index()
+        return _setup_page()
     # After first run: require admin login
     if not auth.is_admin():
         return redirect(url_for("login_view", next="/setup?rerun=1"))
     if _settings.get("SETUP_COMPLETE", False) and request.args.get("rerun") != "1":
         return redirect(url_for("ui_dashboard"))
-    return render_template("setup.html")
+    if cfg.UI_V2:
+        return _spa_index()
+    return _setup_page()
+
+
+@app.get("/setup/classic")
+def setup_wizard_classic():
+    import settings as _settings
+    # First run: no users yet - always allow
+    if db.user_count() == 0:
+        return _setup_page()
+    # After first run: require admin login
+    if not auth.is_admin():
+        return redirect(url_for("login_view", next="/setup/classic?rerun=1"))
+    if _settings.get("SETUP_COMPLETE", False) and request.args.get("rerun") != "1":
+        return redirect(url_for("ui_dashboard"))
+    return _setup_page()
 
 
 @app.post("/setup/skip")

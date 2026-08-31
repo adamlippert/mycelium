@@ -357,6 +357,12 @@ OIDC_SCOPES = _env("OIDC_SCOPES", "openid email profile")
 OIDC_USER_CLAIM = _env("OIDC_USER_CLAIM", "preferred_username")
 OIDC_PROVIDER_NAME = _env("OIDC_PROVIDER_NAME", "SSO")
 
+# Serve the React SPA at /login, /setup and /admin instead of the Jinja
+# pages. Env var, not a runtime setting: a runtime toggle is unreachable if
+# login is what broke. The Jinja pages stay reachable at /login/classic,
+# /setup/classic and /admin/classic regardless.
+UI_V2 = _env("UI_V2", "false").lower() in ("1", "true", "yes")
+
 
 def configure_logging() -> None:
     logging.basicConfig(
