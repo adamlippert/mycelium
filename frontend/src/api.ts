@@ -48,6 +48,28 @@ async function http<T>(url: string, init: RequestInit = {}): Promise<T> {
   return (await resp.json()) as T;
 }
 
+/** POST helper for the Jinja maintenance/blacklist routes that are plain form
+ * posts today: the Flask handler flashes a message and responds with a
+ * redirect to the dashboard, not JSON. fetch() follows that redirect on its
+ * own, so success is just response.ok after the follow - there is no JSON
+ * body to parse. */
+async function formPost(url: string, body?: Record<string, string>): Promise<void> {
+  const headers: Record<string, string> = { 'X-CSRFToken': csrfToken() };
+  let payload: string | undefined;
+  if (body) {
+    payload = new URLSearchParams(body).toString();
+    headers['Content-Type'] = 'application/x-www-form-urlencoded';
+  }
+  const resp = await fetch(url, { method: 'POST', headers, body: payload, credentials: 'same-origin' });
+  if (resp.status === 401) {
+    if (typeof window !== 'undefined' && !window.location.pathname.endsWith('/login')) {
+      window.location.href = '/login';
+    }
+    throw new Error('unauthorized');
+  }
+  if (!resp.ok) throw new Error(`${resp.status}`);
+}
+
 export const api = {
   // Discovery
   search: (q: string) =>
@@ -320,6 +342,58 @@ export const api = {
     http<{ scanned: number; imported: number; skipped: number; failed: number }>(
       '/ui/api/torbox/scan-library', { method: 'POST' }
     ),
+  migrateCanonical: () =>
+    http<{ scanned: number; renamed: number; merged: number; skipped: number; no_imdb: number; errors?: number }>(
+      '/ui/api/migrate-canonical', { method: 'POST' }
+    ),
+  cleanupDuplicateStrms: () =>
+    http<{ scanned: number; cleaned: number; skipped?: number }>(
+      '/ui/api/cleanup-duplicate-strms', { method: 'POST' }
+    ),
+  seriesBackfill: () =>
+    http<{ ok: boolean; started: string }>('/ui/api/series-backfill', { method: 'POST' }),
+
+  // Maintenance tab: the 14 Jinja action forms. Each POSTs and redirects to
+  // the dashboard (flash message on the reloaded page) rather than
+  // returning JSON, so these go through formPost, not http().
+  maintenanceRepairAll: () => formPost('/ui/repair-all'),
+  maintenanceRunCleanup: () => formPost('/ui/run-cleanup'),
+  maintenanceAutoUpgrade: () => formPost('/ui/auto-upgrade'),
+  maintenancePackConsolidate: () => formPost('/ui/pack-consolidate'),
+  maintenanceMergeSeries: () => formPost('/ui/merge-series'),
+  maintenanceSyncSeerr: () => formPost('/ui/sync-movies'),
+  maintenanceLibraryImport: () => formPost('/ui/library-import'),
+  maintenanceFixCovers: () => formPost('/ui/refresh-images'),
+  maintenanceGenerateNfos: () => formPost('/ui/generate-nfos'),
+  maintenanceDbVacuum: () => formPost('/ui/db-vacuum'),
+  maintenanceRecovery: () => formPost('/ui/recovery'),
+
+  // The three JS-driven maintenance actions: these DO return JSON.
+  fixImdbTitles: () =>
+    http<{ fixed: Array<Record<string, unknown>>; failed: Array<Record<string, unknown>>; total: number; fixed_count: number }>(
+      '/ui/api/fix-imdb-titles', { method: 'POST' }
+    ),
+  repairTvshowTitles: () =>
+    http<{ fixed: number; skipped: number }>('/ui/api/repair-tvshow-titles', { method: 'POST' }),
+  clearRetryQueue: () =>
+    http<{ ok: boolean; removed: number }>('/ui/api/retry-queue/clear', { method: 'POST' }),
+
+  // Maintenance tab: repair history feed (summary + item list).
+  repairOverview: () => http<{ items: RepairItem[]; last_cleanup: RepairSummary | null }>('/ui/api/repair'),
+
+  // Maintenance tab: small manual-input cards for actions whose live UI
+  // (search candidates, TorBox list, backup list, show-override list) is
+  // out of scope for this tab - each posts the same route the Jinja page's
+  // per-row form used, form-encoded, plain redirect response.
+  maintenanceAddMagnet: (magnet: string) => formPost('/ui/add-magnet', { magnet }),
+  maintenanceTorboxDelete: (torrentId: string) => formPost('/ui/torbox-delete', { torrent_id: torrentId }),
+  maintenanceBackupRestore: (name: string) => formPost('/ui/backup-restore', { name }),
+  maintenanceShowOverrideDelete: (imdbId: string) =>
+    formPost(`/ui/show-override-delete/${encodeURIComponent(imdbId)}`),
+
+  // Blacklist tab
+  blacklist: () => http<{ items: BlacklistItem[] }>('/ui/api/blacklist'),
+  blacklistClear: (infoHash: string) => formPost(`/ui/blacklist-clear/${encodeURIComponent(infoHash)}`),
 
   // Auto-approve (genre rules + favorite actors)
   genres: (type: 'movie' | 'tv') =>
@@ -438,6 +512,32 @@ export type LibraryHealth = {
   strm_without_db: number;
   db_without_strm: number;
 };
+
+export interface RepairItem {
+  path: string;
+  title: string | null;
+  media_type: string | null;
+  status: string;
+  old_torrent_id: string | number | null;
+  new_info_hash: string | null;
+  reason: string | null;
+  created_at: string | null;
+}
+
+export interface RepairSummary {
+  scanned: number;
+  repaired: number;
+  deleted: number;
+  unfixable: number;
+  ran_at: string;
+}
+
+export interface BlacklistItem {
+  info_hash: string;
+  fail_count: number;
+  last_error: string | null;
+  last_attempt: string | null;
+}
 
 export interface SettingItem {
   key: string;

@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import Overview from './Overview';
 import Users from './Users';
 import Requests from './Requests';
+import Maintenance from './Maintenance';
+import Blacklist from './Blacklist';
 
 function Stub() {
   return <p className="text-muted text-sm">Coming in this plan.</p>;
@@ -15,8 +17,8 @@ export const ADMIN_TABS: { id: string; label: string; component: ComponentType }
   { id: 'filter-rules', label: 'Filter rules', component: Stub },
   { id: 'scrapers', label: 'Scrapers', component: Stub },
   { id: 'logs', label: 'Logs', component: Stub },
-  { id: 'maintenance', label: 'Maintenance', component: Stub },
-  { id: 'blacklist', label: 'Blacklist', component: Stub },
+  { id: 'maintenance', label: 'Maintenance', component: Maintenance },
+  { id: 'blacklist', label: 'Blacklist', component: Blacklist },
   { id: 'settings', label: 'Settings', component: Stub },
 ];
 

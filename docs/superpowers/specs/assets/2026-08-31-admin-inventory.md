@@ -106,41 +106,41 @@ buttons above move to Scrapers.
 
 ## Maintenance
 
-- [ ] Maintenance: Repair strm files button -> `POST /ui/repair-all` -> planned home: Maintenance
-- [ ] Maintenance: Run cleanup button -> `POST /ui/run-cleanup` -> planned home: Maintenance
-- [ ] Maintenance: Auto-upgrade button -> `POST /ui/auto-upgrade` -> planned home: Maintenance
-- [ ] Maintenance: Consolidate packs button -> `POST /ui/pack-consolidate` -> planned home: Maintenance
-- [ ] Maintenance: Merge series button (confirm dialog) -> `POST /ui/merge-series` -> planned home: Maintenance
-- [ ] Maintenance: Fix IMDB titles button -> `fixImdbTitles()` / `POST /ui/api/fix-imdb-titles` -> planned home: Maintenance
-- [ ] Maintenance: Clear retry queue button (confirm) -> `clearRetryQueue()` / `POST /ui/api/retry-queue/clear` -> planned home: Maintenance
-- [ ] Maintenance: Fix library titles button (rewrites tvshow.nfo titles) -> `repairTvshowTitles()` / `POST /ui/api/repair-tvshow-titles` -> planned home: Maintenance
-- [ ] Maintenance: Sync Seerr button -> `POST /ui/sync-movies` -> planned home: Maintenance
-- [ ] Maintenance: Import TorBox library button -> `POST /ui/library-import` -> planned home: Maintenance
-- [ ] Maintenance: Fix covers button -> `POST /ui/refresh-images` -> planned home: Maintenance
-- [ ] Maintenance: Generate NFOs button -> `POST /ui/generate-nfos` -> planned home: Maintenance
-- [ ] Maintenance: Vacuum DB button (confirm) -> `POST /ui/db-vacuum` -> planned home: Maintenance
-- [ ] Maintenance: Recovery wizard button (confirm) -> `POST /ui/recovery` -> planned home: Maintenance
-- [ ] Maintenance: repair summary stat tiles (scanned/repaired/deleted/unfixable/last run) -> `refreshRepair()` / `GET /ui/api/repair` -> planned home: Maintenance
-- [ ] Maintenance: repair history table (search, sort, paginate) -> `refreshRepair()`/`initRepairPagination()` / `GET /ui/api/repair` -> planned home: Maintenance
+- [x] Maintenance: Repair strm files button -> `POST /ui/repair-all` -> planned home: Maintenance
+- [x] Maintenance: Run cleanup button -> `POST /ui/run-cleanup` -> planned home: Maintenance
+- [x] Maintenance: Auto-upgrade button -> `POST /ui/auto-upgrade` -> planned home: Maintenance
+- [x] Maintenance: Consolidate packs button -> `POST /ui/pack-consolidate` -> planned home: Maintenance
+- [x] Maintenance: Merge series button (confirm dialog) -> `POST /ui/merge-series` -> planned home: Maintenance
+- [x] Maintenance: Fix IMDB titles button -> `fixImdbTitles()` / `POST /ui/api/fix-imdb-titles` -> planned home: Maintenance
+- [x] Maintenance: Clear retry queue button (confirm) -> `clearRetryQueue()` / `POST /ui/api/retry-queue/clear` -> planned home: Maintenance
+- [x] Maintenance: Fix library titles button (rewrites tvshow.nfo titles) -> `repairTvshowTitles()` / `POST /ui/api/repair-tvshow-titles` -> planned home: Maintenance
+- [x] Maintenance: Sync Seerr button -> `POST /ui/sync-movies` -> planned home: Maintenance
+- [x] Maintenance: Import TorBox library button -> `POST /ui/library-import` -> planned home: Maintenance
+- [x] Maintenance: Fix covers button -> `POST /ui/refresh-images` -> planned home: Maintenance
+- [x] Maintenance: Generate NFOs button -> `POST /ui/generate-nfos` -> planned home: Maintenance
+- [x] Maintenance: Vacuum DB button (confirm) -> `POST /ui/db-vacuum` -> planned home: Maintenance
+- [x] Maintenance: Recovery wizard button (confirm) -> `POST /ui/recovery` -> planned home: Maintenance
+- [x] Maintenance: repair summary stat tiles (scanned/repaired/deleted/unfixable/last run) -> `refreshRepair()` / `GET /ui/api/repair` -> planned home: Maintenance
+- [x] Maintenance: repair history table (search, sort, paginate) -> `refreshRepair()`/`initRepairPagination()` / `GET /ui/api/repair` -> planned home: Maintenance
 - [ ] Maintenance: force strm rescan (topbar circular-arrow icon) -> `forceRescan()` / `POST /ui/strm-rescan` -> planned home: Maintenance (placement chosen by inventory - lives in the global topbar, not the Maintenance tab-pane, but is functionally a maintenance action)
 - [ ] Maintenance: manual release search by IMDB id/season/episode + candidate list (cached badge, season-pack badge, size, seeders) -> `doSearch()` / `POST /ui/api/search-candidates` -> planned home: Maintenance (placement chosen by inventory - no live control in the current 8-tab markup reaches this, see Findings; kept because it is the only path to Add magnet, which the map places here)
-- [ ] Maintenance: Add magnet button (per search candidate) -> `POST /ui/add-magnet` -> planned home: Maintenance (explicit in map)
-- [ ] Maintenance: TorBox torrent list + per-row Delete (confirm) -> `refreshTorbox()` / `GET /ui/api/torbox-list`, `POST /ui/torbox-delete` -> planned home: Maintenance (explicit in map; no live control reaches `refreshTorbox()` currently, see Findings)
-- [ ] Maintenance: Radarr/Sonarr import (Test Radarr, Import Radarr, Test Sonarr, Import Sonarr, Status poll) -> Jinja `arrTest()`/`arrRun()`/`arrStatus()` (rendered under the Settings tab's `arr_import` group) **and** Admin.tsx `ArrImportPanel` (same three actions) -> planned home: Maintenance (map: "+ Admin.tsx ArrImportPanel"; dual source, one line per instructions)
-- [ ] Maintenance: Sync all series + episodes button (series backfill, confirm dialog) -> Admin.tsx `ArrImportPanel` / `POST /ui/api/series-backfill` -> planned home: Maintenance
-- [ ] Maintenance: Migrate to canonical names button (confirm) -> Admin.tsx `MaintenancePanel` / `POST /ui/api/migrate-canonical` -> planned home: Maintenance
-- [ ] Maintenance: Clean up duplicate strm files button -> Admin.tsx `MaintenancePanel` / `POST /ui/api/cleanup-duplicate-strms` -> planned home: Maintenance
-- [ ] Maintenance: Repair broken strm links button -> Admin.tsx `MaintenancePanel` / `POST /ui/api/repair-strms` -> planned home: Maintenance
-- [ ] Maintenance: Scan TorBox library button -> Admin.tsx `MaintenancePanel` / `POST /ui/api/torbox/scan-library` -> planned home: Maintenance
-- [ ] Maintenance: backup list + per-backup Restore (confirm) -> `toggleBackupList()` / `GET /ui/api/backups`, `POST /ui/backup-restore` -> planned home: Maintenance (explicit in map; no live control reaches `toggleBackupList()` currently, see Findings)
-- [ ] Maintenance: per-title quality-override Clear button -> `POST /ui/show-override-delete/<imdb_id>` -> planned home: Maintenance (explicit in map; reached only via the dead `refreshOverrides()` list, see Findings)
+- [x] Maintenance: Add magnet button (per search candidate) -> `POST /ui/add-magnet` -> planned home: Maintenance (explicit in map)
+- [x] Maintenance: TorBox torrent list + per-row Delete (confirm) -> `refreshTorbox()` / `GET /ui/api/torbox-list`, `POST /ui/torbox-delete` -> planned home: Maintenance (explicit in map; no live control reaches `refreshTorbox()` currently, see Findings)
+- [x] Maintenance: Radarr/Sonarr import (Test Radarr, Import Radarr, Test Sonarr, Import Sonarr, Status poll) -> Jinja `arrTest()`/`arrRun()`/`arrStatus()` (rendered under the Settings tab's `arr_import` group) **and** Admin.tsx `ArrImportPanel` (same three actions) -> planned home: Maintenance (map: "+ Admin.tsx ArrImportPanel"; dual source, one line per instructions)
+- [x] Maintenance: Sync all series + episodes button (series backfill, confirm dialog) -> Admin.tsx `ArrImportPanel` / `POST /ui/api/series-backfill` -> planned home: Maintenance
+- [x] Maintenance: Migrate to canonical names button (confirm) -> Admin.tsx `MaintenancePanel` / `POST /ui/api/migrate-canonical` -> planned home: Maintenance
+- [x] Maintenance: Clean up duplicate strm files button -> Admin.tsx `MaintenancePanel` / `POST /ui/api/cleanup-duplicate-strms` -> planned home: Maintenance
+- [x] Maintenance: Repair broken strm links button -> Admin.tsx `MaintenancePanel` / `POST /ui/api/repair-strms` -> planned home: Maintenance
+- [x] Maintenance: Scan TorBox library button -> Admin.tsx `MaintenancePanel` / `POST /ui/api/torbox/scan-library` -> planned home: Maintenance
+- [x] Maintenance: backup list + per-backup Restore (confirm) -> `toggleBackupList()` / `GET /ui/api/backups`, `POST /ui/backup-restore` -> planned home: Maintenance (explicit in map; no live control reaches `toggleBackupList()` currently, see Findings)
+- [x] Maintenance: per-title quality-override Clear button -> `POST /ui/show-override-delete/<imdb_id>` -> planned home: Maintenance (explicit in map; reached only via the dead `refreshOverrides()` list, see Findings)
 - [ ] Maintenance: per-title quality-override list + set form (view current overrides; set quality_preference/allow_4k/prefer_hevc/notes per imdb_id) -> `refreshOverrides()` / `GET /ui/api/show-overrides`, `POST /ui/show-override` -> planned home: Maintenance (placement chosen by inventory - the map only names the delete action; the list has no live control and the set form has *no* control at all, live or dead - also listed as an orphan route below)
 - [ ] Maintenance: virtual items / catbox status list (title, media type, live-in-TorBox badge, play count, last played, created, info hash) -> `refreshCatbox()` / `GET /ui/api/virtual-items` -> planned home: Maintenance (placement chosen by inventory - not named in the map and no live control reaches it; closest existing admin surface, `GET /ui/api/playability-state` / `GET /ui/api/integrity`, is CLAUDE.md's own documented "open point" #4, "playability state table in UI")
 
 ## Blacklist
 
-- [ ] Blacklist: failed-hash table (search, sort, paginate) -> `refreshBlacklist()` / `GET /ui/api/blacklist` -> planned home: Blacklist
-- [ ] Blacklist: per-row Clear button (confirm) -> `POST /ui/blacklist-clear/<info_hash>` -> planned home: Blacklist
+- [x] Blacklist: failed-hash table (search, sort, paginate) -> `refreshBlacklist()` / `GET /ui/api/blacklist` -> planned home: Blacklist
+- [x] Blacklist: per-row Clear button (confirm) -> `POST /ui/blacklist-clear/<info_hash>` -> planned home: Blacklist
 
 ## Settings
 
