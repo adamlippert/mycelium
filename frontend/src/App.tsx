@@ -8,12 +8,14 @@ import Requests from './pages/Requests';
 import Wanted from './pages/Wanted';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import Setup from './pages/Setup';
 import AdminLayout from './pages/admin/AdminLayout';
 
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/setup" element={<Setup />} />
       <Route element={<Layout />}>
         <Route index element={<Discover />} />
         <Route path="library" element={<Library />} />
