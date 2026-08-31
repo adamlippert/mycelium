@@ -243,6 +243,18 @@ export const api = {
     return http<{ lines: LogLine[] }>(`/ui/api/logs${qs ? `?${qs}` : ''}`);
   },
 
+  // Zilean native index (Scrapers tab)
+  zileanStatus: () => http<ZileanStatus>('/ui/api/zilean/status'),
+  zileanSync: (force = false) =>
+    http<{ ok?: boolean; started?: boolean; error?: string }>('/ui/api/zilean/sync', {
+      method: 'POST',
+      body: JSON.stringify({ force }),
+    }),
+  zileanImport: () =>
+    http<{ ok?: boolean; started?: boolean; error?: string }>('/ui/api/zilean/import', {
+      method: 'POST',
+    }),
+
   // Admin: Overview tab
   health: () => http<{ services: HealthService[] }>('/ui/api/health'),
   activity: () => http<{ events: ActivityEvent[] }>('/ui/api/activity'),
@@ -460,6 +472,21 @@ export type ScraperHealth = {
 };
 
 export type LogLine = { time: string; level: string; name: string; msg: string };
+
+export type ZileanStatus = {
+  mode: string;
+  total_hashes?: number;
+  last_synced_at?: string | null;
+  last_status?: string;
+  last_new_hashes?: number;
+  last_pages_processed?: number;
+  last_error?: string | null;
+  last_import_at?: string | null;
+  last_import_count?: number;
+  last_import_error?: string | null;
+  syncing?: boolean;
+  importing?: boolean;
+};
 
 export type HealthService = { name: string; status: string };
 

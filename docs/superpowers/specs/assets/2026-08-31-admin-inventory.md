@@ -92,7 +92,7 @@ fields and are saved together by the Settings tab's "Save all" (`POST /ui/settin
 
 ## Scrapers
 
-- [ ] Scrapers: Zilean native index controls (Sync now, Import from Postgres, Status poll with inline error text) -> `zileanSync()`/`zileanImport()`/`zileanStatus()`, `POST /ui/api/zilean/sync`, `POST /ui/api/zilean/import`, `GET /ui/api/zilean/status` -> planned home: Scrapers (explicit in map)
+- [x] Scrapers: Zilean native index controls (Sync now, Import from Postgres, Status poll with inline error text) -> `zileanSync()`/`zileanImport()`/`zileanStatus()`, `POST /ui/api/zilean/sync`, `POST /ui/api/zilean/import`, `GET /ui/api/zilean/status` -> planned home: Scrapers (explicit in map)
 
 The Zilean *configuration* fields (`ZILEAN_MODE`, Postgres host/port/user/db, etc.)
 render as part of the generic settings-group table (`g.id === 'zilean_native'`) and
@@ -101,8 +101,8 @@ buttons above move to Scrapers.
 
 ## Logs
 
-- [ ] Logs: log viewer box (tail last N lines, auto-scroll only if already at bottom) -> `fetchLogs()` / `GET /ui/logs` -> planned home: Logs
-- [ ] Logs: Auto ON/OFF toggle (5s poll cadence) -> `toggleAuto()` / `scheduleLogs()` -> planned home: Logs
+- [x] Logs: log viewer box (tail last N lines, auto-scroll only if already at bottom) -> `fetchLogs()` / `GET /ui/logs` -> planned home: Logs
+- [x] Logs: Auto ON/OFF toggle (5s poll cadence) -> `toggleAuto()` / `scheduleLogs()` -> planned home: Logs
 
 ## Maintenance
 
