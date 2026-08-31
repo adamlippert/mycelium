@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.8.2",
+    "date": "2026-08-31",
+    "notes": [
+      "The admin Overview shows all four integration endpoints again (Seerr webhook, TorBox push, stream prefix, webhook secret), each with a Copy button",
+      "Releases is its own admin tab",
+      "The Library series list is searchable, like movies",
+      "The Movies / Episodes / Series / Wanted tiles return to the admin Overview"
+    ]
+  },
+  {
     "version": "0.8.1",
     "date": "2026-08-31",
     "notes": [

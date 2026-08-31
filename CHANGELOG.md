@@ -2,6 +2,18 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.8.2] - 2026-08-31
+
+### Fixed
+
+- **The admin Overview's integration endpoints card is complete again.** The 0.8.0 port carried only the webhook secret; the Seerr webhook URL, the TorBox push notification URL and the catbox stream prefix now render above it, each with a Copy button, built from the page's own origin exactly as the old dashboard built them.
+- **The old dashboard's library tiles are back on the Overview**: Movies, Episodes, Series and Wanted, all from the stats payload the page already fetched.
+- **The Library series list is searchable**, matching the movies panel.
+
+### Changed
+
+- **Releases is its own admin tab** rather than a panel at the bottom of Overview.
+
 ## [0.8.1] - 2026-08-31
 
 ### Fixed
