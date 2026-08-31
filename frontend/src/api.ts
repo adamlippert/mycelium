@@ -263,6 +263,9 @@ export const api = {
   wantedRecheck: () => http<{ ok: boolean; message?: string }>('/ui/api/wanted-recheck', { method: 'POST' }),
   wantedEpisodes: () => http<{ items: WantedEpisode[] }>('/ui/api/wanted-episodes'),
 
+  // All requests (admin Requests tab)
+  requestsAll: () => http<{ items: RequestRow[] }>('/ui/api/requests/all'),
+
   // Failed processing requests
   failedRequests: () => http<{ items: any[] }>('/ui/api/requests/failed'),
   retryRequest: (id: number) =>
@@ -442,6 +445,21 @@ export interface SettingItem {
   kind: 'bool' | 'list' | 'int' | 'float' | 'str';
   overridden: boolean;
   hot_reload: boolean;
+}
+
+export interface RequestRow {
+  id: number;
+  title: string;
+  imdb_id: string;
+  media_type: string;
+  seasons: string | null;
+  status: string;
+  quality: string | null;
+  source: string | null;
+  info_hash: string | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface GenreRule {

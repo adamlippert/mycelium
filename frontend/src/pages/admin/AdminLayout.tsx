@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Overview from './Overview';
 import Users from './Users';
+import Requests from './Requests';
 
 function Stub() {
   return <p className="text-muted text-sm">Coming in this plan.</p>;
@@ -10,7 +11,7 @@ function Stub() {
 export const ADMIN_TABS: { id: string; label: string; component: ComponentType }[] = [
   { id: 'overview', label: 'Overview', component: Overview },
   { id: 'users', label: 'Users', component: Users },
-  { id: 'requests', label: 'Requests', component: Stub },
+  { id: 'requests', label: 'Requests', component: Requests },
   { id: 'filter-rules', label: 'Filter rules', component: Stub },
   { id: 'scrapers', label: 'Scrapers', component: Stub },
   { id: 'logs', label: 'Logs', component: Stub },

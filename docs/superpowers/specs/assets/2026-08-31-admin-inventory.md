@@ -61,12 +61,12 @@ A control the map does not name gets the best-fitting tab plus a
 
 ## Requests
 
-- [ ] Requests: All Requests table (search, sort, paginate) -> `refreshRequests()` / `GET /ui/api/requests/all` -> planned home: Requests
-- [ ] Requests: Delete button ("forget the request, keep the files") -> `deleteRequest()` / `POST /ui/api/requests/<id>/delete` -> planned home: Requests
-- [ ] Requests: Remove from library (purge) button -> `purgeRequest()` / `POST /ui/api/requests/<id>/purge` -> planned home: Requests
+- [x] Requests: All Requests table (search, sort, paginate) -> `refreshRequests()` / `GET /ui/api/requests/all` -> planned home: Requests
+- [x] Requests: Delete button ("forget the request, keep the files") -> `deleteRequest()` / `POST /ui/api/requests/<id>/delete` -> planned home: Requests
+- [x] Requests: Remove from library (purge) button -> `purgeRequest()` / `POST /ui/api/requests/<id>/purge` -> planned home: Requests
 - [ ] Requests: retry a failed request -> `POST /ui/api/requests/<id>/retry`, already wired in `frontend/src/pages/Requests.tsx` (`api.retryRequest`, outside this inventory's two named sources but confirmed live) -> planned home: Requests
-- [ ] Requests: Pending requests table + Approve/Deny -> Jinja `loadUsersTab()`'s "Pending requests" table (`approveReq`/`denyReq`, `POST /ui/api/user-requests/<id>/approve|deny`) **and** Admin.tsx's "Pending requests" section (`approveMut`/`denyMut`, same endpoints) -> planned home: Requests (map: "+ Admin.tsx pending approvals"; note the Jinja version currently lives inside the *Users* tab-pane, not Requests - the map moves it)
-- [ ] Requests: Auto-approve genre rules editor (Admin.tsx `AutoApprovePanel`: per-rule enabled toggle, media-type + genre selects, year-from/year-to, add rule, save rules, run now) -> `api.autoApproveGenreRules` / `setAutoApproveGenreRules` / `runAutoApproveNow` -> planned home: Requests (map: "+ Admin.tsx AutoApprovePanel")
+- [x] Requests: Pending requests table + Approve/Deny -> Jinja `loadUsersTab()`'s "Pending requests" table (`approveReq`/`denyReq`, `POST /ui/api/user-requests/<id>/approve|deny`) **and** Admin.tsx's "Pending requests" section (`approveMut`/`denyMut`, same endpoints) -> planned home: Requests (map: "+ Admin.tsx pending approvals"; note the Jinja version currently lives inside the *Users* tab-pane, not Requests - the map moves it)
+- [x] Requests: Auto-approve genre rules editor (Admin.tsx `AutoApprovePanel`: per-rule enabled toggle, media-type + genre selects, year-from/year-to, add rule, save rules, run now) -> `api.autoApproveGenreRules` / `setAutoApproveGenreRules` / `runAutoApproveNow` -> planned home: Requests (map: "+ Admin.tsx AutoApprovePanel")
 
 ## Users
 
