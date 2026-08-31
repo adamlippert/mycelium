@@ -84,7 +84,7 @@ function PendingApprovalsPanel() {
             type="button"
             onClick={() => denyMut.mutate({ id: r.id, note: prompt('Reason?') || '' })}
             disabled={denyMut.isPending}
-            className="ml-2 rounded bg-red-500/20 px-3 py-1 text-xs text-red-400 hover:bg-red-500/30 disabled:opacity-50"
+            className="ml-2 rounded bg-danger/20 px-3 py-1 text-xs text-danger hover:bg-danger/30 disabled:opacity-50"
           >
             Deny
           </button>
@@ -168,7 +168,7 @@ function AllRequestsPanel() {
               }
             }}
             disabled={purgeMut.isPending}
-            className="ml-2 rounded bg-red-500/20 px-3 py-1 text-xs text-red-400 hover:bg-red-500/30 disabled:opacity-50"
+            className="ml-2 rounded bg-danger/20 px-3 py-1 text-xs text-danger hover:bg-danger/30 disabled:opacity-50"
           >
             Remove from library
           </button>
@@ -344,7 +344,7 @@ function GenreRuleRows({
             <button
               type="button"
               onClick={() => onRemove(i)}
-              className="ml-auto rounded px-2 py-1 text-xs text-red-400 hover:bg-red-500/10"
+              className="ml-auto rounded px-2 py-1 text-xs text-danger hover:bg-danger/10"
             >
               Remove
             </button>

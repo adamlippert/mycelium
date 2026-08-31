@@ -118,7 +118,7 @@ export default function Users() {
           <button
             type="button"
             onClick={() => confirm(`Delete ${u.username}?`) && deleteMut.mutate(u.id)}
-            className="rounded bg-red-500/20 px-3 py-1 text-xs text-red-400 hover:bg-red-500/30"
+            className="rounded bg-danger/20 px-3 py-1 text-xs text-danger hover:bg-danger/30"
           >
             Delete
           </button>
@@ -205,7 +205,7 @@ function CreateUserForm() {
         </button>
       </div>
       {msg && (
-        <div className={`mt-3 text-xs ${msg.kind === 'ok' ? 'text-ok' : 'text-red-400'}`}>{msg.text}</div>
+        <div className={`mt-3 text-xs ${msg.kind === 'ok' ? 'text-ok' : 'text-danger'}`}>{msg.text}</div>
       )}
     </div>
   );

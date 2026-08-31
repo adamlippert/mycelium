@@ -379,6 +379,7 @@ export const api = {
   maintenanceGenerateNfos: () => formPost('/ui/generate-nfos'),
   maintenanceDbVacuum: () => formPost('/ui/db-vacuum'),
   maintenanceRecovery: () => formPost('/ui/recovery'),
+  maintenanceStrmRescan: () => formPost('/ui/strm-rescan'),
 
   // The three JS-driven maintenance actions: these DO return JSON.
   fixImdbTitles: () =>

@@ -17,6 +17,7 @@ const apiMocks = vi.hoisted(() => ({
   maintenanceGenerateNfos: vi.fn(),
   maintenanceDbVacuum: vi.fn(),
   maintenanceRecovery: vi.fn(),
+  maintenanceStrmRescan: vi.fn(),
   fixImdbTitles: vi.fn(),
   repairTvshowTitles: vi.fn(),
   clearRetryQueue: vi.fn(),
@@ -83,6 +84,7 @@ describe('Maintenance tab', () => {
     expect(screen.getByRole('button', { name: 'Repair strm files' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Vacuum DB' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Recovery wizard' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Force strm rescan' })).toBeInTheDocument();
   });
 
   it('renders the repair summary from the mocked /ui/api/repair payload', async () => {
@@ -112,5 +114,11 @@ describe('Maintenance tab', () => {
     renderIt();
     await userEvent.click(screen.getByRole('button', { name: 'Run cleanup' }));
     await waitFor(() => expect(apiMocks.maintenanceRunCleanup).toHaveBeenCalled());
+  });
+
+  it('runs the strm rescan action without confirming', async () => {
+    renderIt();
+    await userEvent.click(screen.getByRole('button', { name: 'Force strm rescan' }));
+    await waitFor(() => expect(apiMocks.maintenanceStrmRescan).toHaveBeenCalled());
   });
 });

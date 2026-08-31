@@ -53,7 +53,7 @@ function ActionButton({
         <span className="text-right text-xs text-muted">{desc}</span>
       </div>
       {state.kind === 'ok' && state.msg && <div className="font-mono text-xs text-ok">{state.msg}</div>}
-      {state.kind === 'err' && <div className="font-mono text-xs text-red-400">Error: {state.msg}</div>}
+      {state.kind === 'err' && <div className="font-mono text-xs text-danger">Error: {state.msg}</div>}
     </div>
   );
 }
@@ -145,6 +145,14 @@ function LibraryGroup() {
             (d.skipped ? ` - ${d.skipped} skipped (no IMDB id in the nfo)` : '') +
             '. Run a Jellyfin scan to see the change.'
           );
+        }}
+      />
+      <ActionButton
+        label="Force strm rescan"
+        desc="Rebuild strm files from the current library state"
+        run={async () => {
+          await api.maintenanceStrmRescan();
+          return 'strm rescan started - check Logs';
         }}
       />
     </GroupCard>
@@ -400,7 +408,7 @@ function ArrImportPanel() {
             <div className="mt-1 flex gap-4 text-xs text-muted">
               <span className="text-ok">+{s.added} added</span>
               <span>{s.skipped} skipped</span>
-              <span className="text-red-400">{s.errors} errors</span>
+              <span className="text-danger">{s.errors} errors</span>
             </div>
           </div>
         )}
@@ -513,7 +521,7 @@ function QuickActionCard({
         </button>
       </form>
       {state.kind === 'ok' && <div className="mt-2 text-xs text-ok">Done.</div>}
-      {state.kind === 'err' && <div className="mt-2 text-xs text-red-400">Error: {state.msg}</div>}
+      {state.kind === 'err' && <div className="mt-2 text-xs text-danger">Error: {state.msg}</div>}
     </Card>
   );
 }
