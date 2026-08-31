@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.8.1",
+    "date": "2026-08-31",
+    "notes": [
+      "Fix: the Discover page rendered for a moment and then went black. The new trending hero and the trending row shared one cached query under different shapes, so the row tried to list an object",
+      "A wrong shape now shows the empty state instead of blanking the page"
+    ]
+  },
+  {
     "version": "0.8.0",
     "date": "2026-08-30",
     "notes": [

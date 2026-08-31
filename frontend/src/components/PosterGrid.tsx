@@ -16,7 +16,9 @@ export default function PosterGrid({
   if (loading) {
     return <div className="text-muted text-sm py-6">Loading...</div>;
   }
-  if (!items || items.length === 0) {
+  // Array.isArray, not a truthiness check: an object slipping through here
+  // reaches .map below and blanks the whole page.
+  if (!Array.isArray(items) || items.length === 0) {
     return <div className="text-muted text-sm py-6">{empty || 'Nothing to show.'}</div>;
   }
   return <ScrollStrip items={items} onItemClick={onItemClick} />;

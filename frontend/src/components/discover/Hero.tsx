@@ -16,12 +16,16 @@ export function Hero({
   onWatchlist: (item: TmdbItem) => Promise<unknown> | void;
 }) {
   const [watchlistPending, setWatchlistPending] = useState(false);
+  // Discover's trending Row uses this exact key and unwraps .results in its
+  // own fetcher. React Query stores one entry per key, so returning the raw
+  // {results: [...]} envelope here would hand the Row an object to map over,
+  // whichever query resolved first. Both sides must cache the same shape.
   const { data: trending } = useQuery({
     queryKey: ['trending', 'all', 'week'],
-    queryFn: () => api.trending('all', 'week'),
+    queryFn: () => api.trending('all', 'week').then((r) => r.results),
     staleTime: 5 * 60_000,
   });
-  const top = trending?.results?.[0];
+  const top = trending?.[0];
   const { data: detail } = useQuery({
     queryKey: ['hero-detail', top?.media_type, top?.tmdb_id],
     queryFn: () => api.details(top!.media_type, top!.tmdb_id),

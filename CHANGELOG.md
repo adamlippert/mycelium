@@ -2,6 +2,13 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.8.1] - 2026-08-31
+
+### Fixed
+
+- **Discover rendered briefly and then went black.** The trending hero added in 0.8.0 and the trending row it sits above both use the React Query key `['trending', 'all', 'week']`, but their fetchers returned different shapes: the row unwrapped `.results` into an array while the hero cached the whole `{results: [...]}` envelope. React Query keeps one entry per key, so whichever query resolved first decided what the other received, and when the hero won, the row was handed an object to list. `PosterGrid`'s guard let it through, because an object is truthy and its `length` is `undefined` rather than `0`, and `ScrollStrip` then called `.map` on it: `TypeError: s.map is not a function`, which took the whole page down after first paint. The hero now unwraps `.results` like every other consumer of that key.
+- `PosterGrid` checks `Array.isArray` rather than truthiness, so a shape mismatch degrades to the empty state instead of a blank page. Every test in 0.8.0 passed because the hero was only ever rendered on its own with a mocked payload; a new test renders it alongside a trending row under one query client, which is the arrangement that actually breaks.
+
 ## [0.8.0] - 2026-08-30
 
 ### Changed
