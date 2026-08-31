@@ -9,6 +9,7 @@ import Wanted from './pages/Wanted';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
+import Manual from './pages/Manual';
 import AdminLayout from './pages/admin/AdminLayout';
 
 export default function App() {
@@ -25,9 +26,7 @@ export default function App() {
         <Route path="wanted" element={<Wanted />} />
         <Route path="settings" element={<Settings />} />
         <Route path="admin" element={<AdminLayout />} />
-        <Route path="manual" element={
-          <iframe src="/docs/install-guide.html" className="w-full border-0" style={{ height: 'calc(100vh - 57px)' }} />
-        } />
+        <Route path="manual" element={<Manual />} />
         <Route path="*" element={<div className="text-center py-16 text-muted">Page not found</div>} />
       </Route>
     </Routes>
