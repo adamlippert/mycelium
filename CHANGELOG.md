@@ -2,6 +2,15 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.8.3] - 2026-08-31
+
+### Fixed
+
+- **The region picker never saved for the shared-password login, and it lied about it.** That login type's user record is a synthetic shim with id 0; `db.update_user(0, ...)` matched no rows, and the endpoint returned `ok: true` anyway, so the picker appeared to work and silently reverted. Legacy-mode saves now persist as a runtime setting (`LEGACY_USER_REGION`, legacy mode is single-user by definition) and survive restarts; per-user logins keep the user-row path. The same id-0 shim silently no-ops `me/preferences` and `me/plugin-fields` too; those are recorded as a follow-up, same bug class.
+- **The default region is United States**, end to end: the session payload's fallback chain is now saved row value, then the legacy setting, then US. The previous fallback was hardcoded `NL` server-side, which also made any frontend-only default change dead code.
+- **Toast notifications return.** The redesign dropped the old dashboard's corner toasts on the reasoning that the activity feed covered them; in use it did not. A toast system now confirms the main actions everywhere (request submitted, added to watchlist, sync started with its count, delete and purge and retry) and surfaces failures, and the admin shows live activity toasts again, polling only while the admin is open.
+- **The logo mark is back beside the wordmark** in the sidebar and on the login page, as the mockup drew it.
+
 ## [0.8.2] - 2026-08-31
 
 ### Fixed

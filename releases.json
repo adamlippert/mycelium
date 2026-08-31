@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.8.3",
+    "date": "2026-08-31",
+    "notes": [
+      "Toast notifications are back: bottom-corner confirmations when you add, request, sync or delete, and live activity toasts in the admin",
+      "The sidebar and login page show the logo mark next to the wordmark again",
+      "The region picker actually saves now, for both the shared-password and per-user logins, and the default region is United States"
+    ]
+  },
+  {
     "version": "0.8.2",
     "date": "2026-08-31",
     "notes": [
