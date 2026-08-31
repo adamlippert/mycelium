@@ -427,6 +427,10 @@ export const api = {
 
   // Maintenance tab: repair history feed (summary + item list).
   repairOverview: () => http<{ items: RepairItem[]; last_cleanup: RepairSummary | null }>('/ui/api/repair'),
+  playabilityState: () => http<{ items: PlayabilityItem[] }>('/ui/api/playability-state'),
+  reResolve: (token: string) =>
+    http<{ ok: boolean; resolved: boolean; title?: string; hint?: string }>(
+      `/ui/api/virtual-items/${encodeURIComponent(token)}/re-resolve`, { method: 'POST' }),
 
   // Maintenance tab: small manual-input cards for actions whose live UI
   // (search candidates, TorBox list, backup list, show-override list) is
@@ -533,6 +537,18 @@ export type ZileanStatus = {
 };
 
 export type HealthService = { name: string; status: string };
+export type PlayabilityItem = {
+  content_key: string;
+  status: string;
+  last_ok_provider: string | null;
+  last_ok_at: string | null;
+  last_fail_reason: string | null;
+  consecutive_failures: number;
+  updated_at: string;
+  title: string | null;
+  token: string | null;
+  strm_path: string | null;
+};
 
 export type ActivityEvent = {
   id: number;

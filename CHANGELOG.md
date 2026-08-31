@@ -4,6 +4,10 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Playability panel in admin Maintenance**, closing two long-standing open points: the playability-state table (items that failed to materialize 3+ times in a row, with failure counts, reasons and last-known-good provider) and a per-item Re-resolve button - previously only reachable with curl against `/ui/api/virtual-items/<token>/re-resolve`.
+
 ### Removed
 
 - **The Jinja UI is gone.** The React SPA has been the default since 0.9.0 and a full audit had already confirmed every control was rebuilt; maintaining two UIs meant building every feature twice. Deleted: the three templates (login, setup wizard, admin dashboard), the `/login/classic`, `/setup/classic` and `/admin/classic` escape hatches, the `UI_V2` flag (the SPA is simply the UI now), twelve form-POST routes that no surface had called since the redesign, and every `flash()` call - nothing rendered those messages any more, so they would have accumulated unread in the session cookie forever.

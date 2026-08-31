@@ -1,8 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api';
-import type { RepairItem } from '../../api';
-import { Card, DataTable, StatTile } from '../../components/primitives';
+import type { PlayabilityItem, RepairItem } from '../../api';
+import { Card, DataTable, StatTile, useToast } from '../../components/primitives';
 import type { Column } from '../../components/primitives';
 
 /** One maintenance action button: pending state, optional confirm() guard
@@ -315,6 +315,108 @@ function RepairHistory() {
   );
 }
 
+/** Items catbox has repeatedly failed to materialize, with the re-resolve
+ * action that used to require curl. Fed by /ui/api/playability-state
+ * (3+ consecutive failures); re-resolve clears the fail state and retries
+ * a materialize in the background. */
+function PlayabilityPanel() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { data } = useQuery({
+    queryKey: ['playability-state'],
+    queryFn: api.playabilityState,
+    refetchInterval: 120_000,
+  });
+  const [pendingToken, setPendingToken] = useState<string | null>(null);
+  const reResolveMut = useMutation({
+    mutationFn: (token: string) => api.reResolve(token),
+    onSettled: () => setPendingToken(null),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['playability-state'] });
+      if (r.resolved) toast('Re-resolved', r.title);
+      else toast('Re-resolve attempted', r.hint || 'No URL yet; check the logs.');
+    },
+    onError: () => toast('Re-resolve failed', 'See the logs for details.'),
+  });
+
+  const items = data?.items ?? [];
+
+  const columns: Column<PlayabilityItem>[] = [
+    {
+      key: 'title',
+      header: 'Title',
+      render: (i) => (
+        <span
+          className="block max-w-[240px] overflow-hidden text-ellipsis whitespace-nowrap"
+          title={i.strm_path || i.content_key}
+        >
+          {i.title || i.content_key}
+        </span>
+      ),
+    },
+    {
+      key: 'fails',
+      header: 'Failures',
+      render: (i) => <span className="text-danger">{i.consecutive_failures}</span>,
+    },
+    {
+      key: 'reason',
+      header: 'Last reason',
+      render: (i) => <span className="font-mono text-xs text-muted">{i.last_fail_reason || '-'}</span>,
+    },
+    {
+      key: 'lastok',
+      header: 'Last OK',
+      render: (i) => (
+        <span className="text-xs text-muted">
+          {i.last_ok_at ? `${i.last_ok_at.slice(0, 16)} (${i.last_ok_provider || '?'})` : 'never'}
+        </span>
+      ),
+    },
+    {
+      key: 'updated',
+      header: 'Updated',
+      render: (i) => <span className="text-xs text-muted">{(i.updated_at || '').slice(0, 16)}</span>,
+    },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      render: (i) =>
+        i.token ? (
+          <button
+            type="button"
+            onClick={() => {
+              setPendingToken(i.token);
+              reResolveMut.mutate(i.token!);
+            }}
+            disabled={pendingToken !== null}
+            className="rounded border border-border px-3 py-1 text-xs hover:bg-bg disabled:opacity-50"
+          >
+            {pendingToken === i.token ? 'Resolving...' : 'Re-resolve'}
+          </button>
+        ) : (
+          <span className="text-xs text-muted" title="No virtual item matches this content key">-</span>
+        ),
+    },
+  ];
+
+  return (
+    <section>
+      <h2 className="mb-1 text-lg font-bold">Playability</h2>
+      <p className="mb-3 text-sm text-muted">
+        Items that failed to materialize 3+ times in a row. Re-resolve clears the
+        fail state and tries again.
+      </p>
+      <DataTable
+        columns={columns}
+        rows={items}
+        empty="Nothing degraded. Items appear here after repeated playback failures."
+      />
+    </section>
+  );
+}
+
 /** Ported from the pre-native-admin frontend/src/pages/Admin.tsx `ArrImportPanel`. */
 function ArrImportPanel() {
   const [msg, setMsg] = useState('');
@@ -539,6 +641,8 @@ export default function Maintenance() {
       </div>
 
       <RepairHistory />
+
+      <PlayabilityPanel />
 
       <ArrImportPanel />
 
