@@ -41,21 +41,21 @@ A control the map does not name gets the best-fitting tab plus a
 
 ## Overview
 
-- [ ] Overview: stat tiles (movies, episodes, series, wanted, success rate 7d + sub-line) -> `refreshOverview()` / `GET /ui/api/stats` -> planned home: Overview
-- [ ] Overview: TorBox quota tile + resets-in countdown + per-reason breakdown card -> `refreshTorboxQuota()` / `GET /ui/api/torbox-quota` -> planned home: Overview
-- [ ] Overview: Service Health panel (topbar dots + card, per-service ok/down) -> `refreshHealth()` / `GET /ui/api/health` -> planned home: Overview
-- [ ] Overview: Quality Distribution bars -> `refreshOverview()` / `GET /ui/api/stats` (`qualities`) -> planned home: Overview
-- [ ] Overview: TorBox Usage card (torrent count, total size, plan, per-state badges) -> `refreshOverview()` / `GET /ui/api/torbox-usage` -> planned home: Overview
-- [ ] Overview: Performance Metrics (30d) card (avg latency, added, failed) -> `refreshOverview()` / `GET /ui/api/metrics-summary` -> planned home: Overview
-- [ ] Overview: Retry Queue card (next 10 pending retries) -> `refreshOverview()` / `GET /ui/api/retry-queue` -> planned home: Overview
-- [ ] Overview: Source Win Rate bars -> `refreshOverview()` / `GET /ui/api/metrics-summary` (`sources`/`unique_sources`) -> planned home: Overview
-- [ ] Overview: Library Health card (.strm count, DB count, strm minus DB, DB minus strm) -> `refreshOverview()` / `GET /ui/api/orphans` -> planned home: Overview
-- [ ] Overview: Integration Endpoints card (Seerr webhook URL, TorBox push URL, Catbox stream prefix; webhook secret reveal-on-click + Copy button) -> `populateEndpointUrls()` / `GET /ui/api/webhook-secret` -> planned home: Overview
-- [ ] Overview: Recent Activity feed (last 15 events) -> `refreshOverview()` / `GET /ui/api/activity` -> planned home: Overview
-- [ ] Overview: Top Folders (.strm count) storage bars -> `refreshOverview()` / `GET /ui/api/storage` -> planned home: Overview
-- [ ] Overview: live activity toast stream (polls every 5s, toasts new events since last seen) -> `pollActivity()` / `GET /ui/api/activity` -> planned home: Overview
-- [ ] Overview: idle-gated auto-refresh (health every 30s; overview refresh every 30s once idle > 10s; repair refresh every 120s once idle) -> `setInterval(...)` -> planned home: Overview
-- [ ] Overview: Releases changelog (expandable per-version notes, "current" badge) -> Jinja `releases` tab-pane, server-rendered from `releases`/`app_version` -> planned home: Overview (explicit in map: "+ Jinja releases")
+- [x] Overview: stat tiles (movies, episodes, series, wanted, success rate 7d + sub-line) -> `refreshOverview()` / `GET /ui/api/stats` -> planned home: Overview (Task 6: replaced by the task-6-brief binding metric substitution table - Requests 7d / Queue depth / TorBox library / Failures 7d tiles, not a literal port of these five)
+- [ ] Overview: TorBox quota tile + resets-in countdown + per-reason breakdown card -> `refreshTorboxQuota()` / `GET /ui/api/torbox-quota` -> planned home: Overview (out of scope for Task 6; not in its binding table or "also ports" list)
+- [x] Overview: Service Health panel (topbar dots + card, per-service ok/down) -> `refreshHealth()` / `GET /ui/api/health` -> planned home: Overview (Task 6: ported as the health dot row, card only - no topbar dots, that's shell chrome)
+- [x] Overview: Quality Distribution bars -> `refreshOverview()` / `GET /ui/api/stats` (`qualities`) -> planned home: Overview (Task 6)
+- [ ] Overview: TorBox Usage card (torrent count, total size, plan, per-state badges) -> `refreshOverview()` / `GET /ui/api/torbox-usage` -> planned home: Overview (out of scope for Task 6; the TorBox library stat tile covers count + size only, from `/ui/api/torbox-list` not `/ui/api/torbox-usage`)
+- [ ] Overview: Performance Metrics (30d) card (avg latency, added, failed) -> `refreshOverview()` / `GET /ui/api/metrics-summary` -> planned home: Overview (out of scope for Task 6)
+- [x] Overview: Retry Queue card (next 10 pending retries) -> `refreshOverview()` / `GET /ui/api/retry-queue` -> planned home: Overview (Task 6: replaced by the Queue depth stat tile - a count, not the pending-retries list; see task-6-report.md)
+- [ ] Overview: Source Win Rate bars -> `refreshOverview()` / `GET /ui/api/metrics-summary` (`sources`/`unique_sources`) -> planned home: Overview (out of scope for Task 6)
+- [ ] Overview: Library Health card (.strm count, DB count, strm minus DB, DB minus strm) -> `refreshOverview()` / `GET /ui/api/orphans` -> planned home: Overview (out of scope for Task 6)
+- [x] Overview: Integration Endpoints card (Seerr webhook URL, TorBox push URL, Catbox stream prefix; webhook secret reveal-on-click + Copy button) -> `populateEndpointUrls()` / `GET /ui/api/webhook-secret` -> planned home: Overview (Task 6: partial - only the webhook secret + Copy button per the brief's "also ports" list; Seerr/TorBox/Catbox URL rows and reveal-on-click are dropped, not ported)
+- [x] Overview: Recent Activity feed (last 15 events) -> `refreshOverview()` / `GET /ui/api/activity` -> planned home: Overview (Task 6: last 20 per the brief, not 15)
+- [ ] Overview: Top Folders (.strm count) storage bars -> `refreshOverview()` / `GET /ui/api/storage` -> planned home: Overview (out of scope for Task 6)
+- [ ] Overview: live activity toast stream (polls every 5s, toasts new events since last seen) -> `pollActivity()` / `GET /ui/api/activity` -> planned home: Overview (out of scope for Task 6)
+- [ ] Overview: idle-gated auto-refresh (health every 30s; overview refresh every 30s once idle > 10s; repair refresh every 120s once idle) -> `setInterval(...)` -> planned home: Overview (out of scope for Task 6; task-6-brief mandates a flat `refetchInterval: 30_000` on stats and health only, no idle gating)
+- [x] Overview: Releases changelog (expandable per-version notes, "current" badge) -> Jinja `releases` tab-pane, server-rendered from `releases`/`app_version` -> planned home: Overview (explicit in map: "+ Jinja releases") (Task 6: ported via the new `GET /ui/api/releases` route; "current" badge on the first/latest entry)
 - [ ] Overview: theme toggle (dark/light, topbar icon) -> `toggleTheme()` -> planned home: Overview (placement chosen by inventory - this is global chrome, not overview-specific data, so it may end up living outside any single tab in the React shell instead)
 - [ ] Overview: topbar keyboard-shortcut tab switcher (digit keys 1-0) -> `keydown` listener -> planned home: Overview (placement chosen by inventory; **stale**: only `1`/`2`/`9`/`0` still map to a real tab (overview/requests/settings/logs), `3`-`8` map to `movies`/`series`/`wanted`/`search`/`torbox`/`catbox`, none of which exist in the current 8-tab bar - see Findings)
 

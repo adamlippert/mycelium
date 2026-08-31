@@ -1121,6 +1121,14 @@ def ui_api_activity():
     return jsonify(events=db.get_activity(50))
 
 
+@app.get("/ui/api/releases")
+def ui_api_releases():
+    """Release changelog for the admin Overview tab. Every /ui/api/ route is
+    already behind the global auth gate, and the Jinja page shows this to any
+    admin-page viewer, so plain auth is enough here."""
+    return jsonify(releases=RELEASES)
+
+
 @app.get("/ui/api/repair")
 def ui_api_repair():
     """Repair history for the Maintenance tab, so it can refresh in place.

@@ -221,6 +221,14 @@ export const api = {
     return http<{ lines: LogLine[] }>(`/ui/api/logs${qs ? `?${qs}` : ''}`);
   },
 
+  // Admin: Overview tab
+  health: () => http<{ services: HealthService[] }>('/ui/api/health'),
+  activity: () => http<{ events: ActivityEvent[] }>('/ui/api/activity'),
+  webhookSecret: () => http<{ secret: string; source: string }>('/ui/api/webhook-secret'),
+  torboxList: () => http<{ torrents: TorboxTorrent[] }>('/ui/api/torbox-list'),
+  retryQueue: () => http<{ items: unknown[] }>('/ui/api/retry-queue'),
+  releases: () => http<{ releases: Release[] }>('/ui/api/releases'),
+
   // Arr import
   arrTest: (kind: 'radarr' | 'sonarr') =>
     http<{ ok: boolean; error?: string }>(`/ui/api/arr-import/test-${kind}`, {
@@ -371,6 +379,30 @@ export type ScraperHealth = {
 };
 
 export type LogLine = { time: string; level: string; name: string; msg: string };
+
+export type HealthService = { name: string; status: string };
+
+export type ActivityEvent = {
+  created_at: string;
+  event: string;
+  title?: string | null;
+  message?: string | null;
+  success?: boolean;
+};
+
+export type TorboxTorrent = {
+  id: number;
+  name: string;
+  hash: string;
+  size: number;
+  download_state: string;
+  download_finished: boolean;
+  progress: number;
+  created_at: string;
+  file_count: number;
+};
+
+export type Release = { version: string; date: string; notes: string[] };
 
 export interface SettingItem {
   key: string;
