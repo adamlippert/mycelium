@@ -5,6 +5,7 @@ import { Hero } from './Hero';
 import PosterGrid from '../PosterGrid';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api';
+import { ToastProvider } from '../primitives';
 
 const results = [{
   tmdb_id: 42, media_type: 'movie' as const, title: 'Dune: Part Three', year: '2026',
@@ -41,8 +42,10 @@ describe('Hero and the trending Row share a cache key', () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={qc}>
-        <Hero onRequest={() => {}} onWatchlist={() => {}} />
-        <TrendingRow />
+        <ToastProvider>
+          <Hero onRequest={() => {}} onWatchlist={() => {}} />
+          <TrendingRow />
+        </ToastProvider>
       </QueryClientProvider>,
     );
 

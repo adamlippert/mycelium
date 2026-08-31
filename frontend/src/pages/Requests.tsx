@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
-import { Pill, StatTile, statusLabel, statusToPillState } from '../components/primitives';
+import { Pill, StatTile, statusLabel, statusToPillState, useToast } from '../components/primitives';
 import { QuotaCard } from '../components/requests/QuotaCard';
 
 export default function Requests() {
   const qc = useQueryClient();
+  const toast = useToast();
   const { data: sessionData } = useQuery({ queryKey: ['session'], queryFn: api.session });
   const isAdmin = sessionData?.user?.role === 'admin';
   const { data, isLoading } = useQuery({ queryKey: ['my-requests'], queryFn: api.myRequests });
@@ -12,13 +13,17 @@ export default function Requests() {
     mutationFn: (id: number) => api.deleteRequest(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['my-requests'] });
+      toast('Request forgotten', 'The files stay in your library');
     },
+    onError: (err: Error) => toast('Could not forget request', err.message, 'err'),
   });
   const purgeMut = useMutation({
     mutationFn: (id: number) => api.purgeRequest(id),
-    onSuccess: () => {
+    onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['my-requests'] });
+      toast('Removed from library', `${r.strms} file${r.strms === 1 ? '' : 's'} deleted`);
     },
+    onError: (err: Error) => toast('Could not remove from library', err.message, 'err'),
   });
   if (isLoading) return <div className="text-muted">Loading…</div>;
   const items = data?.items || [];
@@ -104,12 +109,15 @@ export default function Requests() {
 
 function FailedRequestsPanel() {
   const qc = useQueryClient();
+  const toast = useToast();
   const { data } = useQuery({ queryKey: ['failed-requests'], queryFn: api.failedRequests, refetchInterval: 10000 });
   const retryMut = useMutation({
     mutationFn: (id: number) => api.retryRequest(id),
-    onSuccess: () => {
+    onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['failed-requests'] });
+      toast('Retry queued', r.title);
     },
+    onError: (err: Error) => toast('Retry failed', err.message, 'err'),
   });
 
   const items = data?.items || [];

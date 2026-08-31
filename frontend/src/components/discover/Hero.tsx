@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, tmdbImg } from '../../api';
 import type { TmdbItem } from '../../types';
+import { useToast } from '../primitives';
 
 function fmtRuntime(min?: number) {
   if (!min) return null;
@@ -16,6 +17,7 @@ export function Hero({
   onWatchlist: (item: TmdbItem) => Promise<unknown> | void;
 }) {
   const [watchlistPending, setWatchlistPending] = useState(false);
+  const toast = useToast();
   // Discover's trending Row uses this exact key and unwraps .results in its
   // own fetcher. React Query stores one entry per key, so returning the raw
   // {results: [...]} envelope here would hand the Row an object to map over,
@@ -43,6 +45,9 @@ export function Hero({
     setWatchlistPending(true);
     try {
       await onWatchlist(detail ?? top);
+      toast('Added to watchlist');
+    } catch (err) {
+      toast('Could not add to watchlist', err instanceof Error ? err.message : undefined, 'err');
     } finally {
       setWatchlistPending(false);
     }

@@ -523,6 +523,7 @@ export type ZileanStatus = {
 export type HealthService = { name: string; status: string };
 
 export type ActivityEvent = {
+  id: number;
   created_at: string;
   event: string;
   title?: string | null;

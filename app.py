@@ -3068,6 +3068,16 @@ def ui_api_me_region():
     region = str(p.get("region", "")).upper().strip()[:5]
     if not region:
         return jsonify(error="region required"), 400
+    if not rec.get("id"):
+        # Legacy single-user login (AUTH_USERNAME/AUTH_PASSWORD) has no real
+        # users-table row: current_user_record() hands back a synthetic dict
+        # with id=0 (auth.py:170), so db.update_user(0, ...) below would match
+        # zero rows and silently no-op - the picker would look like it saved
+        # (200 ok=true) but GET /ui/api/session keeps reporting the old region
+        # forever because the shim never carries one. Fail loudly instead so
+        # RegionPicker.tsx can toast it rather than pretend it worked.
+        return jsonify(error="Region can't be saved for the shared login. "
+                              "Create a personal account under Settings > Users to persist preferences."), 409
     db.update_user(rec["id"], region=region)
     return jsonify(ok=True, region=region)
 

@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi } from 'vitest';
 import Search from './Search';
+import { ToastProvider } from '../components/primitives';
 
 const results = [
   { tmdb_id: 1, media_type: 'movie', title: 'Blade Runner', year: '1982', rating: 8.1,
@@ -25,7 +26,9 @@ function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/search?q=blade']}><Search /></MemoryRouter>
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/search?q=blade']}><Search /></MemoryRouter>
+      </ToastProvider>
     </QueryClientProvider>,
   );
 }

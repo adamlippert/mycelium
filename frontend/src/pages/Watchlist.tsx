@@ -6,6 +6,7 @@ import PosterCard from '../components/PosterCard';
 import DetailModal from '../components/DetailModal';
 import { SourceCard } from '../components/watchlist/SourceCard';
 import { Icon } from '../design/icons';
+import { useToast } from '../components/primitives';
 
 export default function Watchlist() {
   const [detail, setDetail] = useState<{ id: number; type: MediaType } | null>(null);
@@ -13,13 +14,22 @@ export default function Watchlist() {
   const { data: trakt } = useQuery({ queryKey: ['trakt-status'], queryFn: api.traktStatus, staleTime: 60_000 });
   const { data: mdblist } = useQuery({ queryKey: ['mdblist-status'], queryFn: api.mdblistStatus, staleTime: 60_000 });
   const queryClient = useQueryClient();
+  const toast = useToast();
   const traktSync = useMutation({
     mutationFn: api.traktSync,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['watchlist'] }),
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+      toast('Trakt sync started', `${r.added} title${r.added === 1 ? '' : 's'} added`);
+    },
+    onError: (err: Error) => toast('Trakt sync failed', err.message, 'err'),
   });
   const mdblistSync = useMutation({
     mutationFn: api.mdblistSync,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['watchlist'] }),
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+      toast('MDBList sync started', `${r.added} title${r.added === 1 ? '' : 's'} added`);
+    },
+    onError: (err: Error) => toast('MDBList sync failed', err.message, 'err'),
   });
 
   const open = (item: TmdbItem) => setDetail({ id: item.tmdb_id, type: item.media_type });

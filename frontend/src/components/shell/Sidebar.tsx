@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api';
 import type { IconName } from '../../design/icons';
+import { BrandMark } from './BrandMark';
 import { NavItem } from './NavItem';
 
 export type NavEntry = {
@@ -54,6 +55,7 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
                   ${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
     >
       <div className="flex items-center gap-2.5 border-b border-border px-4 py-5">
+        <BrandMark />
         <span className="font-mono text-lg font-bold tracking-wide text-white">
           myc<span className="text-accent-pale">3</span>l<span className="text-accent-pale">1</span>um
         </span>

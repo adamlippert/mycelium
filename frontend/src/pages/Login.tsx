@@ -1,5 +1,6 @@
 import { useLocation } from 'react-router-dom';
 import { api, csrfToken } from '../api';
+import { BrandMark } from '../components/shell/BrandMark';
 
 /** The ?next= param, sanitised the same way the server sanitises the
  * submitted "next" form field (login_submit in app.py): must start with a
@@ -40,9 +41,12 @@ export default function Login() {
 
       <div className="relative w-full max-w-sm rounded-2xl border border-border bg-card/90 p-8 shadow-2xl backdrop-blur">
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
-          <span className="font-mono text-2xl font-bold tracking-wide text-white">
-            myc<span className="text-accent-pale">3</span>l<span className="text-accent-pale">1</span>um
-          </span>
+          <div className="flex items-center gap-2.5">
+            <BrandMark />
+            <span className="font-mono text-2xl font-bold tracking-wide text-white">
+              myc<span className="text-accent-pale">3</span>l<span className="text-accent-pale">1</span>um
+            </span>
+          </div>
           <span className="text-xs text-muted">the hidden network beneath your media library</span>
         </div>
 

@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi } from 'vitest';
 import DetailModal from './index';
+import { ToastProvider } from '../primitives';
 
 vi.mock('../../api', async () => {
   const actual = await vi.importActual<typeof import('../../api')>('../../api');
@@ -26,9 +27,11 @@ function renderModal() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter>
-        <DetailModal tmdbId={1} mediaType="movie" onClose={() => {}} onSelectItem={() => {}} />
-      </MemoryRouter>
+      <ToastProvider>
+        <MemoryRouter>
+          <DetailModal tmdbId={1} mediaType="movie" onClose={() => {}} onSelectItem={() => {}} />
+        </MemoryRouter>
+      </ToastProvider>
     </QueryClientProvider>,
   );
 }
@@ -44,9 +47,11 @@ describe('DetailModal after the split', () => {
     const qc = new QueryClient();
     const { container } = render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter>
-          <DetailModal tmdbId={null} mediaType={null} onClose={() => {}} onSelectItem={() => {}} />
-        </MemoryRouter>
+        <ToastProvider>
+          <MemoryRouter>
+            <DetailModal tmdbId={null} mediaType={null} onClose={() => {}} onSelectItem={() => {}} />
+          </MemoryRouter>
+        </ToastProvider>
       </QueryClientProvider>,
     );
     expect(container.innerHTML).toBe('');

@@ -7,6 +7,7 @@ import TrailerModal from '../TrailerModal';
 import PersonModal from '../PersonModal';
 import { usePluginSlot } from '../../hooks/usePluginSlots';
 import { useWatched } from '../../hooks/useWatched';
+import { useToast } from '../primitives';
 import { Header } from './Header';
 import { Seasons } from './Seasons';
 import { Cast } from './Cast';
@@ -25,6 +26,7 @@ export default function DetailModal({
   onSelectItem: (item: TmdbItem) => void;
 }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const open = tmdbId !== null && mediaType !== null;
 
   const { data: detail, isLoading } = useQuery({
@@ -118,13 +120,22 @@ export default function DetailModal({
     onSuccess: (r) => {
       if (r.status === 'pending') {
         setAddStatus('pending');
+        toast('Request submitted', 'Waiting for admin approval');
       } else if (r.imdb_id) {
         setPollingImdbId(r.imdb_id);
+        toast('Request submitted', 'Looking for a release…');
+      } else if (r.error) {
+        setAddStatus('error');
+        toast('Request failed', r.error, 'err');
       } else {
         setAddStatus('added');
+        toast('Added to library');
       }
     },
-    onError: () => setAddStatus('error'),
+    onError: (err: Error) => {
+      setAddStatus('error');
+      toast('Request failed', err.message, 'err');
+    },
   });
 
   const toggleSeason = (n: number) =>

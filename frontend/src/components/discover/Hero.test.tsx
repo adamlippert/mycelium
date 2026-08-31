@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi } from 'vitest';
 import { Hero } from './Hero';
+import { ToastProvider } from '../primitives';
 
 const top = {
   tmdb_id: 42, media_type: 'movie', title: 'Dune: Part Three', year: '2026',
@@ -25,7 +26,9 @@ function renderHero() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <Hero onRequest={() => {}} onWatchlist={() => {}} />
+      <ToastProvider>
+        <Hero onRequest={() => {}} onWatchlist={() => {}} />
+      </ToastProvider>
     </QueryClientProvider>,
   );
 }

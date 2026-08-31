@@ -89,7 +89,7 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
 
         <div className="ml-auto flex items-center gap-2">
           {summary && <Pill state={TORBOX_PILL[summary.torbox.state]}>{summary.torbox.label}</Pill>}
-          {session?.user && <RegionPicker region={session.user.region || 'NL'} />}
+          {session?.user && <RegionPicker region={session.user.region || 'US'} />}
         </div>
       </div>
     </header>
