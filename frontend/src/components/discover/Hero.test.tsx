@@ -25,7 +25,7 @@ function renderHero() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <Hero onRequest={() => {}} onOpen={() => {}} />
+      <Hero onRequest={() => {}} onWatchlist={() => {}} />
     </QueryClientProvider>,
   );
 }

@@ -139,9 +139,9 @@ export default function Wanted() {
 }
 
 function attemptStyle(n: number): React.CSSProperties {
-  if (n >= 10) return { background: 'rgba(209,71,71,0.14)', color: '#e48181' };
-  if (n >= 5) return { background: 'rgba(198,178,83,0.13)', color: '#dacd8a' };
-  return { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.45)' };
+  if (n >= 10) return { background: 'var(--pill-failed-bg)', color: 'var(--pill-failed-fg)' };
+  if (n >= 5) return { background: 'var(--pill-queued-bg)', color: 'var(--pill-queued-fg)' };
+  return { background: 'var(--pill-lazy-bg)', color: 'var(--pill-lazy-fg)' };
 }
 
 function AttemptBadge({ n }: { n: number }) {

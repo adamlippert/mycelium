@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
-import { Pill, StatTile } from '../components/primitives';
-import type { PillState } from '../components/primitives';
+import { Pill, StatTile, statusLabel, statusToPillState } from '../components/primitives';
 import { QuotaCard } from '../components/requests/QuotaCard';
 
 export default function Requests() {
@@ -118,7 +117,7 @@ function FailedRequestsPanel() {
 
   return (
     <section>
-      <h2 className="text-lg font-bold mb-3 text-red-400">Failed requests</h2>
+      <h2 className="text-lg font-bold mb-3 text-danger">Failed requests</h2>
       <p className="text-muted text-xs mb-3">
         These requests failed to find a stream. The system retries automatically  -  you can also retry manually.
       </p>
@@ -137,7 +136,7 @@ function FailedRequestsPanel() {
             <tr key={r.id} className="border-b border-border hover:bg-card">
               <td className="py-2 px-3 font-medium">{r.title}</td>
               <td className="py-2 px-3 text-muted">{r.media_type}</td>
-              <td className="py-2 px-3 text-red-400 text-xs max-w-xs truncate" title={r.error || ''}>
+              <td className="py-2 px-3 text-danger text-xs max-w-xs truncate" title={r.error || ''}>
                 {r.error || ' - '}
               </td>
               <td className="py-2 px-3 text-muted text-xs">{r.updated_at}</td>
@@ -233,25 +232,11 @@ function PendingApprovalsPanel() {
   );
 }
 
-function statusToPillState(status: string): PillState {
-  if (status === 'pending') return 'queued';
-  if (status === 'approved' || status === 'success' || status === 'available') return 'ready';
-  if (status === 'denied' || status === 'failed') return 'failed';
-  return 'lazy';
-}
-
 function StatusPill({ status }: { status: string }) {
   return <Pill state={statusToPillState(status)}><span className="capitalize">{status}</span></Pill>;
 }
 
 function LibraryPill({ status }: { status: string | null }) {
   if (!status) return <span className="text-xs text-muted">--</span>;
-  const labels: Record<string, string> = {
-    success: 'In library',
-    wanted: 'Wanted',
-    upcoming: 'Upcoming',
-    failed: 'Failed',
-    pending: 'Processing',
-  };
-  return <Pill state={statusToPillState(status)}>{labels[status] || status}</Pill>;
+  return <Pill state={statusToPillState(status)}>{statusLabel(status)}</Pill>;
 }

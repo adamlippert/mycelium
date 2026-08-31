@@ -5,6 +5,7 @@ import { api, tmdbImg } from '../api';
 import type { MediaType, TmdbItem } from '../types';
 import { Chip } from '../components/primitives/Chip';
 import { Pill } from '../components/primitives/Pill';
+import { statusLabel } from '../components/primitives/statusLabels';
 import DetailModal from '../components/DetailModal';
 
 type Facet = 'all' | 'movie' | 'tv' | 'inlib';
@@ -111,6 +112,9 @@ export default function Search() {
                     <span className="text-[10px] uppercase tracking-wide text-muted">{it.media_type === 'tv' ? 'Series' : 'Movie'}</span>
                     {(it.library_status === 'success' || it.library_status === 'available') && <Pill state="ready">In library</Pill>}
                     {it.library_status === 'pending' && <Pill state="queued">Requested</Pill>}
+                    {it.library_status === 'failed' && <Pill state="failed">{statusLabel('failed')}</Pill>}
+                    {it.library_status === 'wanted' && <Pill state="queued">{statusLabel('wanted')}</Pill>}
+                    {it.library_status === 'upcoming' && <Pill state="lazy">{statusLabel('upcoming')}</Pill>}
                   </span>
                   {it.overview && <span className="mt-1 block text-xs leading-relaxed text-muted line-clamp-2">{it.overview}</span>}
                   {it.rating > 0 && (

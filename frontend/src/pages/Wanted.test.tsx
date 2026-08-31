@@ -59,9 +59,9 @@ describe('Wanted', () => {
     await waitFor(() => expect(screen.getByText('Movie B')).toBeInTheDocument());
     const low = container.querySelector('[data-attempts="2"]') as HTMLElement;
     const high = container.querySelector('[data-attempts="11"]') as HTMLElement;
-    // jsdom (like real browsers) canonicalises any valid inline color to rgb()/rgba()
-    // on read, so '#e48181' (the --pill-failed-fg token) reads back as this rgb triplet.
-    expect(low.style.color).not.toContain('rgb(228, 129, 129)');
-    expect(high.style.color).toContain('rgb(228, 129, 129)');
+    // jsdom does NOT resolve var() references in .style.color, so assert the
+    // custom property name is wired up rather than a computed rgb() value.
+    expect(low.style.color).not.toContain('var(--pill-failed-fg)');
+    expect(high.style.color).toContain('var(--pill-failed-fg)');
   });
 });

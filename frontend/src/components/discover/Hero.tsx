@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, tmdbImg } from '../../api';
 import type { TmdbItem } from '../../types';
@@ -9,11 +10,12 @@ function fmtRuntime(min?: number) {
 
 export function Hero({
   onRequest,
-  onOpen,
+  onWatchlist,
 }: {
   onRequest: (item: TmdbItem) => void;
-  onOpen: (item: TmdbItem) => void;
+  onWatchlist: (item: TmdbItem) => Promise<unknown> | void;
 }) {
+  const [watchlistPending, setWatchlistPending] = useState(false);
   const { data: trending } = useQuery({
     queryKey: ['trending', 'all', 'week'],
     queryFn: () => api.trending('all', 'week'),
@@ -32,6 +34,15 @@ export function Hero({
   const backdrop = tmdbImg.backdrop(top.backdrop_path);
   const runtime = fmtRuntime(detail?.runtime);
   const genres = detail?.genres?.slice(0, 3).join(' · ');
+
+  const handleWatchlist = async () => {
+    setWatchlistPending(true);
+    try {
+      await onWatchlist(detail ?? top);
+    } finally {
+      setWatchlistPending(false);
+    }
+  };
 
   return (
     <section
@@ -80,8 +91,9 @@ export function Hero({
           </button>
           <button
             type="button"
-            onClick={() => onOpen(top)}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-body hover:border-accent-light/50"
+            onClick={handleWatchlist}
+            disabled={watchlistPending}
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-body hover:border-accent-light/50 disabled:opacity-50"
           >
             Watchlist
           </button>

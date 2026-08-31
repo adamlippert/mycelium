@@ -4,8 +4,8 @@ import { api } from '../api';
 import { usePluginSlot } from '../hooks/usePluginSlots';
 import PosterCard from '../components/PosterCard';
 import DetailModal from '../components/DetailModal';
-import { StatTile, Chip, DataTable, Pill } from '../components/primitives';
-import type { Column, PillState } from '../components/primitives';
+import { StatTile, Chip, DataTable, Pill, statusLabel, statusToPillState } from '../components/primitives';
+import type { Column } from '../components/primitives';
 import type { TmdbItem } from '../types';
 
 // Mockup's type filter row is All/Movies/Series/Materialized/Lazy/Needs repair.
@@ -15,14 +15,6 @@ import type { TmdbItem } from '../types';
 type Tab = 'all' | 'movies' | 'series';
 
 const PAGE_SIZE = 24;
-
-/** Maps a library item's request status to a Pill state. */
-function statusToPillState(status: string | undefined): PillState {
-  if (status === 'success' || status === 'available') return 'ready';
-  if (status === 'pending') return 'queued';
-  if (status === 'failed') return 'failed';
-  return 'lazy';
-}
 
 function formatAdded(created_at: string | undefined): string {
   if (!created_at) return '-';
@@ -36,7 +28,7 @@ const movieColumns: Column<any>[] = [
   { key: 'title', header: 'Title', render: (m) => m.title },
   { key: 'year', header: 'Year', render: (m) => (m.year ? String(m.year) : '-') },
   { key: 'quality', header: 'Quality', render: (m) => m.quality || '-' },
-  { key: 'state', header: 'State', render: (m) => <Pill state={statusToPillState(m.status)}>{m.status || 'lazy'}</Pill> },
+  { key: 'state', header: 'State', render: (m) => <Pill state={statusToPillState(m.status || 'lazy')}>{statusLabel(m.status || 'lazy')}</Pill> },
   { key: 'added', header: 'Added', render: (m) => formatAdded(m.created_at) },
 ];
 
@@ -339,7 +331,7 @@ function SeriesPanel() {
                 <span className="text-muted text-xs">
                   {s.seasons.length} season{s.seasons.length !== 1 ? 's' : ''} · {totalEps} episodes
                   {missingCount > 0 && (
-                    <span className="text-red-400 ml-2">{missingCount} missing</span>
+                    <span className="text-danger ml-2">{missingCount} missing</span>
                   )}
                   <span className="ml-2">{isOpen ? '▲' : '▼'}</span>
                 </span>
@@ -358,7 +350,7 @@ function SeriesPanel() {
                         <div className="text-xs text-muted mb-1">
                           Season {String(se.season).padStart(2, '0')}{se.year ? ` (${se.year})` : ''} - {se.episodes.length} episode{se.episodes.length !== 1 ? 's' : ''}
                           {seasonMissing.length > 0 && (
-                            <span className="text-red-400 ml-1">({seasonMissing.length} missing)</span>
+                            <span className="text-danger ml-1">({seasonMissing.length} missing)</span>
                           )}
                         </div>
                         <div className="flex flex-wrap gap-1">
@@ -392,7 +384,7 @@ function SeriesPanel() {
                                   className={`text-xs px-2 py-0.5 rounded transition-colors
                                     ${isWatched
                                       ? 'bg-ok/20 text-ok hover:bg-ok hover:text-white'
-                                      : 'bg-accent/20 text-accent hover:bg-indigo-600 hover:text-white'
+                                      : 'bg-accent/20 text-accent hover:bg-accent-light hover:text-white'
                                     }`}
                                   title={isWatched ? 'Watched - play again' : 'Play in browser'}
                                 >

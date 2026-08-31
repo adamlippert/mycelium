@@ -247,7 +247,7 @@ function OAuthDeviceSection({ spec, configured, connected, username, syncedAt, o
           </a>{' '}
           and enter:
         </p>
-        <div className="font-mono text-2xl font-bold tracking-widest text-white bg-zinc-800 px-4 py-3 rounded-lg inline-block">
+        <div className="font-mono text-2xl font-bold tracking-widest text-white bg-card-raised px-4 py-3 rounded-lg inline-block">
           {deviceInfo.user_code}
         </div>
         <p className="text-xs text-muted animate-pulse">Waiting for confirmation…</p>
@@ -264,7 +264,7 @@ function OAuthDeviceSection({ spec, configured, connected, username, syncedAt, o
   return (
     <div className="space-y-2 mb-4">
       <Pill state="lazy">Not connected</Pill>
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p className="text-xs text-danger">{error}</p>}
       <button
         onClick={startAuth}
         disabled={!configured}

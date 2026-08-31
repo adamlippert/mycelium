@@ -1,5 +1,6 @@
 export { Pill, PILL_STATES } from './Pill';
 export type { PillState } from './Pill';
+export { statusLabel, statusToPillState } from './statusLabels';
 export { StatusDot } from './StatusDot';
 export { Card } from './Card';
 export { Chip } from './Chip';

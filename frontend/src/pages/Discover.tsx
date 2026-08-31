@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, NL_PROVIDER_IDS, tmdbImg } from '../api';
 import type { MediaType, TmdbItem } from '../types';
 import PosterGrid from '../components/PosterGrid';
@@ -16,6 +16,7 @@ type Cat =
   | { kind: 'provider'; id: number };
 
 export default function Discover() {
+  const queryClient = useQueryClient();
   const [detail, setDetail] = useState<{ id: number; type: MediaType } | null>(null);
   const [activeProvider, setActiveProvider] = useState<number | null>(null);
   const { data: genreTabsData } = useQuery({ queryKey: ['genre-tabs'], queryFn: api.genreTabs });
@@ -23,9 +24,24 @@ export default function Discover() {
   const open = (item: TmdbItem) => setDetail({ id: item.tmdb_id, type: item.media_type });
   const close = () => setDetail(null);
 
+  const watchlistMutation = useMutation({
+    mutationFn: (item: TmdbItem) =>
+      api.watchlistAdd({
+        imdb_id: item.imdb_id!,
+        tmdb_id: item.tmdb_id,
+        media_type: item.media_type,
+        title: item.title,
+        poster_path: item.poster_path,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+      queryClient.invalidateQueries({ queryKey: ['shell-summary'] });
+    },
+  });
+
   return (
     <div className="space-y-8">
-      <Hero onRequest={open} onOpen={open} />
+      <Hero onRequest={open} onWatchlist={(item) => watchlistMutation.mutateAsync(item)} />
 
       <ProviderStrip
         onPick={(pid) => { setActiveProvider(pid); setDetail(null); }}
