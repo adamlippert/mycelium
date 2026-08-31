@@ -2,6 +2,27 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.8.0] - 2026-08-30
+
+### Changed
+
+- **The entire web UI is redesigned** after the AIOStreams visual language: near-black ground, purple accent, Inter and JetBrains Mono self-hosted (no Google Fonts requests), SVG navigation icons, and a component system (pills, chips, stat tiles, tables) shared by every screen. 146 component tests where the frontend previously had none.
+- **Every SPA screen relaid out.** Discover opens with a full-bleed trending hero with a working watchlist action; Library gains stat tiles, filter chips and a grid/table toggle; Watchlist shows Trakt and MDBList source cards with one-click sync; Search renders result rows with overviews, status pills and client-side facets; Requests shows the monthly quota card and approval tiles; Wanted shows movies and episodes side by side with attempt-count colour ramps, a retry-all button, and previously invisible given-up episodes surfaced; Settings splits into Integrations and Preferences.
+- **The admin is native.** The 2,297-line embedded Jinja dashboard and the half-wired React admin are replaced by one nine-tab React admin (Overview, Users, Requests, Filter rules, Scrapers, Logs, Maintenance, Blacklist, Settings). A 93-control inventory of both old surfaces was discharged control-by-control; nothing was dropped without a recorded reason. The filter rules editor is a behaviour-proven port of the existing chip editor. The Overview tiles show only real numbers; the mockup's invented metrics (active streams, cache hit rate) were deliberately not faked.
+- The admin dashboard no longer ever reloads itself; every panel refreshes in place, and polling stops when its tab is hidden.
+
+### Added
+
+- `GET /ui/api/shell-summary` (sidebar counts, TorBox state), `GET /ui/api/me/quota`, `GET /ui/api/scraper-health` (rolling per-scraper latency from a new in-process ring buffer), `GET /ui/api/logs` (structured, level-filtered), `GET /ui/api/releases`, `GET /ui/api/repair`.
+- **`UI_V2` environment variable** (default off). When set, `/login`, `/setup` and `/admin` serve the redesigned React pages; the Jinja versions stay reachable at `/login/classic`, `/setup/classic` and `/admin/classic` regardless, as permanent escape hatches. With it unset, those three routes behave byte-identically to 0.7.7. The auth endpoints themselves are untouched: the React login submits the same form POST to the same `/login`.
+- The React setup wizard ports all ten steps and every field of the original, verified field-by-field.
+
+### Fixed
+
+- **Setup wizard quality and language choices now apply.** Since the filter-rules model landed, the wizard's `QUALITY_PREFERENCE`, `ALLOW_4K`, `PREFER_HEVC` and `AUDIO_LANGUAGE_PREFERENCE` fields were silently dropped by the save handler's allow-list; nothing translated them into the rule model, so a fresh install's choices did nothing. `setup_save` now translates them through the same mapping the one-time migration uses (`RESOLUTION_PREFERRED`, `RESOLUTION_EXCLUDED`, `ENCODE_PREFERRED`, `LANGUAGE_PREFERRED`). Applies to both the old and new wizard.
+- Approving a request in the admin now refreshes the all-requests table beneath it.
+- The admin nav item is hidden from non-admin users again (a regression the redesign's own review caught and fixed before release).
+
 ## [0.7.7] - 2026-08-30
 
 ### Fixed

@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.8.0",
+    "date": "2026-08-30",
+    "notes": [
+      "The whole web UI is redesigned: new dark palette, self-hosted fonts, SVG icons, a sidebar with live counts and a TorBox status pill",
+      "Every screen relaid out: Discover gains a trending hero, Library gets stat tiles and a table view, Watchlist shows Trakt and MDBList sync cards, Search becomes result rows with facets, Requests shows your monthly quota, Wanted shows both backlogs with retry-all",
+      "The admin is now fully native: nine tabs replacing the old embedded dashboard, including a chip-based filter rules editor, live scraper health, and a structured log viewer",
+      "New: set UI_V2=true to also serve the redesigned login, setup wizard and admin at their own URLs; without it those three pages look exactly as before. The old pages stay reachable at /login/classic, /setup/classic and /admin/classic either way",
+      "Fix: quality and language choices made in the setup wizard now actually apply (they were silently ignored since the filter-rules model landed)"
+    ]
+  },
+  {
     "version": "0.7.7",
     "date": "2026-08-30",
     "notes": [
