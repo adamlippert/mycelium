@@ -26,11 +26,25 @@ def _decode(token):
     return json.loads(base64.b64decode(token))
 
 
-def test_config_contains_both_credentials(configured):
-    cfg = _decode(debridio.build_config_token())
+def test_config_carries_the_debridio_key_but_not_the_torbox_key(configured):
+    """Service wrap: Debridio is queried as a plain scraper. The addon does
+    not validate providerKey (verified live: identical 538 streams and 197
+    cached flags with the key present, omitted, blank or nonsense) and
+    Mycelium resolves every hash through its own TorBox client, so the key
+    is not sent. provider stays, or the addon 500s."""
+    token = debridio.build_config_token()
+    cfg = _decode(token)
     assert cfg["api_key"] == "dk" * 16
-    assert cfg["providerKey"] == "tb-uuid-value"
     assert cfg["provider"] == "torbox"
+    assert "providerKey" not in cfg
+    assert "tb-uuid-value" not in base64.b64decode(token).decode()
+
+
+def test_opt_in_restores_the_torbox_key(configured, monkeypatch):
+    """Escape hatch for a future addon version that starts requiring it."""
+    monkeypatch.setitem(configured, "DEBRIDIO_SEND_TORBOX_KEY", "true")
+    cfg = _decode(debridio.build_config_token())
+    assert cfg["providerKey"] == "tb-uuid-value"
 
 
 def test_config_is_permissive(configured):
@@ -58,9 +72,18 @@ def test_unconfigured_returns_empty_token(monkeypatch):
     assert debridio.is_configured() is False
 
 
-def test_is_configured_requires_both_keys(monkeypatch):
+def test_is_configured_needs_only_the_debridio_key(monkeypatch):
+    """A TorBox key is no longer part of talking to Debridio."""
     monkeypatch.setattr(debridio._settings, "get",
                         lambda k, d=None: "x" if k == "DEBRIDIO_API_KEY" else d)
+    monkeypatch.setattr(debridio.config, "TORBOX_API_KEY", "")
+    assert debridio.is_configured() is True
+
+
+def test_is_configured_requires_the_torbox_key_in_opt_in_mode(monkeypatch):
+    values = {"DEBRIDIO_API_KEY": "x", "DEBRIDIO_SEND_TORBOX_KEY": "true"}
+    monkeypatch.setattr(debridio._settings, "get",
+                        lambda k, d=None: values.get(k, d))
     monkeypatch.setattr(debridio.config, "TORBOX_API_KEY", "")
     assert debridio.is_configured() is False
 

@@ -4,6 +4,10 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Debridio is queried as a plain scraper; your TorBox key is no longer sent to it.** The addon's config segment carried the key, but it never validated it: probing the live addon returned byte-identical results with the key present, omitted, blanked or filled with nonsense (538 streams, 538 hashes, 197 cached flags, in every shape). It was only used to build play URLs that Mycelium discards, since it keeps the info hash and resolves every release through its own TorBox client, exactly as it already did for Torrentio and Zilean. All three scrapers now see no debrid credentials at all. `DEBRIDIO_SEND_TORBOX_KEY=true` restores the old behaviour if a future addon version starts requiring it.
+
 ### Fixed
 
 - **Preferences saved by the shared-password login persist now.** The legacy single-user login has no users-table row (its session record is a synthetic shim with id 0), so saving UI preferences or plugin toggles matched zero rows and silently reverted - the same bug class as the 0.8.3 region fix, on the two endpoints that fix recorded as follow-ups. They now persist in a settings blob the login's record reads back, so the session payload, plugin fields and webplayer checks all see them.

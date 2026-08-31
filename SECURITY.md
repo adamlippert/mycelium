@@ -30,7 +30,12 @@ release; the advisory is published after a fix is available.
 - `/stream/<token>` and `/spore-stream/<token>` are unauthenticated by design
   (media players cannot log in); the random per-item token is the capability.
   Treat those URLs like credentials.
-- Debrid API keys configured in Mycelium are sent to the corresponding
-  third-party services. The Debridio integration embeds keys in request URLs
-  because the Stremio addon protocol has no header authentication; Mycelium
-  scrubs these values from its own logs and error messages.
+- Your debrid (TorBox / RealDebrid) API keys are used by Mycelium itself and
+  are not shared with scrapers. All three scrapers are queried for torrent
+  results only, and every release is resolved through Mycelium's own debrid
+  client.
+- The optional Debridio scraper needs its own Debridio API key, which the
+  Stremio addon protocol carries in the request URL rather than a header.
+  Mycelium scrubs that value, and any URL containing it, from its own logs
+  and error messages. Set `DEBRIDIO_SEND_TORBOX_KEY=true` only if you
+  deliberately want your TorBox key sent to Debridio as well.

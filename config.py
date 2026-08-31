@@ -46,6 +46,9 @@ DEBRIDIO_ENABLED = _env("DEBRIDIO_ENABLED", "false").lower() in ("1", "true", "y
 DEBRIDIO_API_KEY = _env("DEBRIDIO_API_KEY", "")
 DEBRIDIO_BASE_URL = _env("DEBRIDIO_BASE_URL", "https://addon.debridio.com")
 DEBRIDIO_MAX_RESULTS = _env_int("DEBRIDIO_MAX_RESULTS", 100)
+# Opt-in: send the TorBox key inside Debridio's config segment. Off, because
+# the addon does not validate it and Mycelium resolves hashes itself.
+DEBRIDIO_SEND_TORBOX_KEY = _env("DEBRIDIO_SEND_TORBOX_KEY", "false").lower() in ("1", "true", "yes")
 # Escape hatch: a full pre-built config segment, used verbatim when set. We
 # build the config against an undocumented third-party schema; if Debridio
 # changes it, this keeps users running without waiting for a release.

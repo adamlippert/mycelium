@@ -6,8 +6,10 @@ in behaviorHints.bingeGroup as 'debridio-<40 hex>' and again in the play-URL
 path. Verified 702/702 consistent, with 88 of Torrentio's 111 hashes for the
 same title appearing verbatim.
 
-The config segment is base64 JSON holding the Debridio API key AND the user's
-TorBox key, so the request URL is a secret. Nothing here may log it.
+The config segment is base64 JSON holding the Debridio API key, so the request
+URL is a secret. Nothing here may log it. It does NOT carry the user's TorBox
+key: the addon never validates providerKey and Mycelium resolves every hash
+through its own TorBox client, so the key is not sent (see send_torbox_key).
 """
 import base64
 import json
@@ -40,10 +42,31 @@ def _s(key: str):
     return _settings.get(key, getattr(config, key, None))
 
 
+def send_torbox_key() -> bool:
+    """Whether to put the user's TorBox key in the addon config. Off.
+
+    The addon does not validate providerKey: omitting it, blanking it or
+    filling it with nonsense returns byte-identical results, cached flags
+    included (measured against the live addon: 538 streams, 538 hashes, 197
+    cached, in all four shapes). It is only used to build the play URLs,
+    which Mycelium discards - _to_stream() keeps the info hash and every
+    release is resolved through Mycelium's own TorBox client, exactly like
+    Torrentio's and Zilean's results.
+
+    So the key is not sent. Set DEBRIDIO_SEND_TORBOX_KEY=true to restore the
+    old behaviour if a future addon version starts needing it.
+    """
+    return str(_s("DEBRIDIO_SEND_TORBOX_KEY") or "").strip().lower() in ("1", "true", "yes")
+
+
 def is_configured() -> bool:
-    """Debridio needs its own key and a TorBox key to proxy for."""
-    return bool((_s("DEBRIDIO_API_KEY") or "").strip()
-                and (_s("TORBOX_API_KEY") or "").strip())
+    """Debridio needs its own API key. A TorBox key is only required in the
+    opt-in send_torbox_key() mode; the addon itself never checks it."""
+    if not (_s("DEBRIDIO_API_KEY") or "").strip():
+        return False
+    if send_torbox_key() and not (_s("TORBOX_API_KEY") or "").strip():
+        return False
+    return True
 
 
 def build_config_token() -> str:
@@ -61,15 +84,20 @@ def build_config_token() -> str:
         return ""
     cfg = {
         "api_key": (_s("DEBRIDIO_API_KEY") or "").strip(),
+        # Required: the addon 500s ("providerConfig.instance") without it, and
+        # it is what makes the cached flag mean "cached on TorBox".
         "provider": "torbox",
-        "providerKey": (_s("TORBOX_API_KEY") or "").strip(),
+    }
+    if send_torbox_key():
+        cfg["providerKey"] = (_s("TORBOX_API_KEY") or "").strip()
+    cfg.update({
         "disableUncached": False,
         "maxSize": "",
         "maxReturnPerQuality": str(_s("DEBRIDIO_MAX_RESULTS") or 100),
         "resolutions": list(_RESOLUTIONS),
         "excludedQualities": [],
         "preferredLang": [],
-    }
+    })
     return base64.b64encode(json.dumps(cfg, separators=(",", ":")).encode()).decode()
 
 
