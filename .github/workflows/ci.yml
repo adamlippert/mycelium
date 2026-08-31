@@ -1,0 +1,90 @@
+name: CI
+
+# Runs the test suites on every push to main and every pull request. Also
+# exposed as workflow_call so release.yml can gate a release on it without
+# duplicating any of this.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+# A second push to the same branch cancels the first: the older result is
+# about to be irrelevant anyway.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - run: pip install -r requirements-dev.txt
+
+      # The suite never imports app.py (it would start the scheduler), so this
+      # needs no database, no TorBox key and no network.
+      - name: pytest
+        run: python -m pytest tests/ -q
+
+  frontend:
+    name: Frontend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Vitest
+        run: npm test
+
+      # tsc carries a known baseline of pre-existing errors in files this
+      # project has not touched. Failing on any error would demand a cleanup
+      # first; failing on GROWTH catches every new one from today onward.
+      # Lower the baseline when those files get fixed; never raise it.
+      - name: Type check (no new errors)
+        run: |
+          baseline=4
+          count=$(npx tsc --noEmit 2>&1 | grep -c "error TS" || true)
+          echo "tsc errors: $count (baseline $baseline)"
+          if [ "$count" -gt "$baseline" ]; then
+            echo "::error::tsc reports $count errors, above the baseline of $baseline"
+            npx tsc --noEmit
+            exit 1
+          fi
+
+      - name: Filter rules model tests
+        working-directory: .
+        run: node --test tests/js/filter_rules.test.js
+
+      # static/app/ is committed because the Dockerfile copies it when the npm
+      # build is skipped. If it drifts from source, the image ships a stale UI.
+      # Non-blocking for now: Vite output has not yet been proven byte-identical
+      # between a macOS dev machine and this runner. Promote to blocking once a
+      # few runs show it green.
+      - name: Built SPA matches source
+        continue-on-error: true
+        run: |
+          npm run build
+          cd .. && git diff --exit-code --stat static/app/ \
+            || echo "::warning::static/app/ differs from a fresh build; rebuild and commit it"
