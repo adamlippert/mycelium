@@ -2183,8 +2183,9 @@ def ui_api_request_status():
 
 @app.get("/ui/api/requests/failed")
 def ui_api_failed_requests():
-    rows = [r for r in db.get_recent(500) if r.get("status") == "failed"]
-    return jsonify(items=rows)
+    # Every logged-in user polls this; filter in SQL (indexed on status)
+    # instead of pulling 500 full rows per poll and filtering in Python.
+    return jsonify(items=db.get_failed_requests(50))
 
 
 @app.post("/ui/api/requests/<int:row_id>/retry")
@@ -2814,34 +2815,42 @@ def ui_api_library_status_map():
 
 @app.get("/ui/api/library/movies")
 def ui_api_library_movies():
-    """Return all movie requests with status info, reconciling stale wanted status."""
+    """One page of movie requests with status info, reconciling stale wanted
+    status. Paginated server-side: the old get_recent(10000) shape silently
+    hid everything past the 10,000 most recent rows."""
     db.reconcile_wanted_movies()
-    rows = db.get_recent(10000)
-    seen = set()
-    items = []
-    for r in rows:
-        if r.get("media_type") != "movie":
-            continue
-        imdb = r.get("imdb_id", "")
-        if imdb in seen:
-            continue
-        seen.add(imdb)
-        items.append({
-            "title": r.get("title") or "Unknown",
-            "imdb_id": imdb,
-            "tmdb_id": r.get("tmdb_id"),
-            "quality": r.get("quality"),
-            "status": r.get("status"),
-            "source": r.get("source"),
-            "created_at": r.get("created_at"),
-            "year": r.get("year"),
-        })
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+    try:
+        page_size = min(100, max(1, int(request.args.get("page_size", 24))))
+    except ValueError:
+        page_size = 24
+    search = (request.args.get("search") or "").strip()
+    status_filter = request.args.get("filter", "all")
+    if status_filter not in ("all", "available", "wanted"):
+        status_filter = "all"
+    result = db.get_movie_requests_page(
+        search=search, status_filter=status_filter,
+        limit=page_size, offset=(page - 1) * page_size)
+    items = [{
+        "title": r.get("title") or "Unknown",
+        "imdb_id": r.get("imdb_id", ""),
+        "tmdb_id": r.get("tmdb_id"),
+        "quality": r.get("quality"),
+        "status": r.get("status"),
+        "source": r.get("source"),
+        "created_at": r.get("created_at"),
+        "year": r.get("year"),
+    } for r in result["items"]]
     # Enrich with cached poster paths (single batch query)
     imdb_ids = [it["imdb_id"] for it in items if it.get("imdb_id")]
     poster_map = db.get_posters_batch(imdb_ids)
     for it in items:
         it["poster_path"] = poster_map.get(it["imdb_id"])
-    return jsonify(items=items)
+    return jsonify(items=items, total=result["total"], counts=result["counts"],
+                   page=page, page_size=page_size)
 
 
 @app.get("/ui/api/library/series-episodes")

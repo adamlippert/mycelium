@@ -2,6 +2,16 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **The Library's movie list is paged by the server.** The endpoint used to fetch the 10,000 most recent requests, filter and deduplicate them in Python, and ship the whole result to the browser on every visit, where search and paging happened client-side. Past 10,000 movies the rest of the library silently never appeared. Search, the All/Available/Wanted filter and paging now run in SQL (with a new index on media type and creation date), the response carries one 24-item page plus the toolbar counts, and the Jellyfin id prefetch asks only for the movies on screen instead of building a query string from the entire library.
+- **The cleanup repair loop no longer sleeps after healthy files.** It paused two seconds after every `.strm` it scanned, even when the file was fine and no API had been called; on a large library that pause alone stretched a run into hours while the maintenance lock was held. The pause now applies only when a repair attempt actually ran.
+- **RealDebrid on-play waits are capped at 45 seconds**, the same cap the TorBox path already had. They inherited the 600-second request-time default, so a single play of an uncached RealDebrid item could hold one of the serving threads for ten minutes.
+- **The failed-requests panel polls lighter.** Its endpoint fetched the 500 most recent requests of any status on every poll and filtered in Python; it now asks SQL for failed rows only, over an index that already existed. The poll interval goes from ten to thirty seconds, since every logged-in user with My Requests open runs it.
+- **The sidebar's wanted count is a COUNT(*)**, replacing a load of the entire wanted-episodes table on every page navigation.
+
 ## [0.8.4] - 2026-08-31
 
 ### Fixed

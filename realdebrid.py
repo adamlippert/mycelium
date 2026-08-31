@@ -89,9 +89,10 @@ def get_info(rd_id: str, timeout: int = 15) -> dict | None:
         return None
 
 
-def wait_until_ready(rd_id: str) -> dict | None:
-    """Poll RealDebrid for completion."""
-    deadline = time.monotonic() + TORBOX_POLL_TIMEOUT_SEC
+def wait_until_ready(rd_id: str, timeout: int | None = None) -> dict | None:
+    """Poll RealDebrid for completion. On-play callers pass a short timeout;
+    the default is only appropriate for request-time processing."""
+    deadline = time.monotonic() + (timeout if timeout is not None else TORBOX_POLL_TIMEOUT_SEC)
     last_status: str | None = None
     while time.monotonic() < deadline:
         info = get_info(rd_id)

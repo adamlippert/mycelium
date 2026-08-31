@@ -252,7 +252,18 @@ export const api = {
   loginFlags,
   stats: () => http<any>('/ui/api/stats'),
   libraryStatusMap: () => http<Record<string, string>>('/ui/api/library/status-map'),
-  libraryMovies: () => http<{ items: any[] }>('/ui/api/library/movies'),
+  libraryMovies: (opts?: { page?: number; pageSize?: number; search?: string; filter?: string }) => {
+    const params = new URLSearchParams();
+    if (opts?.page) params.set('page', String(opts.page));
+    if (opts?.pageSize) params.set('page_size', String(opts.pageSize));
+    if (opts?.search) params.set('search', opts.search);
+    if (opts?.filter && opts.filter !== 'all') params.set('filter', opts.filter);
+    const qs = params.toString();
+    return http<{
+      items: any[]; total: number; page: number; page_size: number;
+      counts: { all: number; available: number; wanted: number };
+    }>(`/ui/api/library/movies${qs ? `?${qs}` : ''}`);
+  },
   recent: () => http<{ items: any[] }>('/ui/api/activity'),
   myRequests: () => http<{ items: any[] }>('/ui/api/user-requests?mine=1'),
   myQuota: () => http<QuotaInfo>('/ui/api/me/quota'),

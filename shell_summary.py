@@ -35,7 +35,7 @@ def _counts(user_id: int | None) -> dict:
     return {
         "watchlist": len(db.get_watchlist(user_id)) if user_id is not None else 0,
         "requests": len(db.get_user_requests(user_id=user_id, status="pending")) if user_id is not None else 0,
-        "wanted": len([w for w in db.get_all_wanted_episodes() if w["status"] == "wanted"]),
+        "wanted": db.count_wanted_episodes(),
     }
 
 

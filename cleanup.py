@@ -854,7 +854,11 @@ def _run_cleanup_locked() -> None:
         except _RateLimitedError:
             log.warning("Cleanup: TorBox rate limit hit  -  stopping repairs for this run")
             break
-        time.sleep(2)
+        if result != "ok":
+            # The pause spaces out scraper/TorBox calls. A healthy strm made
+            # none (mylist is prefetched), and sleeping for those too turns a
+            # large-library run into hours of idle waiting.
+            time.sleep(2)
         if result == "repaired":
             repaired += 1
             changed = True

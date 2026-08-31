@@ -204,6 +204,7 @@ CREATE TABLE IF NOT EXISTS repair_items (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_requests_imdb_unique ON requests(imdb_id);
 CREATE INDEX IF NOT EXISTS idx_requests_status_created    ON requests(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_requests_media_created     ON requests(media_type, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_monitored_series_status    ON monitored_series(status);
 CREATE INDEX IF NOT EXISTS idx_wanted_status_attempts     ON wanted_episodes(status, attempt_count);
 CREATE INDEX IF NOT EXISTS idx_wanted_imdb                ON wanted_episodes(imdb_id);
@@ -558,6 +559,58 @@ def get_recent(limit: int = 100) -> list[dict]:
             "SELECT * FROM requests ORDER BY created_at DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def get_failed_requests(limit: int = 50) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM requests WHERE status='failed' "
+            "ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_movie_requests_page(search: str = "", status_filter: str = "all",
+                            limit: int = 24, offset: int = 0) -> dict:
+    """One page of movie requests plus the chip counts the Library toolbar
+    shows. imdb_id is UNIQUE on requests, so no dedup pass is needed."""
+    where = ["media_type='movie'"]
+    params: list = []
+    if search:
+        where.append("title LIKE ? COLLATE NOCASE")
+        params.append(f"%{search}%")
+    counts_where = " AND ".join(where)
+    counts_params = list(params)
+    if status_filter == "available":
+        where.append("status='success'")
+    elif status_filter == "wanted":
+        where.append("status!='success'")
+    clause = " AND ".join(where)
+    with _connect() as conn:
+        row = conn.execute(
+            f"SELECT COUNT(*) AS n, "
+            f"COALESCE(SUM(status='success'), 0) AS avail "
+            f"FROM requests WHERE {counts_where}",
+            counts_params,
+        ).fetchone()
+        counts = {"all": row["n"], "available": row["avail"],
+                  "wanted": row["n"] - row["avail"]}
+        total = counts["all"] if status_filter == "all" else counts[status_filter]
+        rows = conn.execute(
+            f"SELECT * FROM requests WHERE {clause} "
+            f"ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            params + [limit, offset],
+        ).fetchall()
+        return {"items": [dict(r) for r in rows], "total": total, "counts": counts}
+
+
+def count_wanted_episodes() -> int:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM wanted_episodes WHERE status='wanted'"
+        ).fetchone()
+        return row["n"]
 
 
 def reconcile_wanted_movies() -> int:

@@ -110,7 +110,7 @@ export default function Requests() {
 function FailedRequestsPanel() {
   const qc = useQueryClient();
   const toast = useToast();
-  const { data } = useQuery({ queryKey: ['failed-requests'], queryFn: api.failedRequests, refetchInterval: 10000 });
+  const { data } = useQuery({ queryKey: ['failed-requests'], queryFn: api.failedRequests, refetchInterval: 30000 });
   const retryMut = useMutation({
     mutationFn: (id: number) => api.retryRequest(id),
     onSuccess: (r) => {

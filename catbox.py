@@ -319,7 +319,7 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
             try:
                 result = _rd.add_magnet(new_magnet)
                 rd_id = result["id"]
-                rd_info = _rd.wait_until_ready(rd_id)
+                rd_info = _rd.wait_until_ready(rd_id, timeout=ON_PLAY_READY_TIMEOUT_SEC)
                 if not rd_info:
                     log.error("Catbox/RD: wait_until_ready timed out for %s", item["title"])
                     _fail_put(token, _FAIL_COOLDOWN_SEC)
@@ -408,7 +408,7 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
                     magnet = item.get("magnet") or f"magnet:?xt=urn:btih:{known_hash}"
                     rd_result = _rd.add_magnet(magnet)
                     rd_id = rd_result["id"]
-                    rd_info = _rd.wait_until_ready(rd_id)
+                    rd_info = _rd.wait_until_ready(rd_id, timeout=ON_PLAY_READY_TIMEOUT_SEC)
                     if rd_info:
                         db.update_virtual_rd_id(token, rd_id)
                         url = _rd_get_url(item, rd_id)
@@ -456,7 +456,7 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
             try:
                 result = _rd.add_magnet(new_magnet)
                 rd_id = result["id"]
-                rd_info = _rd.wait_until_ready(rd_id)
+                rd_info = _rd.wait_until_ready(rd_id, timeout=ON_PLAY_READY_TIMEOUT_SEC)
                 if not rd_info:
                     _fail_put(token, _FAIL_COOLDOWN_SEC)
                     if ckey:

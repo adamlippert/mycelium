@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { usePluginSlot } from '../hooks/usePluginSlots';
@@ -15,6 +15,15 @@ import type { TmdbItem } from '../types';
 type Tab = 'all' | 'movies' | 'series';
 
 const PAGE_SIZE = 24;
+
+function useDebounced<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(t);
+  }, [value, delayMs]);
+  return debounced;
+}
 
 function formatAdded(created_at: string | undefined): string {
   if (!created_at) return '-';
@@ -60,50 +69,46 @@ export default function Library() {
 }
 
 function MoviesPanel() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['library-movies'],
-    queryFn: api.libraryMovies,
-  });
-  const { data: session } = useQuery({ queryKey: ['session'], queryFn: api.session });
-  const clickJellyfin = !!(session?.user as any)?.library_click_jellyfin;
-
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<'all' | 'available' | 'wanted'>('all');
   const [view, setView] = useState<'grid' | 'table'>('grid');
   const [modalItem, setModalItem] = useState<{ tmdb_id: number; media_type: string; title: string } | null>(null);
 
-  const items = useMemo(() => data?.items || [], [data]);
+  // Search, filter and pagination all happen server-side: the endpoint pages
+  // through SQL instead of shipping the whole library. Debounce the search so
+  // a request fires per pause, not per keystroke.
+  const debouncedSearch = useDebounced(search.trim(), 300);
+  const { data, isLoading } = useQuery({
+    queryKey: ['library-movies', page, filter, debouncedSearch],
+    queryFn: () => api.libraryMovies({ page, pageSize: PAGE_SIZE, search: debouncedSearch, filter }),
+    placeholderData: (prev) => prev,
+  });
+  const { data: session } = useQuery({ queryKey: ['session'], queryFn: api.session });
+  const clickJellyfin = !!(session?.user as any)?.library_click_jellyfin;
 
-  // Pre-fetch all Jellyfin item IDs when Jellyfin mode is on.
-  // Stored as a Map so clicking is always synchronous (no popup blocker).
-  const allImdbIds = useMemo(() => items.map((m: any) => m.imdb_id).filter(Boolean), [items]);
+  const paginated = useMemo(() => data?.items || [], [data]);
+  const counts = data?.counts;
+
+  // Pre-fetch Jellyfin item IDs for the movies on screen when Jellyfin mode
+  // is on. Stored as a map so clicking is always synchronous (no popup
+  // blocker). Only the current page's ids go in the URL; the full library
+  // would blow past proxy URL-length limits.
+  const pageImdbIds = useMemo(
+    () => paginated.map((m: any) => m.imdb_id).filter(Boolean),
+    [paginated],
+  );
   const { data: jellyfinData } = useQuery({
-    queryKey: ['jellyfin-items', allImdbIds],
-    queryFn: () => api.jellyfinItems(allImdbIds),
-    enabled: clickJellyfin && allImdbIds.length > 0,
+    queryKey: ['jellyfin-items', pageImdbIds.join(',')],
+    queryFn: () => api.jellyfinItems(pageImdbIds),
+    enabled: clickJellyfin && pageImdbIds.length > 0,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
   const jellyfinMap: Record<string, string | null> = jellyfinData?.items ?? {};
   const jellyfinUrl = jellyfinData?.jellyfin_url ?? session?.jellyfin_url ?? null;
 
-  const filtered = useMemo(() => {
-    let list = items;
-    if (filter === 'available') list = list.filter((m: any) => m.status === 'success');
-    else if (filter === 'wanted') list = list.filter((m: any) => m.status !== 'success');
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      list = list.filter((m: any) => (m.title || '').toLowerCase().includes(q));
-    }
-    return list;
-  }, [items, filter, search]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated = useMemo(
-    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [filtered, page],
-  );
+  const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
 
   const handleSearch = (v: string) => { setSearch(v); setPage(1); };
   const handleFilter = (v: typeof filter) => { setFilter(v); setPage(1); };
@@ -136,8 +141,9 @@ function MoviesPanel() {
 
   if (isLoading) return <div className="text-muted">Loading...</div>;
 
-  const available = items.filter((m: any) => m.status === 'success').length;
-  const wanted    = items.length - available;
+  const allCount   = counts?.all ?? 0;
+  const available  = counts?.available ?? 0;
+  const wanted     = counts?.wanted ?? 0;
 
   return (
     <>
@@ -153,7 +159,7 @@ function MoviesPanel() {
         />
         <div className="flex gap-1">
           {([
-            ['all',       `All (${items.length})`],
+            ['all',       `All (${allCount})`],
             ['available', `Available (${available})`],
             ['wanted',    `Wanted (${wanted})`],
           ] as const).map(([v, label]) => (
