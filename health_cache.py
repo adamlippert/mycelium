@@ -22,9 +22,19 @@ _lock = threading.Lock()
 _cache: dict[str, tuple[bool, float]] = {}
 
 
+def _zilean_native() -> bool:
+    return _settings.get("ZILEAN_MODE", "external") == "native"
+
+
 def _probe(name: str) -> bool:
     try:
         if name == "zilean":
+            if _zilean_native():
+                # The native index is local SQLite: no URL exists to probe.
+                # Down means the index database itself cannot be opened.
+                import zilean_index
+                zilean_index.get_status()
+                return True
             zilean_url = _settings.get("ZILEAN_URL", _ZILEAN_URL_DEFAULT)
             if not zilean_url:
                 return False
@@ -54,7 +64,9 @@ def _probe(name: str) -> bool:
 def is_up(name: str) -> bool:
     if name == "zilean" and (
         not _settings.get("ZILEAN_ENABLED", False)
-        or not _settings.get("ZILEAN_URL", _ZILEAN_URL_DEFAULT)
+        # Native mode needs no URL; requiring one here silently skipped the
+        # built-in index for every search and showed it as permanently down.
+        or (not _zilean_native() and not _settings.get("ZILEAN_URL", _ZILEAN_URL_DEFAULT))
     ):
         return False
     if name == "debridio":

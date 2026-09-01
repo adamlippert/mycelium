@@ -6,6 +6,7 @@ All notable changes to Mycelium are documented in this file.
 
 ### Fixed
 
+- **Native-mode Zilean works again.** The built-in SQLite index (`ZILEAN_MODE=native`) has no URL by design, but the health gate required one: the enabled, working native index was silently skipped for every single search, and both status surfaces showed it as down or disabled. Native mode now probes the local index itself (down only when the index database cannot be opened), searches flow through it, and the Overview health card reports it with its hash count.
 - **The admin Scrapers page shows every scraper again.** It sourced its list from the traffic-routing filter, which hid exactly the scrapers whose status matters: disabled ones showed nothing at all, and a scraper whose health probe failed vanished from the page instead of showing "down". All scrapers are now listed - disabled ones as such - and when the process has no latency samples yet (they are in-memory, so every restart clears them) the live health probe stands in instead of a permanent "unknown".
 
 ## [0.10.1] - 2026-08-31

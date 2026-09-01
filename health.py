@@ -35,7 +35,19 @@ def check_all() -> list[dict]:
         headers={"Authorization": f"Bearer {settings.get('TORBOX_API_KEY', '')}"},
     ))
     if settings.get("ZILEAN_ENABLED", False):
-        services.append(_ping("Zilean", f"{_s('ZILEAN_URL').rstrip('/')}/healthz"))
+        if settings.get("ZILEAN_MODE", "external") == "native":
+            # Built-in SQLite index: nothing to ping. Down means the index
+            # database itself cannot be opened.
+            try:
+                import zilean_index
+                n = zilean_index.get_status().get("total_hashes", 0)
+                services.append({"name": "Zilean", "status": "ok",
+                                 "note": f"native index, {n} hashes"})
+            except Exception:
+                services.append({"name": "Zilean", "status": "down",
+                                 "note": "native index unavailable"})
+        else:
+            services.append(_ping("Zilean", f"{_s('ZILEAN_URL').rstrip('/')}/healthz"))
     else:
         services.append({"name": "Zilean", "status": "disabled"})
     services.append(_ping("Torrentio", f"{TORRENTIO_BASE_URL.rstrip('/')}/manifest.json"))
