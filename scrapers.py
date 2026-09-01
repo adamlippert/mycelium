@@ -68,6 +68,30 @@ _SCRAPERS = [
 ]
 
 
+def health_rows() -> list[dict]:
+    """Every scraper for the admin Scrapers page, in _SCRAPERS order.
+
+    Deliberately NOT _active(): that is a traffic-routing filter, and using
+    it here made the status page hide exactly the scrapers whose status
+    matters - disabled ones showed nothing at all, and a scraper whose
+    probe failed vanished instead of showing "down". Disabled scrapers are
+    listed as such, and when this process has no latency samples yet (they
+    are in-memory, so every restart clears them) the live health probe
+    stands in for "unknown"."""
+    import scraper_metrics
+    rows = []
+    for name, key, _fn in _SCRAPERS:
+        if key is not None and not _settings.get(key, False):
+            rows.append({"name": name, "state": "disabled",
+                         "latency_ms": None, "samples": 0})
+            continue
+        row = scraper_metrics.get_health([name])[0]
+        if row["state"] == "unknown":
+            row["state"] = "ok" if health_cache.is_up(name) else "down"
+        rows.append(row)
+    return rows
+
+
 def _active() -> list[tuple]:
     out = []
     for name, key, fn in _SCRAPERS:

@@ -2,6 +2,12 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **The admin Scrapers page shows every scraper again.** It sourced its list from the traffic-routing filter, which hid exactly the scrapers whose status matters: disabled ones showed nothing at all, and a scraper whose health probe failed vanished from the page instead of showing "down". All scrapers are now listed - disabled ones as such - and when the process has no latency samples yet (they are in-memory, so every restart clears them) the live health probe stands in instead of a permanent "unknown".
+
 ## [0.10.1] - 2026-08-31
 
 ### Fixed

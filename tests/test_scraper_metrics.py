@@ -89,7 +89,9 @@ def test_the_endpoint_is_registered():
     with open(os.path.join(os.path.dirname(__file__), "..", "app.py"), encoding="utf-8") as f:
         src = f.read()
     assert '@app.get("/ui/api/scraper-health")' in src
-    assert "scraper_metrics.get_health(" in src
+    # The endpoint now serves scrapers.health_rows(), which wraps get_health
+    # per scraper and adds the disabled/probe states the admin page shows.
+    assert "health_rows()" in src
 
 
 def test_the_scraper_calls_go_through_the_wrapper():

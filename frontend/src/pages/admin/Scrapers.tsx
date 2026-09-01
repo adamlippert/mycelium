@@ -8,7 +8,7 @@ import type { Column } from '../../components/primitives';
 type ScraperRow = {
   name: string;
   latency_ms: number | null;
-  state: 'ok' | 'slow' | 'down' | 'unknown';
+  state: 'ok' | 'slow' | 'down' | 'unknown' | 'disabled';
   samples: number;
 };
 
@@ -24,12 +24,13 @@ const PILL_BY_STATE: Record<ScraperRow['state'], PillState> = {
   slow: 'queued',
   down: 'failed',
   unknown: 'lazy',
+  disabled: 'lazy',
 };
 
 function ScraperStatusDot({ state }: { state: ScraperRow['state'] }) {
   // 'unknown' has no signal to color yet, so it renders a plain dim dot
   // instead of borrowing the danger glow meant for a confirmed-down scraper.
-  if (state === 'unknown') {
+  if (state === 'unknown' || state === 'disabled') {
     return <span className="block h-[7px] w-[7px] flex-none rounded-full bg-white/20" />;
   }
   const tone = state === 'ok' ? 'ok' : state === 'slow' ? 'warn' : 'danger';

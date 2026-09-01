@@ -1119,8 +1119,7 @@ def ui_api_scraper_health():
     if not auth.is_admin():
         return jsonify(error="admin required"), 403
     import scrapers as _scrapers
-    active = [name for name, _ in _scrapers._active()]
-    return jsonify(scrapers=scraper_metrics.get_health(active))
+    return jsonify(scrapers=_scrapers.health_rows())
 
 
 @app.get("/ui/api/logs")
