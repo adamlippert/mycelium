@@ -2,6 +2,12 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **Debridio error logs keep their diagnostic tail.** The redaction that scrubs the config token from URLs was greedy: "/" and alphanumerics are all valid base64, so it swallowed everything up to the next non-base64 character and logged `.../<config>:2:1.json` - media type and IMDB id destroyed, which cost real diagnosis time during a transient Debridio 500. Tokens followed by known path segments now redact to `/<config>/stream/series/tt...`; the greedy pattern stays as the backstop for tokens in any other position. (The 500 itself was Debridio-side and transient: all four providerKey shapes, the deployed keyless one included, return identical results on the same series request. The health gate skips a down scraper for 60 seconds and then re-probes, so no action was needed.)
+
 ## [0.10.0] - 2026-08-31
 
 ### Added

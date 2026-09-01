@@ -88,6 +88,25 @@ def test_is_configured_requires_the_torbox_key_in_opt_in_mode(monkeypatch):
     assert debridio.is_configured() is False
 
 
+def test_redact_keeps_the_diagnostic_url_tail():
+    """A greedy base64 pattern used to swallow "/stream/series/tt2861424"
+    after the token ("/" and alphanumerics are all valid base64), logging
+    ".../<config>:2:1.json" - an error line with the media type and id
+    destroyed, which cost real diagnosis time during a live incident."""
+    url = ("https://addon.debridio.com/eyJhcGlfa2V5IjoiZmFrZWZha2VmYWtl"
+           "/stream/series/tt2861424:2:1.json")
+    out = debridio.redact(url)
+    assert out == "https://addon.debridio.com/<config>/stream/series/tt2861424:2:1.json"
+
+
+def test_redact_still_collapses_a_bare_trailing_token():
+    """The bounded pattern only fires before known segments; a token in any
+    other position must still be scrubbed by the greedy backstop."""
+    out = debridio.redact("giving up on https://addon.debridio.com/eyJhcGlfa2V5IjoiZmFrZWZha2VmYWtl")
+    assert "eyJhcGlfa2V5" not in out
+    assert "/<config>" in out
+
+
 def test_redact_removes_the_config_segment():
     url = "https://addon.debridio.com/eyJhcGlfa2V5IjoiEXAMPLE/stream/movie/tt1.json"
     out = debridio.redact(url)

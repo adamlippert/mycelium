@@ -35,6 +35,13 @@ CAPABILITIES = frozenset(("resolution", "source", "encode", "visual_tag", "audio
 
 _RESOLUTIONS = ["8k", "4k", "1440p", "1080p", "720p", "480p", "360p", "unknown"]
 _HEX40_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
+# Two shapes: bounded stops at the known path segments that follow a config
+# token, so the informative tail of a URL ("/stream/series/tt...json")
+# survives redaction - the greedy fallback ate it, because "/" and
+# alphanumerics are all valid base64, which turned an error log into
+# ".../<config>:2:1.json" with the media type and id destroyed. The greedy
+# variant stays as the backstop for tokens in any other position.
+_B64_SEGMENT_BOUNDED_RE = re.compile(r"/(?:ey[A-Za-z0-9+/=_-]{16,}?)(?=/stream/|/manifest\.json)")
 _B64_SEGMENT_RE = re.compile(r"/(?:ey[A-Za-z0-9+/=_-]{16,})")
 
 
@@ -121,6 +128,7 @@ def redact(text) -> str:
         secret = str(_s(key) or "").strip()
         if len(secret) >= 8:          # too short to be a key; avoid over-scrubbing
             out = out.replace(secret, "<redacted>")
+    out = _B64_SEGMENT_BOUNDED_RE.sub("/<config>", out)
     out = _B64_SEGMENT_RE.sub("/<config>", out)
     out = re.sub(r"/play/(\w+)/(\w+)/[^/]+/[^/]+/", r"/play/\1/\2/<redacted>/<redacted>/", out)
     return out
