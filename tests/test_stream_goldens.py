@@ -108,3 +108,21 @@ def test_dockerfile_wires_the_go_front():
     assert "STREAM_FRONT_ENABLED" in src
     # Rollback path: front disabled binds gunicorn to the exposed port.
     assert re.search(r"STREAM_FRONT_ENABLED[^\n]*false", src) or "else" in src
+
+
+def test_cold_head_validates_the_cdn_status():
+    """Found by the live load test: the cold path cached whatever
+    Content-Length the CDN HEAD returned, without checking the status. Under
+    a CDN 429 storm that cached the 162-byte error page as the file size and
+    served clients a 162-byte "movie" with a 206. The resolve must check the
+    status, retry a 429 once, refuse to cache failures, and answer 503 (rate
+    limited) or 502 rather than success."""
+    src = _src("app.py")
+    m = re.search(r"def _resolve_stream_mode\(.*?\n(.*?)\n    # CDN file is", src, re.S)
+    assert m, "cold branch of _resolve_stream_mode not found"
+    body = m.group(1)
+    assert "head.status_code" in body, "HEAD status is never checked"
+    assert "429" in body, "no rate-limit handling on the HEAD"
+    assert "503" in body, "a rate-limited HEAD must answer 503"
+    # The poisoning shape: an unconditional cache of the HEAD's length.
+    assert '_spore_cold_sizes[token] = int(head.headers.get' not in body

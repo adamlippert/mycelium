@@ -25,10 +25,17 @@ BASE="${1:?usage: loadtest-streams.sh <base-url> <token> [streams] [seconds]}"
 TOKEN="${2:?need a virtual-item token (use one that has already been played)}"
 STREAMS="${3:-40}"
 SECONDS_TOTAL="${4:-60}"
+# Per-stream rate. Lower it when running from a client whose own downlink
+# would saturate before the server does (N x rate must fit YOUR connection,
+# or the health probes measure your congestion, not the server's).
+RATE="${RATE:-500k}"
 BASE="${BASE%/}"
 
 TMP="$(mktemp -d)"
-trap 'kill $(cat "$TMP"/pids 2>/dev/null) 2>/dev/null; rm -rf "$TMP"' EXIT INT TERM
+# The || true matters: set -e is live inside the trap, and kill returns
+# nonzero once the streams have already exited, which made the whole script
+# report failure after a successful run.
+trap 'kill $(cat "$TMP"/pids 2>/dev/null) 2>/dev/null || true; rm -rf "$TMP"' EXIT INT TERM
 
 echo "== baseline: /health latency, idle (10 samples) =="
 i=0
@@ -38,11 +45,11 @@ while [ "$i" -lt 10 ]; do
 done
 sort -n "$TMP/base" | awk '{a[NR]=$1} END {printf "  min=%.3fs median=%.3fs max=%.3fs\n", a[1], a[int(NR/2)+1], a[NR]}'
 
-echo "== opening $STREAMS streams for ${SECONDS_TOTAL}s (each rate-limited to 500KB/s) =="
+echo "== opening $STREAMS streams for ${SECONDS_TOTAL}s (each rate-limited to $RATE/s) =="
 i=0
 : > "$TMP/pids"
 while [ "$i" -lt "$STREAMS" ]; do
-  curl -s -o /dev/null -m "$SECONDS_TOTAL" --limit-rate 500k \
+  curl -s -o /dev/null -m "$SECONDS_TOTAL" --limit-rate "$RATE" \
     -H "Range: bytes=0-" "$BASE/spore-stream/$TOKEN" \
     -w '%{http_code}\n' >> "$TMP/codes" &
   echo $! >> "$TMP/pids"

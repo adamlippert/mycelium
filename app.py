@@ -1511,12 +1511,34 @@ def _resolve_stream_mode(token: str) -> dict:
                 name=f"fsh-{token[:8]}",
             ).start()
             import requests as _req
+            status = None
+            size = 0
             try:
-                head = _req.head(cdn_url, timeout=10, allow_redirects=True)
-                _spore_cold_sizes[token] = int(head.headers.get("Content-Length", 0))
+                for attempt in (1, 2):
+                    head = _req.head(cdn_url, timeout=10, allow_redirects=True)
+                    status = head.status_code
+                    if status == 429 and attempt == 1:
+                        # Transient CDN rate limit: one short backoff, then
+                        # give up honestly rather than serve garbage.
+                        _t.sleep(0.5)
+                        continue
+                    if status < 400:
+                        size = int(head.headers.get("Content-Length", 0) or 0)
+                    break
             except Exception as exc:
                 log.warning("spore-stream: HEAD failed for cold token=%s: %s", token, exc)
                 return {"error": 502, "reason": "HEAD failed"}
+            if not size:
+                # An error response's Content-Length is the size of its error
+                # page, not of the file. Caching it here once served clients a
+                # 162-byte "movie" with a 206 status (found by the stream load
+                # test under a CDN 429 storm). Do not cache failures: the next
+                # request retries the HEAD.
+                log.warning("spore-stream: cold HEAD status=%s size=%s for token=%s",
+                            status, size, token)
+                return {"error": 503 if status == 429 else 502,
+                        "reason": f"HEAD status {status}"}
+            _spore_cold_sizes[token] = size
         size = _spore_cold_sizes.get(token, 0)
         if not size:
             return {"error": 502, "reason": "no file size"}

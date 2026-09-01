@@ -141,11 +141,12 @@ func parseByteRange(rangeHdr string, fileSize uint64) (uint64, uint64, error) {
 	return start, end, nil
 }
 
-// rangeForRequest resolves the request's Range header against fileSize and
-// writes the response status plus streaming headers. Returns ok=false after
-// answering 416 itself.
-func rangeForRequest(w http.ResponseWriter, r *http.Request, fileSize uint64) (start, end uint64, ok bool) {
-	status := http.StatusOK
+// parseRequestRange resolves the request's Range header against fileSize.
+// Returns ok=false after answering 416 itself. Writes NO success headers:
+// those wait until the first byte source is secured, so a dead-on-arrival
+// stream can still become an honest error status.
+func parseRequestRange(w http.ResponseWriter, r *http.Request, fileSize uint64) (start, end uint64, status int, ok bool) {
+	status = http.StatusOK
 	start, end = uint64(0), fileSize-1
 	if rangeHdr := r.Header.Get("Range"); rangeHdr != "" {
 		var err error
@@ -153,13 +154,17 @@ func rangeForRequest(w http.ResponseWriter, r *http.Request, fileSize uint64) (s
 		if err != nil {
 			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", fileSize))
 			http.Error(w, "range not satisfiable", http.StatusRequestedRangeNotSatisfiable)
-			return 0, 0, false
+			return 0, 0, 0, false
 		}
 		if end > fileSize-1 {
 			end = fileSize - 1
 		}
 		status = http.StatusPartialContent
 	}
+	return start, end, status, true
+}
+
+func writeStreamHeaders(w http.ResponseWriter, status int, start, end, fileSize uint64) {
 	w.Header().Set("Content-Type", "video/mp4")
 	w.Header().Set("Accept-Ranges", "bytes")
 	w.Header().Set("Content-Length", strconv.FormatUint(end-start+1, 10))
@@ -167,7 +172,22 @@ func rangeForRequest(w http.ResponseWriter, r *http.Request, fileSize uint64) (s
 		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fileSize))
 	}
 	w.WriteHeader(status)
-	return start, end, true
+}
+
+// writeCdnFailure answers a stream whose FIRST CDN fetch failed, before any
+// response headers went out: 503 for a rate limit (retryable, and players
+// understand a status where they cannot understand a truncated 206), 502
+// for anything else. Behind Cloudflare the old truncated-206 shape showed
+// up as 520s; without it, as "corrupt file" player errors.
+func writeCdnFailure(w http.ResponseWriter, token string, err error) {
+	var rl *rateLimitedError
+	if errors.As(err, &rl) {
+		w.Header().Set("Retry-After", "2")
+		http.Error(w, "upstream rate limited", http.StatusServiceUnavailable)
+	} else {
+		http.Error(w, "upstream error", http.StatusBadGateway)
+	}
+	log.Printf("stream: token=%s failed before first byte: %v", token, err)
 }
 
 func (s *streamer) serveCold(w http.ResponseWriter, r *http.Request, token, cdnURL string, fileSize uint64) {
@@ -175,11 +195,21 @@ func (s *streamer) serveCold(w http.ResponseWriter, r *http.Request, token, cdnU
 		http.Error(w, "stream unavailable", http.StatusBadGateway)
 		return
 	}
-	start, end, ok := rangeForRequest(w, r, fileSize)
-	if !ok || r.Method == http.MethodHead {
+	start, end, status, ok := parseRequestRange(w, r, fileSize)
+	if !ok {
 		return
 	}
-	sent := s.copyCdnRange(w, cdnURL, start, end)
+	if r.Method == http.MethodHead {
+		writeStreamHeaders(w, status, start, end, fileSize)
+		return
+	}
+	body, err := s.openCdnRange(cdnURL, start, end)
+	if err != nil {
+		writeCdnFailure(w, token, err)
+		return
+	}
+	writeStreamHeaders(w, status, start, end, fileSize)
+	sent, _ := s.serveCdnSpan(w, cdnURL, start, end, body)
 	log.Printf("stream: token=%s cold bytes=%d-%d/%d sent=%d ua=%q",
 		token, start, end, fileSize, sent, trunc(r.UserAgent(), 80))
 }
@@ -198,89 +228,131 @@ func (s *streamer) serveWarm(w http.ResponseWriter, r *http.Request, token strin
 		return
 	}
 	fileSize := info.CdnSize
-	start, end, ok := rangeForRequest(w, r, fileSize)
-	if !ok || r.Method == http.MethodHead {
+	start, end, status, ok := parseRequestRange(w, r, fileSize)
+	if !ok {
 		return
 	}
+	if r.Method == http.MethodHead {
+		writeStreamHeaders(w, status, start, end, fileSize)
+		return
+	}
+	regions := info.virtualRegions(start, end)
+	// When the very first byte comes from the CDN (a seek past the cached
+	// header), secure it before any headers go out. A range starting inside
+	// the cached header can always answer, so headers are safe immediately.
+	var firstBody io.ReadCloser
+	if len(regions) > 0 && !regions[0].FromHeader {
+		firstBody, err = s.openCdnRange(res.CdnURL, regions[0].CdnStart, regions[0].CdnEnd)
+		if err != nil {
+			writeCdnFailure(w, token, err)
+			return
+		}
+	}
+	writeStreamHeaders(w, status, start, end, fileSize)
 	started := time.Now()
 	var sent int64
-	for _, reg := range info.virtualRegions(start, end) {
+	for i, reg := range regions {
 		if reg.FromHeader {
-			n, err := w.Write(info.Header[reg.HdrStart : reg.HdrEnd+1])
+			n, werr := w.Write(info.Header[reg.HdrStart : reg.HdrEnd+1])
 			sent += int64(n)
-			if err != nil {
+			if werr != nil {
 				return // client went away
 			}
 			continue
 		}
-		n := s.copyCdnRange(w, res.CdnURL, reg.CdnStart, reg.CdnEnd)
+		var pre io.ReadCloser
+		if i == 0 {
+			pre = firstBody
+		}
+		n, complete := s.serveCdnSpan(w, res.CdnURL, reg.CdnStart, reg.CdnEnd, pre)
 		sent += n
-		if n < int64(reg.CdnEnd-reg.CdnStart+1) {
-			break // CDN error or client hung up; stop like the Python path does
+		if !complete {
+			break // CDN gave up or client hung up; stop like the Python path does
 		}
 	}
 	log.Printf("stream: token=%s warm bytes=%d-%d/%d sent=%d (%.1fs) ua=%q",
 		token, start, end, fileSize, sent, time.Since(started).Seconds(), trunc(r.UserAgent(), 80))
 }
 
-// copyCdnRange streams CDN bytes [start, end] to w, resuming from the
-// current position on transient errors (429 with backoff, dropped
-// connections) up to a small retry budget. Returns bytes written.
-func (s *streamer) copyCdnRange(w io.Writer, cdnURL string, start, end uint64) int64 {
-	const maxAttempts = 3
-	var written int64
-	pos := start
-	for attempt := 0; attempt < maxAttempts && pos <= end; attempt++ {
-		n, err := s.copyOnce(w, cdnURL, pos, end)
-		written += n
-		pos += uint64(n)
-		if pos > end || err == nil {
-			return written
+// openCdnRange opens CDN bytes [start, end] WITHOUT writing anything to the
+// client, retrying rate limits and transport errors with backoff. Securing
+// the source before response headers go out is what turns a dead-on-arrival
+// stream into an honest 502/503 instead of a 206 that truncates at zero.
+func (s *streamer) openCdnRange(cdnURL string, start, end uint64) (io.ReadCloser, error) {
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(300*(1<<(attempt-1))) * time.Millisecond)
 		}
-		if errors.Is(err, errClientGone) {
-			return written
+		req, err := http.NewRequest(http.MethodGet, cdnURL, nil)
+		if err != nil {
+			return nil, err
 		}
-		var rl *rateLimitedError
-		if errors.As(err, &rl) {
-			time.Sleep(time.Duration(300*(1<<attempt)) * time.Millisecond)
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
+		resp, err := s.cdnClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
 		}
-		log.Printf("stream: cdn error at %d (attempt %d): %v", pos, attempt+1, err)
+		switch {
+		case resp.StatusCode == http.StatusTooManyRequests:
+			resp.Body.Close()
+			lastErr = &rateLimitedError{}
+		case resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK:
+			resp.Body.Close()
+			return nil, fmt.Errorf("cdn status %d", resp.StatusCode)
+		default:
+			return resp.Body, nil
+		}
 	}
-	return written
+	return nil, lastErr
 }
 
-type rateLimitedError struct{}
+// serveCdnSpan streams CDN bytes [start, end] to w, starting from body when
+// the caller already opened it, resuming from the current position on
+// transient errors. Returns bytes written and whether the span completed.
+func (s *streamer) serveCdnSpan(w io.Writer, cdnURL string, start, end uint64, body io.ReadCloser) (int64, bool) {
+	var sent uint64
+	if body != nil {
+		n, serr := streamBody(w, body, end-start+1)
+		body.Close()
+		sent += n
+		if errors.Is(serr, errClientGone) {
+			return int64(sent), false
+		}
+	}
+	const maxResumes = 3
+	for attempt := 0; attempt < maxResumes && start+sent <= end; attempt++ {
+		nb, err := s.openCdnRange(cdnURL, start+sent, end)
+		if err != nil {
+			log.Printf("stream: cdn open failed at %d: %v", start+sent, err)
+			return int64(sent), false
+		}
+		n, serr := streamBody(w, nb, end-(start+sent)+1)
+		nb.Close()
+		sent += n
+		if errors.Is(serr, errClientGone) {
+			return int64(sent), false
+		}
+		if serr != nil {
+			log.Printf("stream: cdn error at %d (resume %d): %v", start+sent, attempt+1, serr)
+		}
+	}
+	return int64(sent), start+sent > end
+}
 
-func (*rateLimitedError) Error() string { return "cdn 429" }
-
-// errClientGone marks a write failure toward the client: not retryable.
-var errClientGone = errors.New("client write failed")
-
-func (s *streamer) copyOnce(w io.Writer, cdnURL string, start, end uint64) (int64, error) {
-	req, err := http.NewRequest(http.MethodGet, cdnURL, nil)
-	if err != nil {
-		return 0, err
-	}
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
-	resp, err := s.cdnClient.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusTooManyRequests {
-		return 0, &rateLimitedError{}
-	}
-	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("cdn status %d", resp.StatusCode)
-	}
-	var written int64
+// streamBody copies up to max bytes from body to w. A write error means the
+// client went away (errClientGone); a read error is a CDN drop the caller
+// may resume from.
+func streamBody(w io.Writer, body io.Reader, max uint64) (uint64, error) {
+	var written uint64
 	buf := make([]byte, 256*1024)
-	body := io.LimitReader(resp.Body, int64(end-start+1))
+	lr := io.LimitReader(body, int64(max))
 	for {
-		nr, rerr := body.Read(buf)
+		nr, rerr := lr.Read(buf)
 		if nr > 0 {
 			nw, werr := w.Write(buf[:nr])
-			written += int64(nw)
+			written += uint64(nw)
 			if werr != nil {
 				return written, errClientGone
 			}
@@ -293,6 +365,13 @@ func (s *streamer) copyOnce(w io.Writer, cdnURL string, start, end uint64) (int6
 		}
 	}
 }
+
+type rateLimitedError struct{}
+
+func (*rateLimitedError) Error() string { return "cdn 429" }
+
+// errClientGone marks a write failure toward the client: not retryable.
+var errClientGone = errors.New("client write failed")
 
 func trunc(s string, n int) string {
 	if len(s) > n {
