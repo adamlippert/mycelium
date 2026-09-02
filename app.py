@@ -182,6 +182,12 @@ def _login_flags() -> dict:
 
 @app.get("/login")
 def login_view():
+    # Nothing to log into when auth is off: is_admin() grants everyone full
+    # access in that mode, so this page would render with no password form
+    # and no SSO button - a dead end that reads as "login is broken" when
+    # the real story is "this deployment has no auth configured".
+    if not auth.is_enabled():
+        return redirect("/")
     return _spa_index()
 
 

@@ -101,3 +101,16 @@ def test_spa_index_placeholders_survive_in_both_built_and_source_html():
                 f"{name} is missing the exact placeholder {literal!r} that "
                 "_spa_index() replaces - a rebuild reformatted the head and "
                 "every str.replace() in _spa_index() now silently no-ops.")
+
+
+def test_login_redirects_home_when_auth_is_disabled():
+    """With auth off, is_admin() already grants full access, so /login would
+    render a page with no password form and no SSO button. That dead end
+    reads as "login is broken" when the truth is "no auth is configured";
+    send visitors to the app instead."""
+    src = _src("app.py")
+    m = re.search(r"def login_view\(\):(.*?)\n@app\.", src, re.S)
+    assert m, "login_view not found"
+    body = m.group(1)
+    assert "auth.is_enabled()" in body, "login_view does not consult auth state"
+    assert 'redirect("/")' in body, "login_view does not send disabled-auth visitors home"
