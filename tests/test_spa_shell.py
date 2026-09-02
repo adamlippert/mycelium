@@ -114,3 +114,24 @@ def test_login_redirects_home_when_auth_is_disabled():
     body = m.group(1)
     assert "auth.is_enabled()" in body, "login_view does not consult auth state"
     assert 'redirect("/")' in body, "login_view does not send disabled-auth visitors home"
+
+
+def test_releases_json_covers_the_running_version():
+    """releases.json is hand-maintained and feeds the admin Releases tab. It
+    silently fell six versions behind (the tab still announced 0.8.4 while
+    0.10.2 shipped), because nothing tied it to APP_VERSION. Now a release
+    that forgets its notes fails here instead of misinforming users."""
+    import json
+    app_src = _src("app.py")
+    m = re.search(r'APP_VERSION\s*=\s*"([^"]+)"', app_src)
+    assert m, "APP_VERSION not found"
+    version = m.group(1)
+    with open(os.path.join(_ROOT, "releases.json"), encoding="utf-8") as f:
+        releases = json.load(f)
+    versions = [r["version"] for r in releases]
+    assert version in versions, (
+        f"APP_VERSION {version} has no releases.json entry; the admin "
+        f"Releases tab would announce {versions[0]} as newest")
+    assert versions[0] == version, (
+        f"releases.json is not newest-first: it leads with {versions[0]}, "
+        f"but the running version is {version}")

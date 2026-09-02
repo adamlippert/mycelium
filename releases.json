@@ -1,5 +1,60 @@
 [
   {
+    "version": "0.10.2",
+    "date": "2026-09-01",
+    "notes": [
+      "Native-mode Zilean works again: the built-in index has no URL, but the health gate demanded one, so it was skipped for every search and shown as down",
+      "The admin Scrapers page lists every scraper, including disabled and down ones, instead of hiding them",
+      "/login sends you to the app when authentication is disabled, instead of a login page with no way to log in"
+    ]
+  },
+  {
+    "version": "0.10.1",
+    "date": "2026-08-31",
+    "notes": [
+      "A rate-limited TorBox CDN no longer produces fake tiny streams or truncated responses: streams that cannot start now answer with a proper retryable error",
+      "Mid-stream CDN drops resume from the exact byte where the transfer died"
+    ]
+  },
+  {
+    "version": "0.10.0",
+    "date": "2026-08-31",
+    "notes": [
+      "The Jinja dashboard is gone: the React UI is the only interface, so features are built once instead of twice",
+      "New Playability panel in admin Maintenance, with a Re-resolve button that previously required curl",
+      "Debridio is queried as a plain scraper: your TorBox key is no longer sent to it",
+      "Preferences saved by the shared-password login persist instead of silently reverting"
+    ]
+  },
+  {
+    "version": "0.9.0",
+    "date": "2026-08-31",
+    "notes": [
+      "Streaming moves to a Go front process: each open stream costs a goroutine instead of a worker thread, removing the ceiling on simultaneous streams",
+      "The admin System health card shows which process is serving streams",
+      "The React UI is now the default"
+    ]
+  },
+  {
+    "version": "0.8.6",
+    "date": "2026-08-31",
+    "notes": [
+      "The serving thread pool grows from 16 to 64, configurable with GUNICORN_THREADS",
+      "The TorBox rate-limit budget is enforced through the database, so it holds across restarts and processes",
+      "The frontend is code-split: the first page load drops from 949KB to 27KB",
+      "Stats, indexes and repair jobs reworked for large libraries"
+    ]
+  },
+  {
+    "version": "0.8.5",
+    "date": "2026-08-31",
+    "notes": [
+      "The Library pages movies server-side: libraries over 10,000 titles were silently showing only the newest 10,000",
+      "Cleanup runs finish dramatically faster: it no longer pauses two seconds after every healthy file",
+      "RealDebrid on-play waits are capped at 45 seconds like the TorBox path"
+    ]
+  },
+  {
     "version": "0.8.4",
     "date": "2026-08-31",
     "notes": [

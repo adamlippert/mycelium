@@ -2,6 +2,16 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **The running version is shown in the app footer.** It was embedded in every page all along (the `app-version` meta tag) but only the login page displayed it, so once you were signed in there was no way to tell which build you were on.
+
+### Fixed
+
+- **The admin Releases tab announces the current version again.** `releases.json` is hand-maintained and had silently fallen six releases behind, still calling 0.8.4 the newest while 0.10.2 shipped. Backfilled 0.8.5 through 0.10.2, and a test now fails any release whose version has no entry, so it cannot drift again.
+
 ## [0.10.2] - 2026-09-01
 
 ### Fixed
