@@ -451,3 +451,70 @@ def test_url_never_reaches_the_logs(configured, monkeypatch, caplog):
     assert "dkdk" not in blob
     assert "tb-uuid-value" not in blob
     assert "eyJhcGlfa2V5" not in blob
+
+
+# ── DEBRIDIO_CONFIG_TOKEN must not bypass the key-privacy default ────────────
+
+def _override_settings(monkeypatch, token, send_key=False):
+    values = {"DEBRIDIO_CONFIG_TOKEN": token, "DEBRIDIO_API_KEY": "dk" * 16,
+              "TORBOX_API_KEY": "tb-uuid-value"}
+    if send_key:
+        values["DEBRIDIO_SEND_TORBOX_KEY"] = "true"
+    monkeypatch.setattr(debridio._settings, "get",
+                        lambda k, d=None: values.get(k, d))
+    return values
+
+
+def _token_for(cfg):
+    return base64.b64encode(json.dumps(cfg).encode()).decode()
+
+
+def test_override_has_its_torbox_key_stripped(monkeypatch):
+    """The override is returned verbatim, so it bypassed send_torbox_key():
+    any blob built before that default changed carries a providerKey, which
+    made the one escape-hatch setting silently re-enable key sharing."""
+    _override_settings(monkeypatch, _token_for({
+        "api_key": "theirs", "provider": "torbox", "providerKey": "tb-uuid-value",
+        "maxReturnPerQuality": "250"}))
+
+    out = _decode(debridio.build_config_token())
+
+    assert "providerKey" not in out
+    assert out["api_key"] == "theirs"
+    # Everything else survives: tuning those fields is why the override exists.
+    assert out["maxReturnPerQuality"] == "250"
+    assert out["provider"] == "torbox"
+
+
+def test_override_is_untouched_when_the_opt_in_is_set(monkeypatch):
+    _override_settings(monkeypatch, _token_for({
+        "api_key": "theirs", "providerKey": "tb-uuid-value"}), send_key=True)
+
+    out = _decode(debridio.build_config_token())
+
+    assert out["providerKey"] == "tb-uuid-value"
+
+
+def test_override_without_a_provider_key_is_passed_through_unchanged(monkeypatch):
+    token = _token_for({"api_key": "theirs", "provider": "torbox"})
+    _override_settings(monkeypatch, token)
+
+    assert debridio.build_config_token() == token
+
+
+def test_undecodable_override_is_used_verbatim(monkeypatch):
+    """The genuine 'Debridio changed something we do not understand' case:
+    honour the hatch rather than guessing, and warn."""
+    _override_settings(monkeypatch, "not-base64-json!!")
+
+    assert debridio.build_config_token() == "not-base64-json!!"
+
+
+def test_undecodable_override_warns_that_privacy_cannot_be_enforced(monkeypatch, caplog):
+    _override_settings(monkeypatch, "not-base64-json!!")
+
+    with caplog.at_level("WARNING"):
+        debridio.build_config_token()
+
+    assert any("verbatim" in r.message or "verbatim" in str(r.msg)
+               for r in caplog.records), "no warning about the unparsed override"

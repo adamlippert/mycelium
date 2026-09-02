@@ -86,7 +86,7 @@ def build_config_token() -> str:
     """
     override = (_s("DEBRIDIO_CONFIG_TOKEN") or "").strip()
     if override:
-        return override
+        return _sanitize_override(override)
     if not is_configured():
         return ""
     cfg = {
@@ -105,6 +105,43 @@ def build_config_token() -> str:
         "excludedQualities": [],
         "preferredLang": [],
     })
+    return base64.b64encode(json.dumps(cfg, separators=(",", ":")).encode()).decode()
+
+
+def _sanitize_override(token: str) -> str:
+    """Apply the key-privacy default to a hand-supplied config segment.
+
+    DEBRIDIO_CONFIG_TOKEN exists for the case where Debridio changes its
+    config schema and a user needs to keep working without waiting for a
+    release. It is returned verbatim, which means it also bypasses
+    send_torbox_key() - and any blob built before that default changed
+    carries a providerKey, so the one setting meant as an escape hatch
+    silently re-enabled the key sharing everything else now avoids.
+
+    The segment is base64 JSON (we emit it in that shape), so the key can
+    be dropped without disturbing the fields someone actually set the
+    override to control. A blob that does not decode is exactly the
+    "they changed something we do not understand" case the hatch is for:
+    pass it through untouched and say so, rather than guessing.
+    """
+    if send_torbox_key():
+        return token
+    try:
+        cfg = json.loads(base64.b64decode(token))
+        if not isinstance(cfg, dict):
+            raise ValueError("config segment is not a JSON object")
+    except Exception as exc:
+        log.warning(
+            "Debridio: DEBRIDIO_CONFIG_TOKEN is not base64 JSON (%s); using it "
+            "verbatim. If it contains a TorBox key, that key is sent to "
+            "Debridio - rebuild it without providerKey, or clear the override "
+            "to let Mycelium build the config itself.", exc)
+        return token
+    if "providerKey" not in cfg:
+        return token
+    cfg.pop("providerKey")
+    log.info("Debridio: dropped providerKey from DEBRIDIO_CONFIG_TOKEN "
+             "(set DEBRIDIO_SEND_TORBOX_KEY=true to keep sending it)")
     return base64.b64encode(json.dumps(cfg, separators=(",", ":")).encode()).decode()
 
 
