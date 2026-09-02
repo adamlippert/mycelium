@@ -36,6 +36,8 @@ release; the advisory is published after a fix is available.
   client.
 - The optional Debridio scraper needs its own Debridio API key, which the
   Stremio addon protocol carries in the request URL rather than a header.
+  A hand-supplied `DEBRIDIO_CONFIG_TOKEN` is sanitized rather than trusted:
+  any value matching your TorBox key is removed before the request.
   Mycelium scrubs that value, and any URL containing it, from its own logs
   and error messages. Set `DEBRIDIO_SEND_TORBOX_KEY=true` only if you
   deliberately want your TorBox key sent to Debridio as well.

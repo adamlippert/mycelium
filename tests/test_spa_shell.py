@@ -135,3 +135,8 @@ def test_releases_json_covers_the_running_version():
     assert versions[0] == version, (
         f"releases.json is not newest-first: it leads with {versions[0]}, "
         f"but the running version is {version}")
+    # admin/Releases.tsx maps over notes and renders date unguarded; a
+    # malformed entry blanks the tab at runtime instead of failing here.
+    for r in releases:
+        assert isinstance(r.get("notes"), list) and r["notes"], f"{r.get('version')}: no notes"
+        assert r.get("date"), f"{r.get('version')}: no date"

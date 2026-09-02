@@ -455,6 +455,17 @@ def test_url_never_reaches_the_logs(configured, monkeypatch, caplog):
 
 # ── DEBRIDIO_CONFIG_TOKEN must not bypass the key-privacy default ────────────
 
+@pytest.fixture(autouse=True)
+def _reset_override_caches():
+    """_notify_once() and redact()'s scrub set are module-level and keyed by
+    token, so without this one test's log suppresses another's."""
+    debridio._override_notices.clear()
+    debridio._sanitized_overrides.clear()
+    yield
+    debridio._override_notices.clear()
+    debridio._sanitized_overrides.clear()
+
+
 def _override_settings(monkeypatch, token, send_key=False):
     values = {"DEBRIDIO_CONFIG_TOKEN": token, "DEBRIDIO_API_KEY": "dk" * 16,
               "TORBOX_API_KEY": "tb-uuid-value"}
@@ -518,3 +529,87 @@ def test_undecodable_override_warns_that_privacy_cannot_be_enforced(monkeypatch,
 
     assert any("verbatim" in r.message or "verbatim" in str(r.msg)
                for r in caplog.records), "no warning about the unparsed override"
+
+
+def test_override_key_is_stripped_by_value_under_any_field_name(monkeypatch):
+    """The hatch exists for the case Debridio renames its config fields -
+    which is exactly the case a providerKey-only check cannot see. Match the
+    secret itself, wherever and however it is spelled."""
+    for cfg in (
+        {"api_key": "theirs", "providerkey": "tb-uuid-value"},
+        {"api_key": "theirs", "ProviderKey": "tb-uuid-value"},
+        {"api_key": "theirs", "debridApiKey": "tb-uuid-value"},
+        {"api_key": "theirs", "provider": {"type": "torbox", "key": "tb-uuid-value"}},
+        {"api_key": "theirs", "providers": [{"key": "tb-uuid-value"}]},
+    ):
+        _override_settings(monkeypatch, _token_for(cfg))
+        out = base64.b64decode(debridio.build_config_token()).decode()
+        assert "tb-uuid-value" not in out, f"key survived in {cfg}"
+        assert "theirs" in out, f"unrelated field lost from {cfg}"
+
+
+def test_url_safe_base64_override_is_sanitized_not_waved_through(monkeypatch):
+    """The segment rides in a URL path, so a third party has good reason to
+    emit the URL-safe alphabet. Standard-only decoding passed those through
+    untouched, key and all."""
+    blob = json.dumps({"api_key": "theirs", "providerKey": "tb-uuid-value",
+                       "note": "needs<the>urlsafe?chars"}).encode()
+    token = base64.urlsafe_b64encode(blob).decode()
+    assert "-" in token or "_" in token, "fixture is not actually URL-safe-distinct"
+    _override_settings(monkeypatch, token)
+
+    out = debridio.build_config_token()
+    cfg = json.loads(base64.urlsafe_b64decode(out))
+
+    assert "providerKey" not in cfg
+    assert cfg["api_key"] == "theirs"
+    assert cfg["note"] == "needs<the>urlsafe?chars"
+
+
+def test_a_short_torbox_key_does_not_over_strip(monkeypatch):
+    """A stub or blank key must not match half the config by value."""
+    values = {"DEBRIDIO_CONFIG_TOKEN": _token_for({"api_key": "theirs", "region": "x"}),
+              "TORBOX_API_KEY": "x"}
+    monkeypatch.setattr(debridio._settings, "get", lambda k, d=None: values.get(k, d))
+
+    out = _decode(debridio.build_config_token())
+
+    assert out == {"api_key": "theirs", "region": "x"}
+
+
+def test_the_sanitized_token_is_redacted_from_logs(monkeypatch):
+    """redact() scrubs the STORED setting; after sanitizing, the string on the
+    wire is a different one, so it needs scrubbing in its own right."""
+    _override_settings(monkeypatch, _token_for({
+        "api_key": "theirs", "providerKey": "tb-uuid-value"}))
+    sent = debridio.build_config_token()
+
+    out = debridio.redact(f"boom while calling addon with token={sent}")
+
+    assert sent not in out
+    assert "<redacted>" in out
+
+
+def test_the_strip_notice_is_logged_once_per_token(monkeypatch, caplog):
+    """build_config_token() runs per movie, per episode and per health probe."""
+    _override_settings(monkeypatch, _token_for({
+        "api_key": "theirs", "providerKey": "tb-uuid-value"}))
+
+    with caplog.at_level("INFO"):
+        for _ in range(3):
+            debridio.build_config_token()
+
+    notices = [r for r in caplog.records if "stripped the TorBox key" in r.getMessage()]
+    assert len(notices) == 1, f"logged {len(notices)} times"
+
+
+def test_non_dict_json_says_so_precisely(monkeypatch, caplog):
+    """'not base64 JSON' was self-contradictory for a blob that decoded fine
+    but held a list."""
+    _override_settings(monkeypatch, _token_for(["not", "an", "object"]))
+
+    with caplog.at_level("WARNING"):
+        token = debridio.build_config_token()
+
+    assert token == _token_for(["not", "an", "object"])
+    assert any("not a JSON object" in r.getMessage() for r in caplog.records)

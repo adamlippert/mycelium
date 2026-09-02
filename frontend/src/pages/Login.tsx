@@ -1,4 +1,5 @@
 import { useLocation } from 'react-router-dom';
+import { VersionLine } from '../components/VersionLine';
 import { api, csrfToken } from '../api';
 import { BrandMark } from '../components/shell/BrandMark';
 
@@ -124,9 +125,8 @@ export default function Login() {
           </form>
         )}
 
-        <div className="mt-6 flex items-center justify-center gap-2 font-mono text-[10px] text-muted">
-          <span className="h-1.5 w-1.5 rounded-full bg-ok" />
-          <span>mycelium{flags.appVersion ? ` v${flags.appVersion}` : ''} &middot; self-hosted</span>
+        <div className="mt-6 flex justify-center">
+          <VersionLine />
         </div>
       </div>
     </div>

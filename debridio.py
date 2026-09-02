@@ -108,41 +108,103 @@ def build_config_token() -> str:
     return base64.b64encode(json.dumps(cfg, separators=(",", ":")).encode()).decode()
 
 
+# A secret shorter than this is not credible as an API key; the same floor
+# redact() uses, so a blank or stub setting cannot over-match.
+_MIN_SECRET_LEN = 8
+# build_config_token() runs once per movie, once per episode and on every
+# health probe. Without this an operator with an override set would get the
+# same line on every scrape, drowning the signal it is trying to send.
+_override_notices: dict[str, str] = {}
+# Sanitized tokens are what actually go on the wire, so redact() has to scrub
+# them too; the stored setting value no longer matches the string sent.
+_sanitized_overrides: dict[str, str] = {}
+
+
+def _notify_once(token: str, level, message: str) -> None:
+    if _override_notices.get(token) == message:
+        return
+    _override_notices[token] = message
+    level(message)
+
+
+def _drop_torbox_key(node, secret: str):
+    """Strip the TorBox key from a decoded config: by value at any depth, and
+    by the one field name Mycelium itself writes.
+
+    Value matching is the part that counts. The override exists for the case
+    where Debridio changes its config schema - which is exactly the case
+    where the key is no longer called providerKey, so a name-only check would
+    be blind precisely where the hatch gets used. The name check stays as a
+    backstop for a blob whose key has since been rotated in settings.
+    """
+    if isinstance(node, dict):
+        return {k: _drop_torbox_key(v, secret) for k, v in node.items()
+                if k != "providerKey" and not (secret and v == secret)}
+    if isinstance(node, list):
+        return [_drop_torbox_key(v, secret) for v in node]
+    return node
+
+
 def _sanitize_override(token: str) -> str:
     """Apply the key-privacy default to a hand-supplied config segment.
 
     DEBRIDIO_CONFIG_TOKEN exists for the case where Debridio changes its
     config schema and a user needs to keep working without waiting for a
-    release. It is returned verbatim, which means it also bypasses
+    release. It is returned verbatim, which means it also bypassed
     send_torbox_key() - and any blob built before that default changed
-    carries a providerKey, so the one setting meant as an escape hatch
+    carries a TorBox key, so the one setting meant as an escape hatch
     silently re-enabled the key sharing everything else now avoids.
 
-    The segment is base64 JSON (we emit it in that shape), so the key can
-    be dropped without disturbing the fields someone actually set the
-    override to control. A blob that does not decode is exactly the
-    "they changed something we do not understand" case the hatch is for:
-    pass it through untouched and say so, rather than guessing.
+    Both base64 alphabets are tried: the segment rides in a URL path, so a
+    third party generating one has good reason to use the URL-safe variant,
+    and the two are indistinguishable for most ASCII JSON. A blob that
+    decodes under neither is the genuine "they changed something we do not
+    understand" case: passed through untouched, and said so, rather than
+    guessed at.
     """
     if send_torbox_key():
         return token
-    try:
-        cfg = json.loads(base64.b64decode(token))
-        if not isinstance(cfg, dict):
-            raise ValueError("config segment is not a JSON object")
-    except Exception as exc:
-        log.warning(
-            "Debridio: DEBRIDIO_CONFIG_TOKEN is not base64 JSON (%s); using it "
-            "verbatim. If it contains a TorBox key, that key is sent to "
-            "Debridio - rebuild it without providerKey, or clear the override "
-            "to let Mycelium build the config itself.", exc)
+
+    decoded = None
+    for decode, encode in ((base64.b64decode, base64.b64encode),
+                           (base64.urlsafe_b64decode, base64.urlsafe_b64encode)):
+        try:
+            cfg = json.loads(decode(token))
+        except Exception:
+            continue
+        decoded = (cfg, encode)
+        break
+
+    if decoded is None:
+        _notify_once(token, log.warning,
+                     "Debridio: DEBRIDIO_CONFIG_TOKEN could not be read as base64 "
+                     "JSON; using it verbatim. If it carries a TorBox key, that key "
+                     "is sent to Debridio - rebuild it without one, or clear the "
+                     "override and let Mycelium build the config itself.")
         return token
-    if "providerKey" not in cfg:
+
+    cfg, encode = decoded
+    if not isinstance(cfg, dict):
+        _notify_once(token, log.warning,
+                     f"Debridio: DEBRIDIO_CONFIG_TOKEN decodes to a "
+                     f"{type(cfg).__name__}, not a JSON object; using it verbatim.")
         return token
-    cfg.pop("providerKey")
-    log.info("Debridio: dropped providerKey from DEBRIDIO_CONFIG_TOKEN "
-             "(set DEBRIDIO_SEND_TORBOX_KEY=true to keep sending it)")
-    return base64.b64encode(json.dumps(cfg, separators=(",", ":")).encode()).decode()
+
+    secret = str(_s("TORBOX_API_KEY") or "").strip()
+    if len(secret) < _MIN_SECRET_LEN:
+        secret = ""
+    cleaned = _drop_torbox_key(cfg, secret)
+    if cleaned == cfg:
+        # Nothing to strip: return the caller's own bytes rather than a
+        # re-encoded equivalent, so key order, separators and padding survive.
+        return token
+
+    _notify_once(token, log.info,
+                 "Debridio: stripped the TorBox key from DEBRIDIO_CONFIG_TOKEN "
+                 "(set DEBRIDIO_SEND_TORBOX_KEY=true to keep sending it)")
+    out = encode(json.dumps(cleaned, separators=(",", ":")).encode()).decode()
+    _sanitized_overrides[token] = out
+    return out
 
 
 def redact(text) -> str:
@@ -163,8 +225,13 @@ def redact(text) -> str:
         # str(): settings values are not guaranteed to be strings, and redact()
         # is called from exception handlers - it must never raise itself.
         secret = str(_s(key) or "").strip()
-        if len(secret) >= 8:          # too short to be a key; avoid over-scrubbing
+        if len(secret) >= _MIN_SECRET_LEN:  # too short to be a key; avoid over-scrubbing
             out = out.replace(secret, "<redacted>")
+    # A sanitized override is a different string from the stored setting, so
+    # the loop above would miss the token that actually went on the wire.
+    for sanitized in list(_sanitized_overrides.values()):
+        if len(sanitized) >= _MIN_SECRET_LEN:
+            out = out.replace(sanitized, "<redacted>")
     out = _B64_SEGMENT_BOUNDED_RE.sub("/<config>", out)
     out = _B64_SEGMENT_RE.sub("/<config>", out)
     out = re.sub(r"/play/(\w+)/(\w+)/[^/]+/[^/]+/", r"/play/\1/\2/<redacted>/<redacted>/", out)
