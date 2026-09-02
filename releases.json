@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.10.3",
+    "date": "2026-09-02",
+    "notes": [
+      "The running version is shown in the footer, so you can tell which build you are on at a glance",
+      "The Releases tab announces the current version again: this file had silently fallen six releases behind",
+      "A hand-supplied Debridio config token can no longer send your TorBox key: the key is stripped by value, under any field name and either base64 encoding"
+    ]
+  },
+  {
     "version": "0.10.2",
     "date": "2026-09-01",
     "notes": [
