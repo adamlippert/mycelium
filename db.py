@@ -499,6 +499,14 @@ _PRUNE_TARGETS: dict[str, str] = {
     "egress_log":       "created_at",
 }
 
+# Same idea, for tables whose timestamp is a REAL unix epoch rather than a
+# text datetime. They cannot share the query above: SQLite orders every
+# number below every string, so `ts < datetime(...)` is true for every row
+# and would empty the table instead of pruning it.
+_PRUNE_TARGETS_EPOCH: dict[str, str] = {
+    "createtorrent_log": "ts",
+}
+
 
 def prune_old(days: int = 90) -> dict[str, int]:
     """Delete rows in volatile tables older than N days. Returns count per table.
@@ -513,6 +521,16 @@ def prune_old(days: int = 90) -> dict[str, int]:
                 cur = conn.execute(
                     f"DELETE FROM {tbl} WHERE {ts_col} < datetime('now', ?)",
                     (cutoff_modifier,),
+                )
+                out[tbl] = cur.rowcount or 0
+            except Exception as exc:
+                log.debug("prune %s failed: %s", tbl, exc)
+                out[tbl] = 0
+        for tbl, ts_col in _PRUNE_TARGETS_EPOCH.items():
+            try:
+                cur = conn.execute(
+                    f"DELETE FROM {tbl} WHERE {ts_col} < ?",
+                    (time.time() - days * 86400,),
                 )
                 out[tbl] = cur.rowcount or 0
             except Exception as exc:

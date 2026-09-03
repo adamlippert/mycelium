@@ -12,7 +12,7 @@ fill percentage. De-bounced so it doesn't spam.
 import logging
 import shutil
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import db
@@ -56,7 +56,8 @@ def _last_success_age_hours() -> float | None:
                 t = datetime.strptime(ts[:19], "%Y-%m-%d %H:%M:%S")
             except ValueError:
                 continue
-            return (datetime.utcnow() - t).total_seconds() / 3600
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            return (now - t).total_seconds() / 3600
     return None
 
 

@@ -1783,8 +1783,10 @@ def internal_stream_report(token: str):
     gunicorn is exposed directly, where this must not be reachable."""
     if request.remote_addr not in ("127.0.0.1", "::1"):
         abort(403)
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
+        # Covers a falsy non-dict too (null, 0, [], ""), which `or {}` would
+        # have coerced into a silent zero-byte report.
         return jsonify(error="body must be a JSON object"), 400
     try:
         db.record_egress(token, int(payload.get("bytes", 0)))
