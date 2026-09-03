@@ -496,6 +496,7 @@ _PRUNE_TARGETS: dict[str, str] = {
     "webhook_events":   "received_at",
     "metric_events":    "created_at",
     "playability_state": "updated_at",
+    "egress_log":       "created_at",
 }
 
 

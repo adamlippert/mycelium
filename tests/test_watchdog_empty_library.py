@@ -32,6 +32,7 @@ def _drop_cached_conn():
 def _isolated_db(tmp_path, monkeypatch):
     _drop_cached_conn()
     monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setattr(watchdog, "MEDIA_PATH", str(tmp_path / "media"))
     _drop_cached_conn()
     db.init()
     watchdog._last_warn.clear()
@@ -48,29 +49,39 @@ def warnings(monkeypatch):
     return fired
 
 
-def test_configured_but_empty_library_alerts(warnings):
-    """Setup complete plus nothing in the library is a wiped or unmounted
-    database, not a fresh install."""
-    db.set_setting("SETUP_COMPLETE", "true")
+def _write_strm(media_path: str) -> None:
+    movie_dir = os.path.join(media_path, "movies", "X (2024)")
+    os.makedirs(movie_dir, exist_ok=True)
+    with open(os.path.join(movie_dir, "X (2024).strm"), "w") as f:
+        f.write("https://example.invalid/stream/token\n")
+
+
+def test_wiped_database_with_media_on_disk_alerts(warnings, tmp_path):
+    """A .strm already on disk plus nothing in the database is a wiped or
+    unmounted database, not a fresh install."""
+    _write_strm(str(tmp_path / "media"))
 
     watchdog.deadman_check()
 
-    assert warnings, "no alert fired for a configured but empty library"
+    assert warnings, "no alert fired for a wiped database with media on disk"
     metric, title, message = warnings[0]
     assert metric == "empty-library"
-    assert "empty" in message.lower()
+    assert "database" in message.lower()
+    assert "disk" in message.lower()
 
 
-def test_fresh_install_stays_quiet(warnings):
-    """Before setup there is legitimately nothing, and an alert would fire on
-    every first boot."""
+def test_fresh_install_stays_quiet(warnings, tmp_path):
+    """Before anything has ever been written there is legitimately nothing,
+    and an alert would fire on every first boot."""
+    os.makedirs(str(tmp_path / "media"), exist_ok=True)
+
     watchdog.deadman_check()
 
     assert warnings == []
 
 
-def test_a_populated_library_with_recent_activity_stays_quiet(warnings):
-    db.set_setting("SETUP_COMPLETE", "true")
+def test_a_populated_library_with_recent_activity_stays_quiet(warnings, tmp_path):
+    _write_strm(str(tmp_path / "media"))
     with db._connect() as conn:
         conn.execute(
             "INSERT INTO virtual_items (token, info_hash, magnet, title, media_type) "

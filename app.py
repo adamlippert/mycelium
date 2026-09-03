@@ -1773,6 +1773,8 @@ def internal_stream_resolve(token: str):
 
 
 @app.post("/internal/stream-report/<token>")
+# Machine caller over loopback, like the webhooks: no CSRF token to present.
+@_csrf.exempt
 def internal_stream_report(token: str):
     """Byte count for one finished stream, reported by the Go front.
 
@@ -1782,6 +1784,8 @@ def internal_stream_report(token: str):
     if request.remote_addr not in ("127.0.0.1", "::1"):
         abort(403)
     payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify(error="body must be a JSON object"), 400
     try:
         db.record_egress(token, int(payload.get("bytes", 0)))
     except (TypeError, ValueError):

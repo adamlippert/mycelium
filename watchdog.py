@@ -1,7 +1,10 @@
 """Self-monitoring: deadman switch + disk-space warnings.
 
 deadman_check(): if no successful add or strm_generator run has happened in
-DEADMAN_HOURS, fire a notification once per debounce window.
+DEADMAN_HOURS, fire a notification once per debounce window. It also alerts
+when the database has no library items but .strm files already exist under
+MEDIA_PATH, since that combination means the database itself is empty or
+unmounted, not that the install is genuinely fresh.
 
 disk_check(): warn if MEDIA_PATH or the DB volume crosses the configured
 fill percentage. De-bounced so it doesn't spam.
@@ -57,25 +60,36 @@ def _last_success_age_hours() -> float | None:
     return None
 
 
-def deadman_check() -> None:
-    # An empty library on a configured install is a wiped or unmounted
-    # database, and it is the state the age check below cannot see: with no
-    # activity rows at all, _last_success_age_hours() returns None and this
-    # function used to return silently, exactly when it mattered most.
+def _library_has_ever_existed() -> bool:
+    """At least one .strm exists under MEDIA_PATH. The media tree lives on
+    its own mount, so unlike a settings row it survives the database
+    being wiped or a fresh file being created on an unmounted volume,
+    and a genuinely fresh install has none, so it stays quiet."""
     try:
-        import settings as _settings
-        configured = bool(_settings.get("SETUP_COMPLETE", False))
-    except Exception:
-        configured = False
-    if configured:
+        return next(Path(MEDIA_PATH).rglob("*.strm"), None) is not None
+    except Exception as exc:
+        log.debug("Deadman: could not scan %s: %s", MEDIA_PATH, exc)
+        return False
+
+
+def deadman_check() -> None:
+    # An empty library on an install whose media tree already holds .strm
+    # files is a wiped or unmounted database, and it is the state the age
+    # check below cannot see: with no activity rows at all,
+    # _last_success_age_hours() returns None and this function used to
+    # return silently, exactly when it mattered most. The media tree, not
+    # a settings row, is the signal: it lives on its own mount and survives
+    # a database wipe.
+    if _library_has_ever_existed():
         try:
             if db.count_virtual_items() == 0:
                 _warn(
                     "empty-library",
                     "Library is empty",
-                    "Setup is complete but the library is empty. The database "
-                    "may be a fresh file rather than the real one: check that "
-                    "the data volume is mounted before the repair jobs run.",
+                    "No library items in the database, but .strm files exist "
+                    "on disk. The database may be a fresh file rather than "
+                    "the real one: check that the data volume is mounted "
+                    "before the repair jobs run.",
                 )
                 return
         except Exception as exc:

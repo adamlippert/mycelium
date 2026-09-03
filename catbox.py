@@ -204,8 +204,9 @@ def register(info_hash: str, magnet: str, title: str, media_type: str,
 
 def materialize(token: str, allow_readd: bool | None = None) -> str | None:
     """Ensure the torrent is in TorBox and return a fresh stream URL.
-    Cached URLs are served for up to 30 minutes to absorb Jellyfin's probe/seek
-    bursts without spending TorBox createtorrent rate-limit slots.
+    Cached URLs are served for up to _URL_CACHE_TTL_SEC (2.5 hours, inside
+    TorBox's 3 hour link window) to absorb Jellyfin's probe/seek bursts
+    without spending TorBox createtorrent rate-limit slots.
 
     allow_readd controls whether an idle-released torrent may be re-added (which
     can block ~45s waiting for it to become ready). When None (default), it is

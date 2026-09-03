@@ -370,9 +370,11 @@ def install_before_request(app) -> None:
         # closes again as soon as any credential exists. The bootstrap check
         # inside /ui/api/users/create remains the authority on who may create
         # the first admin.
-        if no_credentials_exist() and (
-            path.startswith("/setup") or path.startswith("/ui/api/users/create")
-        ):
+        # The path test goes first: no_credentials_exist() hits the database,
+        # and this line runs on every /stream and /internal request the
+        # public-path loop does not catch.
+        if (path == "/setup" or path.startswith("/setup/")
+                or path.startswith("/ui/api/users/create")) and no_credentials_exist():
             return None
         if path.startswith("/stream/") or path.startswith("/spore-stream/") or path.startswith("/spore-nfs/"):
             return None
