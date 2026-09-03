@@ -697,9 +697,9 @@ def setup_wizard():
 @app.post("/setup/skip")
 @limiter.limit("10 per minute")
 def setup_skip():
-    if db.user_count() > 0 and not auth.is_admin():
-        return jsonify(error="unauthorized"), 401
     import settings as _settings
+    if _settings.get("SETUP_COMPLETE", False) and not auth.is_admin():
+        return jsonify(error="unauthorized"), 401
     _settings.set("SETUP_COMPLETE", True)
     return jsonify(ok=True)
 
@@ -707,9 +707,9 @@ def setup_skip():
 @app.post("/setup/save")
 @limiter.limit("10 per minute")
 def setup_save():
-    if db.user_count() > 0 and not auth.is_admin():
-        return jsonify(error="unauthorized"), 401
     import settings as _settings
+    if _settings.get("SETUP_COMPLETE", False) and not auth.is_admin():
+        return jsonify(error="unauthorized"), 401
     import migrate_filters
     _allowed_keys = {k for g in _settings.SETTING_GROUPS for k in g["keys"]} | {"SETUP_COMPLETE"}
     saved = 0

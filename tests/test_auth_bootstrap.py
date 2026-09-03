@@ -66,3 +66,68 @@ def test_the_gate_lets_the_setup_surface_through_while_bricked():
     body = m.group(1) or m.group(2)
     assert "no_credentials_exist()" in body, "the gate never consults the bootstrap state"
     assert "/setup" in body, "the setup surface is not carved out"
+
+
+def test_gate_allows_setup_and_create_user_when_bricked_denies_others(monkeypatch):
+    """Behavioral test: gate actually allows setup routes through when bricked,
+    and denies them once a credential exists."""
+    import flask
+
+    # Build a bare Flask app with auth installed
+    app = flask.Flask(__name__)
+    app.secret_key = "test"
+    auth.install_before_request(app)
+
+    # Register trivial routes for each surface
+    @app.get("/setup")
+    def setup_route():
+        return "ok"
+
+    @app.post("/ui/api/users/create")
+    def create_user_route():
+        return "ok"
+
+    @app.get("/ui/api/settings")
+    def settings_route():
+        return "ok"
+
+    @app.get("/admin")
+    def admin_route():
+        return "ok"
+
+    @app.get("/login")
+    def login_view():
+        return "login"
+
+    # Monkeypatch settings.get to simulate AUTH_ENABLED=true, no password
+    # The fixture _isolated_db ensures a fresh database with zero users
+    def mock_settings_get(k, d=None):
+        if k == "AUTH_ENABLED":
+            return True
+        if k == "AUTH_PASSWORD_HASH":
+            return ""
+        return d
+
+    monkeypatch.setattr(auth.settings, "get", mock_settings_get)
+
+    client = app.test_client()
+
+    # Phase 1: bricked state (zero users, no password, no OIDC)
+    # Setup surface should be reachable
+    assert client.get("/setup").status_code == 200, "GET /setup should return 200 when bricked"
+    assert client.post("/ui/api/users/create").status_code == 200, "POST /ui/api/users/create should return 200 when bricked"
+
+    # Other authenticated routes should be gated
+    assert client.get("/ui/api/settings").status_code == 401, "GET /ui/api/settings should return 401 when bricked"
+    assert client.get("/admin").status_code == 302, "GET /admin should return 302 redirect when bricked"
+
+    # Phase 2: add a credential (simulate bootstrap by creating a user)
+    db.create_user("admin", "scrypt$x$y", role="admin")
+
+    # Now setup surface should be gated (not bricked anymore)
+    assert client.get("/setup").status_code == 302, "GET /setup should return 302 redirect after credential added"
+    assert client.post("/ui/api/users/create").status_code == 401, "POST /ui/api/users/create should return 401 after credential added"
+
+    # And authenticated routes still gated
+    assert client.get("/ui/api/settings").status_code == 401, "GET /ui/api/settings should still return 401"
+    assert client.get("/admin").status_code == 302, "GET /admin should still return 302"
