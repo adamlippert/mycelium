@@ -58,6 +58,29 @@ def _last_success_age_hours() -> float | None:
 
 
 def deadman_check() -> None:
+    # An empty library on a configured install is a wiped or unmounted
+    # database, and it is the state the age check below cannot see: with no
+    # activity rows at all, _last_success_age_hours() returns None and this
+    # function used to return silently, exactly when it mattered most.
+    try:
+        import settings as _settings
+        configured = bool(_settings.get("SETUP_COMPLETE", False))
+    except Exception:
+        configured = False
+    if configured:
+        try:
+            if db.count_virtual_items() == 0:
+                _warn(
+                    "empty-library",
+                    "Library is empty",
+                    "Setup is complete but the library is empty. The database "
+                    "may be a fresh file rather than the real one: check that "
+                    "the data volume is mounted before the repair jobs run.",
+                )
+                return
+        except Exception as exc:
+            log.debug("Deadman: could not count virtual items: %s", exc)
+
     age = _last_success_age_hours()
     if age is None or age < DEADMAN_HOURS:
         return

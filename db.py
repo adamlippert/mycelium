@@ -620,6 +620,12 @@ def count_wanted_episodes() -> int:
         return row["n"]
 
 
+def count_virtual_items() -> int:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) AS n FROM virtual_items").fetchone()["n"]
+
+
 def count_wanted_episodes_by_status() -> dict[str, int]:
     with _connect() as conn:
         rows = conn.execute(
