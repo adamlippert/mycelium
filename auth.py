@@ -145,6 +145,31 @@ def current_user() -> str | None:
     return session.get("user") or _proxy_user()
 
 
+def no_credentials_exist() -> bool:
+    """True when nothing in this deployment can possibly authenticate.
+
+    With AUTH_ENABLED on and no users, no legacy password hash and no OIDC,
+    the login page cannot succeed and the setup wizard is gated behind it,
+    so a fresh install is unusable. Callers use this to keep the setup
+    surface reachable in exactly that state, and only that state.
+    """
+    try:
+        import db
+        if db.user_count() > 0:
+            return False
+    except Exception:
+        return False
+    if settings.get("AUTH_PASSWORD_HASH", ""):
+        return False
+    try:
+        import oidc
+        if oidc.is_enabled():
+            return False
+    except Exception:
+        pass
+    return True
+
+
 _LEGACY_PREFS_KEY = "LEGACY_USER_PREFS"
 
 
@@ -339,6 +364,16 @@ def install_before_request(app) -> None:
         for prefix in _PUBLIC_PATHS:
             if path == prefix or path.startswith(prefix + "/") or path == prefix.rstrip("/"):
                 return None
+        # A deployment with auth on but no credential at all cannot log in,
+        # and the setup wizard that would create the first one sits behind
+        # this gate. Let the setup surface through while that is true; it
+        # closes again as soon as any credential exists. The bootstrap check
+        # inside /ui/api/users/create remains the authority on who may create
+        # the first admin.
+        if no_credentials_exist() and (
+            path.startswith("/setup") or path.startswith("/ui/api/users/create")
+        ):
+            return None
         if path.startswith("/stream/") or path.startswith("/spore-stream/") or path.startswith("/spore-nfs/"):
             return None
         # The Go streaming front's resolve calls arrive over loopback with no
