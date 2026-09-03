@@ -8,6 +8,11 @@ SQLite database. Runs entirely in-process; no separate container, no
 Postgres, no network dependency at query time (only during the periodic
 sync).
 
+The periodic sync lists the repository tree and fetches only the pages this
+instance has not indexed yet. The repository is append-only, so a page that
+has been indexed once never changes; the full snapshot is downloaded only for
+the initial backfill or when so many pages are missing that it costs less.
+
 Also supports one-time bulk import from an existing external Zilean's
 Postgres database, for users switching from external to native mode who
 don't want to re-scrape everything from scratch.
@@ -22,6 +27,7 @@ import threading
 import time
 import zipfile
 from pathlib import Path
+from urllib.parse import quote
 
 import requests
 
@@ -32,6 +38,14 @@ from torrentio import _looks_like_season_pack
 log = logging.getLogger(__name__)
 
 _HASHLISTS_ZIP_URL = "https://github.com/debridmediamanager/hashlists/archive/refs/heads/main.zip"
+_TREE_API_URL = ("https://api.github.com/repos/debridmediamanager/hashlists/"
+                 "git/trees/main?recursive=1")
+_RAW_PAGE_URL = "https://raw.githubusercontent.com/debridmediamanager/hashlists/main/{path}"
+# Above this many missing pages, downloading the one snapshot costs less than
+# fetching each page on its own. Below it, per-page fetches win by orders of
+# magnitude: upstream adds roughly 37 pages a day, so a six hour window needs
+# about nine of them rather than the whole 1.45 GB archive.
+_INCREMENTAL_MAX_PAGES = 3000
 _IFRAME_RE = re.compile(r'src="https://debridmediamanager\.com/hashlist#([^"]+)"')
 _WORD_RE = re.compile(r"[a-z0-9]+")
 _HASH_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -154,13 +168,128 @@ def _download(url: str, dest: str) -> None:
                 fh.write(chunk)
 
 
-def sync(force: bool = False, min_interval_hours: float = 6.0) -> dict:
-    """Download the DMM hashlist snapshot and index any pages not seen before.
+def _index_page(conn: sqlite3.Connection, name: str, html: str) -> int:
+    """Index one page's entries and mark the page seen. Returns how many of
+    its hashes were new to this index."""
+    new_hashes = 0
+    for entry in _extract_entries(html):
+        if not isinstance(entry, dict):
+            continue
+        info_hash = (entry.get("hash") or "").strip().lower()
+        raw_title = entry.get("filename") or ""
+        if not raw_title or not _HASH_RE.match(info_hash):
+            continue
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO hashes (info_hash, raw_title, title_norm, size_bytes) "
+            "VALUES (?, ?, ?, ?)",
+            (info_hash, raw_title, _normalize(raw_title), int(entry.get("bytes") or 0)),
+        )
+        if cur.rowcount:
+            new_hashes += 1
+    conn.execute("INSERT OR IGNORE INTO seen_pages (filename) VALUES (?)", (name,))
+    return new_hashes
 
-    Only ever downloads/parses pages this instance hasn't processed yet
-    (tracked in seen_pages), so repeated runs are cheap once the initial
-    backfill is done. Safe to call from a scheduler; a lock keeps concurrent
-    calls from running the (multi-minute) sync twice at once.
+
+def _sync_incremental(conn: sqlite3.Connection) -> dict | None:
+    """Fetch only the pages this instance has never indexed.
+
+    The upstream repository is append-only: a sample of 40 consecutive
+    commits added one page each and modified none, so a filename already in
+    seen_pages never needs fetching again. Listing the tree and fetching the
+    few new pages costs a few hundred KB, where the snapshot path costs
+    1.45 GB to discover the roughly nine pages a six hour window adds.
+
+    Returns None when the snapshot is the better tool -- the listing is
+    truncated or empty, or so many pages are missing that per-page fetches
+    would cost more -- leaving the caller to fall back. Network failures are
+    raised rather than swallowed, so a transient GitHub hiccup retries on the
+    next run instead of triggering a 1.45 GB download.
+    """
+    resp = requests.get(_TREE_API_URL, headers=_HTTP_HEADERS, timeout=60)
+    resp.raise_for_status()
+    payload = resp.json() or {}
+
+    if payload.get("truncated"):
+        log.info("Zilean sync: tree listing truncated, using the full snapshot")
+        return None
+    paths = [str(e.get("path") or "") for e in payload.get("tree", [])
+             if e.get("type") == "blob" and str(e.get("path") or "").endswith(".html")]
+    if not paths:
+        log.warning("Zilean sync: tree listing held no pages, using the full snapshot")
+        return None
+
+    seen = {r["filename"] for r in conn.execute("SELECT filename FROM seen_pages")}
+    todo = [p for p in paths if os.path.basename(p) not in seen]
+    if len(todo) > _INCREMENTAL_MAX_PAGES:
+        log.info("Zilean sync: %d page(s) missing, the full snapshot is cheaper", len(todo))
+        return None
+    if not todo:
+        log.info("Zilean sync: no new pages in %d listed", len(paths))
+        return {"new_pages": 0, "new_hashes": 0, "via": "listing"}
+
+    log.info("Zilean sync: fetching %d new page(s) of %d listed", len(todo), len(paths))
+    new_hashes = 0
+    pages_processed = 0
+    for path in todo:
+        try:
+            page = requests.get(_RAW_PAGE_URL.format(path=quote(path)),
+                                headers=_HTTP_HEADERS, timeout=60)
+            page.raise_for_status()
+            html = page.text
+        except Exception as exc:
+            # Leave the page unseen so the next run's diff offers it again.
+            log.warning("Zilean sync: could not fetch %s: %s", path, exc)
+            continue
+        new_hashes += _index_page(conn, os.path.basename(path), html)
+        pages_processed += 1
+        if pages_processed % 500 == 0:
+            conn.commit()
+            log.info("Zilean sync: %d page(s) fetched so far (%d new hashes)",
+                     pages_processed, new_hashes)
+    return {"new_pages": pages_processed, "new_hashes": new_hashes, "via": "listing"}
+
+
+def _sync_from_zip(conn: sqlite3.Connection) -> dict:
+    """Index every unseen page from the full repository snapshot. Used for the
+    initial backfill and whenever too much is missing for per-page fetches."""
+    tmp_dir = tempfile.mkdtemp(prefix="zilean-dmm-")
+    try:
+        zip_path = os.path.join(tmp_dir, "hashlists.zip")
+        log.info("Zilean sync: downloading the full DMM hashlist snapshot")
+        _download(_HASHLISTS_ZIP_URL, zip_path)
+
+        seen = {r["filename"] for r in conn.execute("SELECT filename FROM seen_pages")}
+        new_hashes = 0
+        pages_processed = 0
+
+        with zipfile.ZipFile(zip_path) as zf:
+            for info in zf.infolist():
+                name = os.path.basename(info.filename)
+                if not name.endswith(".html") or name in seen:
+                    continue
+                try:
+                    html = zf.read(info).decode("utf-8", errors="ignore")
+                except Exception:
+                    continue
+                new_hashes += _index_page(conn, name, html)
+                pages_processed += 1
+                if pages_processed % 500 == 0:
+                    conn.commit()
+                    log.info("Zilean sync: %d new page(s) processed so far (%d new hashes)",
+                             pages_processed, new_hashes)
+        return {"new_pages": pages_processed, "new_hashes": new_hashes, "via": "snapshot"}
+    finally:
+        import shutil
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def sync(force: bool = False, min_interval_hours: float = 6.0) -> dict:
+    """Index any hashlist pages this instance has not processed yet.
+
+    Prefers listing the repository tree and fetching only what is new; falls
+    back to the full snapshot for the initial backfill or a large gap. Safe to
+    call from a scheduler; a lock keeps concurrent calls from running the sync
+    twice at once.
     """
     if not _sync_lock.acquire(blocking=False):
         log.info("Zilean sync already running, skipping")
@@ -178,57 +307,20 @@ def sync(force: bool = False, min_interval_hours: float = 6.0) -> dict:
 
         conn.execute("UPDATE sync_state SET last_status='running' WHERE id=1")
 
-        tmp_dir = tempfile.mkdtemp(prefix="zilean-dmm-")
-        try:
-            zip_path = os.path.join(tmp_dir, "hashlists.zip")
-            log.info("Zilean sync: downloading DMM hashlist snapshot")
-            _download(_HASHLISTS_ZIP_URL, zip_path)
+        result = _sync_incremental(conn)
+        if result is None:
+            result = _sync_from_zip(conn)
 
-            seen = {r["filename"] for r in conn.execute("SELECT filename FROM seen_pages")}
-            new_hashes = 0
-            pages_processed = 0
-
-            with zipfile.ZipFile(zip_path) as zf:
-                for info in zf.infolist():
-                    name = os.path.basename(info.filename)
-                    if not name.endswith(".html") or name in seen:
-                        continue
-                    try:
-                        html = zf.read(info).decode("utf-8", errors="ignore")
-                    except Exception:
-                        continue
-                    for entry in _extract_entries(html):
-                        if not isinstance(entry, dict):
-                            continue
-                        info_hash = (entry.get("hash") or "").strip().lower()
-                        raw_title = entry.get("filename") or ""
-                        if not raw_title or not _HASH_RE.match(info_hash):
-                            continue
-                        cur = conn.execute(
-                            "INSERT OR IGNORE INTO hashes (info_hash, raw_title, title_norm, size_bytes) "
-                            "VALUES (?, ?, ?, ?)",
-                            (info_hash, raw_title, _normalize(raw_title), int(entry.get("bytes") or 0)),
-                        )
-                        if cur.rowcount:
-                            new_hashes += 1
-                    conn.execute("INSERT OR IGNORE INTO seen_pages (filename) VALUES (?)", (name,))
-                    pages_processed += 1
-                    if pages_processed % 500 == 0:
-                        conn.commit()
-                        log.info("Zilean sync: %d new page(s) processed so far (%d new hashes)",
-                                  pages_processed, new_hashes)
-
-            conn.execute(
-                "UPDATE sync_state SET last_synced_at=strftime('%Y-%m-%d %H:%M:%S','now'), "
-                "last_status='ok', last_new_hashes=?, last_pages_processed=?, last_error=NULL WHERE id=1",
-                (new_hashes, pages_processed),
-            )
-            conn.commit()
-            log.info("Zilean sync complete: %d new page(s), %d new hash(es)", pages_processed, new_hashes)
-            return {"status": "ok", "new_pages": pages_processed, "new_hashes": new_hashes}
-        finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+        conn.execute(
+            "UPDATE sync_state SET last_synced_at=strftime('%Y-%m-%d %H:%M:%S','now'), "
+            "last_status='ok', last_new_hashes=?, last_pages_processed=?, last_error=NULL WHERE id=1",
+            (result["new_hashes"], result["new_pages"]),
+        )
+        conn.commit()
+        log.info("Zilean sync complete via %s: %d new page(s), %d new hash(es)",
+                 result["via"], result["new_pages"], result["new_hashes"])
+        return {"status": "ok", "new_pages": result["new_pages"],
+                "new_hashes": result["new_hashes"], "via": result["via"]}
     except Exception as exc:
         log.error("Zilean sync failed: %s", exc)
         try:
