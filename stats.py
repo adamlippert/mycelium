@@ -47,6 +47,7 @@ def _build_overview() -> dict:
             "give_up": wanted.get("give_up", 0),
         },
         "movies_pending": db.count_media_items_pending("movie"),
+        "egress_bytes_month": db.egress_this_month(),
         "qualities": req["qualities"],
     }
 

@@ -15,6 +15,7 @@ vi.mock('../../api', async () => {
         requests: { total: 55, succeeded_7d: 41, failed_7d: 7, success_rate_7d: 85.4 },
         wanted: { active: 9, found: 2, give_up: 1 },
         movies_pending: 3,
+        egress_bytes_month: 1_500_000_000_000,
         qualities: { '1080p': 10, '2160p': 5, '4k': 1 },
       }),
       health: () => Promise.resolve({
@@ -94,6 +95,9 @@ describe('Overview tab', () => {
       expect(screen.getByText('6.0 GiB')).toBeInTheDocument();
       // Failures 7d
       expect(screen.getByText('7')).toBeInTheDocument();
+      // Egress this month: bytes_month / 1e12, two decimals
+      expect(screen.getByText('Egress this month')).toBeInTheDocument();
+      expect(screen.getByText('1.50 TB')).toBeInTheDocument();
     });
   });
 

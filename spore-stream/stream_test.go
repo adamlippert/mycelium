@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeCdn serves the golden blob with single-range support, like TorBox's CDN.
@@ -333,5 +335,147 @@ func TestColdStreamResumesAfterAMidStreamCdnDrop(t *testing.T) {
 	}
 	if calls < 2 {
 		t.Fatalf("expected a resume fetch, cdn saw %d call(s)", calls)
+	}
+}
+
+// ── egress reporting ──────────────────────────────────────────────────────
+
+// egressReport captures one POST /internal/stream-report/<token> call.
+type egressReport struct {
+	token string
+	bytes int64
+}
+
+// upstreamWithEgressReport behaves like testFront's upstream but also
+// captures reports posted to /internal/stream-report/<token> on reportCh,
+// so a test can synchronize with the fire-and-forget goroutine.
+func upstreamWithEgressReport(t *testing.T, resolveJSON func(cdnURL string) string, cdnURL string) (*httptest.Server, chan egressReport) {
+	t.Helper()
+	reportCh := make(chan egressReport, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/internal/stream-resolve/") {
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, resolveJSON(cdnURL))
+			return
+		}
+		if token, ok := strings.CutPrefix(r.URL.Path, "/internal/stream-report/"); ok {
+			var payload struct {
+				Bytes int64 `json:"bytes"`
+			}
+			body, _ := io.ReadAll(r.Body)
+			json.Unmarshal(body, &payload)
+			reportCh <- egressReport{token: token, bytes: payload.Bytes}
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"ok":true}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(upstream.Close)
+	return upstream, reportCh
+}
+
+func TestColdStreamReportsEgressAfterCompletion(t *testing.T) {
+	blob, err := os.ReadFile("testdata/cdn.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cdn := fakeCdn(t, blob)
+	upstream, reportCh := upstreamWithEgressReport(t, func(cdnURL string) string {
+		return fmt.Sprintf(`{"mode":"cold","cdn_url":"%s","size":1000}`, cdnURL)
+	}, cdn.URL)
+
+	streamer := newStreamer(upstream.URL)
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		streamer.serve(w, r, "sample")
+	}))
+	t.Cleanup(front.Close)
+
+	req, _ := http.NewRequest("GET", front.URL+"/spore-stream/sample", nil)
+	req.Header.Set("Range", "bytes=200-899")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+
+	select {
+	case r := <-reportCh:
+		if r.token != "sample" {
+			t.Fatalf("reported token %q, want sample", r.token)
+		}
+		if r.bytes != 700 {
+			t.Fatalf("reported %d bytes, want 700", r.bytes)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("cold stream never reported egress")
+	}
+}
+
+func TestWarmStreamReportsEgressAfterCompletion(t *testing.T) {
+	blob, err := os.ReadFile("testdata/cdn.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cdn := fakeCdn(t, blob)
+	upstream, reportCh := upstreamWithEgressReport(t, func(cdnURL string) string {
+		return fmt.Sprintf(`{"mode":"warm","cdn_url":"%s","cdn_size":1000,"fsh_path":"testdata/sample.fsh"}`, cdnURL)
+	}, cdn.URL)
+
+	streamer := newStreamer(upstream.URL)
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		streamer.serve(w, r, "sample")
+	}))
+	t.Cleanup(front.Close)
+
+	req, _ := http.NewRequest("GET", front.URL+"/spore-stream/sample", nil)
+	req.Header.Set("Range", "bytes=10-200")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+
+	select {
+	case r := <-reportCh:
+		if r.token != "sample" {
+			t.Fatalf("reported token %q, want sample", r.token)
+		}
+		if r.bytes != 191 {
+			t.Fatalf("reported %d bytes, want 191", r.bytes)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("warm stream never reported egress")
+	}
+}
+
+func TestZeroByteStreamDoesNotReportEgress(t *testing.T) {
+	// A HEAD request (or any stream that sends zero bytes) must not create a
+	// report: record_egress on the Python side already drops non-positive
+	// counts, but the front should not bother sending them either.
+	cdn := fakeCdn(t, []byte("irrelevant"))
+	upstream, reportCh := upstreamWithEgressReport(t, func(cdnURL string) string {
+		return fmt.Sprintf(`{"mode":"cold","cdn_url":"%s","size":1000}`, cdnURL)
+	}, cdn.URL)
+
+	streamer := newStreamer(upstream.URL)
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		streamer.serve(w, r, "sample")
+	}))
+	t.Cleanup(front.Close)
+
+	resp, err := http.Head(front.URL + "/spore-stream/sample")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	select {
+	case r := <-reportCh:
+		t.Fatalf("unexpected egress report for a HEAD request: %+v", r)
+	case <-time.After(300 * time.Millisecond):
+		// no report arrived, as expected
 	}
 }

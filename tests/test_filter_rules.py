@@ -41,11 +41,17 @@ def test_every_rule_key_is_hot_reloadable():
         assert key in _s.HOT_RELOAD, f"{key} missing from HOT_RELOAD"
 
 
-def test_all_for_ui_exposes_the_vocabulary_for_rule_and_sort_keys():
+def test_all_for_ui_exposes_the_vocabulary_for_rule_and_sort_keys(monkeypatch):
     """options was null for every rule key even though set() validates each
     one against a fixed vocabulary - the UI offered free text where a typo
     would raise. Rule keys, the language lists and SORT_ORDER should all now
-    carry their valid values."""
+    carry their valid values.
+
+    all_for_ui() only reads db.get_all_settings() for override values, which
+    this test never inspects (it only checks the vocabulary), so the db call
+    is mocked out here the same way test_filter_rules_ui.py's `ui` fixture
+    does it, rather than touching a real database."""
+    monkeypatch.setattr(_s.db, "get_all_settings", lambda: {})
     groups = {item["key"]: item for g in _s.all_for_ui() for item in g["items"]}
     assert groups["SOURCE_EXCLUDED"]["options"] == list(rt.values_for("source"))
     assert groups["SORT_ORDER"]["options"] == list(_s._streams.SORT_CRITERIA)

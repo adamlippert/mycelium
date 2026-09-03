@@ -26,6 +26,16 @@ export interface LoginFlags {
   appVersion: string;
 }
 
+/** GET /ui/api/stats, built by stats.py's _build_overview(). */
+export type StatsOverview = {
+  library: { movie_count: number; episode_count: number; series_count: number };
+  requests: { total: number; succeeded_7d: number; failed_7d: number; success_rate_7d: number };
+  wanted: { active: number; found: number; give_up: number };
+  movies_pending: number;
+  egress_bytes_month: number;
+  qualities: Record<string, number>;
+};
+
 /** Whether OIDC / password login are available, read from the meta tags
  * _spa_index() embeds in the served HTML (see app.py). GET /ui/api/session
  * cannot be the source here: it 401s for a logged-out visitor, which is
@@ -250,7 +260,7 @@ export const api = {
   // Library / dashboard
   session: () => http<SessionInfo>('/ui/api/session'),
   loginFlags,
-  stats: () => http<any>('/ui/api/stats'),
+  stats: () => http<StatsOverview>('/ui/api/stats'),
   libraryStatusMap: () => http<Record<string, string>>('/ui/api/library/status-map'),
   libraryMovies: (opts?: { page?: number; pageSize?: number; search?: string; filter?: string }) => {
     const params = new URLSearchParams();

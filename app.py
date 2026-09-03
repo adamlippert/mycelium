@@ -1772,6 +1772,23 @@ def internal_stream_resolve(token: str):
     return jsonify(res)
 
 
+@app.post("/internal/stream-report/<token>")
+def internal_stream_report(token: str):
+    """Byte count for one finished stream, reported by the Go front.
+
+    Loopback-only for the same reason as the resolve endpoint: the front
+    talks to gunicorn over 127.0.0.1, and when the front is disabled
+    gunicorn is exposed directly, where this must not be reachable."""
+    if request.remote_addr not in ("127.0.0.1", "::1"):
+        abort(403)
+    payload = request.get_json(silent=True) or {}
+    try:
+        db.record_egress(token, int(payload.get("bytes", 0)))
+    except (TypeError, ValueError):
+        return jsonify(error="bytes must be an integer"), 400
+    return jsonify(ok=True)
+
+
 @app.get("/ui/api/virtual-items")
 def ui_api_virtual_items():
     items = db.get_all_virtual_items()

@@ -66,6 +66,28 @@ func (s *streamer) resolve(token string) (*resolveResult, int, error) {
 	return &res, http.StatusOK, nil
 }
 
+// reportEgress tells Python how many bytes this stream actually served, so
+// monthly usage can be measured against the provider's bandwidth floor.
+// Fire and forget: a failed report must never affect playback.
+func (s *streamer) reportEgress(token string, sent int64) {
+	if sent <= 0 {
+		return
+	}
+	body := strings.NewReader(fmt.Sprintf(`{"bytes":%d}`, sent))
+	req, err := http.NewRequest(http.MethodPost,
+		s.upstream+"/internal/stream-report/"+token, body)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.resolveClient.Do(req)
+	if err != nil {
+		log.Printf("stream: egress report failed for %s: %v", token, err)
+		return
+	}
+	resp.Body.Close()
+}
+
 func (s *streamer) serve(w http.ResponseWriter, r *http.Request, token string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
@@ -212,6 +234,7 @@ func (s *streamer) serveCold(w http.ResponseWriter, r *http.Request, token, cdnU
 	sent, _ := s.serveCdnSpan(w, cdnURL, start, end, body)
 	log.Printf("stream: token=%s cold bytes=%d-%d/%d sent=%d ua=%q",
 		token, start, end, fileSize, sent, trunc(r.UserAgent(), 80))
+	go s.reportEgress(token, sent)
 }
 
 func (s *streamer) serveWarm(w http.ResponseWriter, r *http.Request, token string, res *resolveResult) {
@@ -272,6 +295,7 @@ func (s *streamer) serveWarm(w http.ResponseWriter, r *http.Request, token strin
 	}
 	log.Printf("stream: token=%s warm bytes=%d-%d/%d sent=%d (%.1fs) ua=%q",
 		token, start, end, fileSize, sent, time.Since(started).Seconds(), trunc(r.UserAgent(), 80))
+	go s.reportEgress(token, sent)
 }
 
 // openCdnRange opens CDN bytes [start, end] WITHOUT writing anything to the

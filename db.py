@@ -295,6 +295,15 @@ CREATE TABLE IF NOT EXISTS createtorrent_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_createtorrent_ts ON createtorrent_log(ts);
+
+CREATE TABLE IF NOT EXISTS egress_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    token      TEXT    NOT NULL,
+    bytes      INTEGER NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_egress_created ON egress_log(created_at);
 """
 
 
@@ -624,6 +633,29 @@ def count_virtual_items() -> int:
     with _connect() as conn:
         return conn.execute(
             "SELECT COUNT(*) AS n FROM virtual_items").fetchone()["n"]
+
+
+def record_egress(token: str, byte_count: int) -> None:
+    """Record bytes served for one stream. Called by the Go front after each
+    transfer, so the monthly total reflects real egress rather than an
+    estimate."""
+    if byte_count <= 0:
+        return
+    with _connect() as conn:
+        conn.execute("INSERT INTO egress_log (token, bytes) VALUES (?, ?)",
+                     (token, int(byte_count)))
+        conn.commit()
+
+
+def egress_this_month() -> int:
+    """Bytes served since the start of the current calendar month. TorBox's
+    bandwidth floors are monthly, so the window matches the policy."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(bytes), 0) AS n FROM egress_log "
+            "WHERE created_at >= strftime('%Y-%m-01 00:00:00', 'now')"
+        ).fetchone()
+        return int(row["n"])
 
 
 def count_wanted_episodes_by_status() -> dict[str, int]:

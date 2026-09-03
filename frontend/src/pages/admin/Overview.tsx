@@ -109,7 +109,7 @@ export default function Overview() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatTile
           value={statsQ.isLoading ? '-' : String(requests7d)}
           label="Requests 7d"
@@ -129,6 +129,11 @@ export default function Overview() {
           value={statsQ.isLoading ? '-' : String(requests?.failed_7d ?? 0)}
           label="Failures 7d"
           glow={requests && requests.failed_7d > 0 ? 'danger' : undefined}
+        />
+        <StatTile
+          value={stats ? `${(stats.egress_bytes_month / 1e12).toFixed(2)} TB` : '-'}
+          label="Egress this month"
+          sub="TorBox plan floors start at 5 TB"
         />
       </div>
 

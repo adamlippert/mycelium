@@ -15,7 +15,7 @@ vi.mock('../api', async () => {
         library: { movie_count: 12, episode_count: 300, series_count: 4 },
         requests: { total: 20, succeeded_7d: 9, failed_7d: 1, success_rate_7d: 90.0 },
         wanted: { active: 2, found: 1, give_up: 0 },
-        movies_pending: 0, qualities: {},
+        movies_pending: 0, egress_bytes_month: 0, qualities: {},
       }),
       libraryMovies: () => Promise.resolve({ items: [], total: 0, page: 1, page_size: 24, counts: { all: 0, available: 0, wanted: 0 } }),
       session: () => Promise.resolve({ authenticated: true, user: { username: 'adam', role: 'admin' } }),
