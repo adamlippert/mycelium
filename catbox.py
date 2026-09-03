@@ -27,7 +27,12 @@ from config import CATBOX_HOST, CATBOX_IDLE_MINUTES as _CATBOX_IDLE_MINUTES_DEFA
 log = logging.getLogger(__name__)
 
 
-_URL_CACHE_TTL_SEC = 82800  # 23 hours  -  within TorBox CDN URL 24h validity
+# TorBox's requestdl opens a returned link for 3 hours; after that a new
+# connection against it is refused, though a transfer already in flight
+# continues. Cache inside that window with headroom, so a cached entry is
+# never dead on arrival. The liveness check below stays as the backstop for
+# links that die early.
+_URL_CACHE_TTL_SEC = 9000  # 2.5 hours
 ON_PLAY_READY_TIMEOUT_SEC = 45  # max wait on-play before giving up (cached = seconds)
 _url_cache: dict[str, tuple[str, float]] = {}
 _url_cache_lock = threading.Lock()
