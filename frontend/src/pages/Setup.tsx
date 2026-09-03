@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { csrfToken } from '../api';
+import { api, csrfToken, loginFlags } from '../api';
 import type { SetField, SetupData } from './setup/types';
 import { DEFAULT_SETUP_DATA, buildFormData } from './setup/types';
 import StepRail from './setup/StepRail';
@@ -15,11 +15,14 @@ import StepOpenSubtitles from './setup/StepOpenSubtitles';
 import StepZilean from './setup/StepZilean';
 import StepRadarrSonarr from './setup/StepRadarrSonarr';
 import StepDone from './setup/StepDone';
+import StepAccount, { EMPTY_ACCOUNT } from './setup/StepAccount';
+import type { Account } from './setup/StepAccount';
 
 // Mirrors templates/setup.html's script constants exactly.
 const STEPS = 12;
 const LITE_SKIP_FROM = 6; // after Notifications (step 6), jump to Done in Lite
-const LITE_SKIP_TO = 11; // Done step
+const LITE_SKIP_TO = 11; // first bookend after the content steps: the
+// account step when this install needs an admin, otherwise Done
 
 /** Pre-auth, chrome-less setup wizard - ports templates/setup.html's twelve
  * data-step panes (ten configuration steps bookended by Welcome and Done) to
@@ -29,13 +32,34 @@ export default function Setup() {
   const [step, setStep] = useState(0);
   const [data, setData] = useState<SetupData>(DEFAULT_SETUP_DATA);
   const [saving, setSaving] = useState(false);
+  // Authentication on with no credential of any kind: completing setup would
+  // close the first-admin window and lock this install out of itself, so the
+  // wizard collects the account instead.
+  const [needsAccount] = useState(() => loginFlags().needsFirstAdmin);
+  const [account, setAccount] = useState<Account>(EMPTY_ACCOUNT);
 
   const set: SetField = (key, value) => setData((d) => ({ ...d, [key]: value }));
 
   const isLite = data.LITE_MODE;
-  const isDone = step === STEPS - 1;
+  const totalSteps = needsAccount ? STEPS + 1 : STEPS;
+  const accountStep = STEPS - 1; // sits where Done was, pushing Done one along
+  const doneStep = totalSteps - 1;
+  const isDone = step === doneStep;
+
+  function accountProblem(): string | null {
+    if (!needsAccount) return null;
+    if (!account.username.trim()) return 'Choose a username.';
+    if (account.password.length < 4) return 'Password must be at least 4 characters.';
+    if (account.password !== account.confirm) return 'The passwords do not match.';
+    return null;
+  }
 
   async function finish() {
+    const problem = accountProblem();
+    if (problem) {
+      window.alert(problem);
+      return;
+    }
     setSaving(true);
     try {
       const r = await fetch('/setup/save', {
@@ -44,6 +68,15 @@ export default function Setup() {
         headers: { 'X-CSRFToken': csrfToken() },
       });
       if (!r.ok) throw new Error('save failed');
+      if (needsAccount) {
+        // Settings are saved but setup is deliberately not marked complete
+        // until this succeeds: creating the first admin is what completes it.
+        await api.createUser({
+          username: account.username.trim(),
+          password: account.password,
+          role: 'admin',
+        });
+      }
       window.location.href = '/ui';
     } catch (e: any) {
       setSaving(false);
@@ -116,7 +149,10 @@ export default function Setup() {
           {step === 8 && <StepOpenSubtitles data={data} set={set} />}
           {step === 9 && <StepZilean data={data} set={set} />}
           {step === 10 && <StepRadarrSonarr data={data} set={set} />}
-          {step === 11 && <StepDone />}
+          {needsAccount && step === accountStep && (
+            <StepAccount account={account} setAccount={setAccount} />
+          )}
+          {step === doneStep && <StepDone />}
         </div>
 
         <div className="flex items-center justify-between border-t border-border bg-card-raised px-7 py-4">

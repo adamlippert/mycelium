@@ -59,3 +59,73 @@ describe('Setup', () => {
     expect(body.get('TORBOX_API_KEY')).toBe('tb-secret');
   });
 });
+
+function setMeta(name: string, value: string) {
+  document.head.querySelectorAll(`meta[name="${name}"]`).forEach((m) => m.remove());
+  const meta = document.createElement('meta');
+  meta.setAttribute('name', name);
+  meta.setAttribute('content', value);
+  document.head.appendChild(meta);
+}
+
+/** Walk the wizard from Welcome to its final pane. Step 1 refuses to advance
+ * without a TorBox key, so fill that in on the way past. */
+async function advanceToEnd() {
+  const next = () => userEvent.click(screen.getByRole('button', { name: /continue/i }));
+  await next(); // Welcome -> TorBox
+  await userEvent.type(screen.getByLabelText(/torbox api key/i), 'tb-test-key');
+  for (let i = 0; i < 10; i += 1) await next(); // through the content steps
+}
+
+describe('Setup first-admin step', () => {
+  beforeEach(() => {
+    // jsdom has no window.alert, and the wizard uses it for validation.
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    document.head.querySelectorAll('meta[name="needs-first-admin"]').forEach((m) => m.remove());
+  });
+
+  it('is absent when the install already has a way in', async () => {
+    setMeta('needs-first-admin', 'false');
+    render(<Setup />);
+
+    await advanceToEnd();
+
+    expect(screen.getByRole('heading', { name: /all set/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^username$/i)).not.toBeInTheDocument();
+  });
+
+  it('collects an admin account before Done when nothing can log in', async () => {
+    setMeta('needs-first-admin', 'true');
+    render(<Setup />);
+
+    await advanceToEnd();
+
+    expect(
+      screen.getByRole('heading', { name: /create your admin account/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/^username$/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /continue/i }));
+    expect(screen.getByRole('heading', { name: /all set/i })).toBeInTheDocument();
+  });
+
+  it('refuses to finish with mismatched passwords', async () => {
+    setMeta('needs-first-admin', 'true');
+    const alert = window.alert as unknown as ReturnType<typeof vi.fn>;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    render(<Setup />);
+
+    await advanceToEnd();
+    await userEvent.type(screen.getByLabelText(/^username$/i), 'adam');
+    await userEvent.type(screen.getByLabelText(/^password$/i), 'hunter2');
+    await userEvent.type(screen.getByLabelText(/confirm password/i), 'hunter3');
+    await userEvent.click(screen.getByRole('button', { name: /continue/i }));
+    await userEvent.click(screen.getByRole('button', { name: /finish|go to dashboard|continue/i }));
+
+    expect(alert).toHaveBeenCalledWith(expect.stringMatching(/do not match/i));
+    expect(fetchSpy).not.toHaveBeenCalledWith('/setup/save', expect.anything());
+  });
+});

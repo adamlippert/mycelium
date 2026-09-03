@@ -24,6 +24,7 @@ export interface LoginFlags {
   oidcProvider: string;
   passwordEnabled: boolean;
   appVersion: string;
+  needsFirstAdmin: boolean;
 }
 
 /** GET /ui/api/stats, built by stats.py's _build_overview(). */
@@ -45,6 +46,7 @@ export const loginFlags = (): LoginFlags => ({
   oidcProvider: metaContent('oidc-provider'),
   passwordEnabled: metaContent('password-enabled') !== 'false',
   appVersion: metaContent('app-version'),
+  needsFirstAdmin: metaContent('needs-first-admin') === 'true',
 });
 
 async function http<T>(url: string, init: RequestInit = {}): Promise<T> {

@@ -166,3 +166,62 @@ def test_no_credentials_when_oidc_is_off_and_nothing_else_exists(isolated_db, mo
     monkeypatch.setattr(oidc, "is_enabled", lambda: False)
 
     assert auth.no_credentials_exist() is True
+
+
+# -- finishing setup must not lock the install out of itself ------------------
+
+def test_needs_first_admin_only_when_auth_is_on_and_nothing_can_log_in(isolated_db, monkeypatch):
+    """A no-auth single-user install has no credential either, and must not be
+    forced to create an account."""
+    src = _src("app.py")
+    m = re.search(r"def _needs_first_admin\(\).*?\n(.*?)\n\n@app\.", src, re.S)
+    assert m, "_needs_first_admin not found"
+    body = m.group(1)
+    assert "auth.is_enabled()" in body, "the predicate ignores whether auth is even on"
+    assert "auth.no_credentials_exist()" in body
+
+
+def test_setup_save_defers_completion_until_an_admin_exists():
+    """Completing setup closes the first-admin window inside
+    /ui/api/users/create, so an install with auth on and no credential would
+    finish the wizard with no way to log in."""
+    src = _src("app.py")
+    m = re.search(r"def setup_save\(\).*?\n(.*?)\n@app\.", src, re.S)
+    assert m, "setup_save not found"
+    body = m.group(1)
+    assert "_needs_first_admin()" in body
+    assert "needs_first_admin=True" in body
+    guard = body.index("_needs_first_admin()")
+    complete = body.index('_settings.set("SETUP_COMPLETE", True)')
+    assert guard < complete, "the guard must come before setup is marked complete"
+
+
+def test_setup_skip_defers_completion_too():
+    """Skipping the wizard is the same trap by a shorter route."""
+    src = _src("app.py")
+    m = re.search(r"def setup_skip\(\).*?\n(.*?)\n\n@app\.", src, re.S)
+    assert m, "setup_skip not found"
+    body = m.group(1)
+    assert "_needs_first_admin()" in body
+    guard = body.index("_needs_first_admin()")
+    complete = body.index('_settings.set("SETUP_COMPLETE", True)')
+    assert guard < complete
+
+
+def test_creating_the_first_admin_is_what_completes_setup():
+    """The bootstrap branch already sets SETUP_COMPLETE; that is why the
+    wizard can safely leave it unset."""
+    src = _src("app.py")
+    m = re.search(r"def ui_api_users_create\(\).*?\n(.*?)\n    if not auth\.is_admin\(\)", src, re.S)
+    assert m, "the bootstrap branch of ui_api_users_create not found"
+    assert '_settings.set("SETUP_COMPLETE", True)' in m.group(1)
+
+
+def test_the_wizard_is_told_whether_an_admin_is_needed():
+    """The wizard renders pre-auth, so it reads this from the injected meta
+    tag rather than an API call."""
+    src = _src("app.py")
+    assert '<meta name="needs-first-admin" content="false" />' in src
+    assert "_needs_first_admin()" in src
+    for shell in ("frontend/index.html", "static/app/index.html"):
+        assert '<meta name="needs-first-admin" content="false" />' in _src(shell), shell

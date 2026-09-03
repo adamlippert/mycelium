@@ -81,8 +81,8 @@ def test_spa_index_placeholders_survive_in_both_built_and_source_html():
     m = re.search(r"def _spa_index\(.*?\n(?=@app\.|\ndef )", app_src, re.S)
     assert m, "_spa_index"
     placeholders = re.findall(r"html\.replace\(\s*\n\s*(['\"].*?['\"]),", m.group(0))
-    assert len(placeholders) == 5, (
-        f"expected 5 html.replace() calls in _spa_index, found {len(placeholders)}")
+    assert len(placeholders) == 6, (
+        f"expected 6 html.replace() calls in _spa_index, found {len(placeholders)}")
     literals = [eval(p) for p in placeholders]  # noqa: S307 - trusted literal from our own source
 
     expected = [
@@ -91,6 +91,7 @@ def test_spa_index_placeholders_survive_in_both_built_and_source_html():
         '<meta name="oidc-provider" content="" />',
         '<meta name="password-enabled" content="true" />',
         '<meta name="app-version" content="" />',
+        '<meta name="needs-first-admin" content="false" />',
     ]
     assert sorted(literals) == sorted(expected)
 

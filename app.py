@@ -694,12 +694,26 @@ def setup_wizard():
     return _spa_index()
 
 
+def _needs_first_admin() -> bool:
+    """True when finishing setup would lock this install out of itself.
+
+    With authentication on and no credential of any kind, the only way in is
+    the first-admin bootstrap inside /ui/api/users/create, and that window
+    closes the moment SETUP_COMPLETE is set. So while this is true the wizard
+    must not set it: creating the admin does, which is what that endpoint
+    already does on success.
+    """
+    return auth.is_enabled() and auth.no_credentials_exist()
+
+
 @app.post("/setup/skip")
 @limiter.limit("10 per minute")
 def setup_skip():
     import settings as _settings
     if _settings.get("SETUP_COMPLETE", False) and not auth.is_admin():
         return jsonify(error="unauthorized"), 401
+    if _needs_first_admin():
+        return jsonify(ok=True, needs_first_admin=True)
     _settings.set("SETUP_COMPLETE", True)
     return jsonify(ok=True)
 
@@ -748,6 +762,11 @@ def setup_save():
             saved += 1
         except ValueError as exc:
             log.warning("setup_save: rejected invalid value for %s: %s", key, exc)
+    if _needs_first_admin():
+        # Settings are saved; completion waits for the admin account, or this
+        # install would finish setup with no way to log into it.
+        log.info("Setup wizard saved %d settings, awaiting the first admin", saved)
+        return jsonify(ok=True, saved=saved, needs_first_admin=True)
     _settings.set("SETUP_COMPLETE", True)
     log.info("Setup wizard saved %d settings", saved)
     return jsonify(ok=True, saved=saved)
@@ -3385,6 +3404,10 @@ def _spa_index():
     html = html.replace(
         '<meta name="app-version" content="" />',
         f'<meta name="app-version" content="{escape(APP_VERSION)}" />',
+    )
+    html = html.replace(
+        '<meta name="needs-first-admin" content="false" />',
+        f'<meta name="needs-first-admin" content="{str(_needs_first_admin()).lower()}" />',
     )
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
