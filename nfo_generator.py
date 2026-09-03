@@ -57,13 +57,69 @@ def _xml_escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _movie_nfo(title: str, year: int | None, imdb_id: str) -> str:
+_RESOLUTION_DIMENSIONS = {
+    "2160p": (3840, 2160),
+    "1080p": (1920, 1080),
+    "720p": (1280, 720),
+    "480p": (854, 480),
+}
+
+_CHANNEL_COUNTS = {"7.1": 8, "5.1": 6, "2.0": 2}
+
+
+def _streamdetails_xml(quality: str | None, release_name: str | None) -> str:
+    """A <fileinfo><streamdetails> block from what is already known locally.
+
+    Jellyfin does not probe .strm files during a library scan, so without
+    this every unplayed title shows no resolution, codec or audio at all.
+    Everything here comes from the release name and the virtual_items row:
+    no ffprobe, no provider request.
+
+    Returns "" when nothing is known. An empty block would be worse than
+    none, because Jellyfin would treat it as authoritative.
+    """
+    import release_tags
+
+    text = release_name or ""
+    parts = []
+
+    dims = _RESOLUTION_DIMENSIONS.get(quality or "")
+    encode = release_tags.detect_encode(text)
+    codec = encode[0] if encode else None
+    if dims or codec:
+        video = ["    <video>"]
+        if codec:
+            video.append(f"      <codec>{_xml_escape(codec)}</codec>")
+        if dims:
+            video.append(f"      <width>{dims[0]}</width>")
+            video.append(f"      <height>{dims[1]}</height>")
+        video.append("    </video>")
+        parts.append("\n".join(video))
+
+    channels = release_tags.detect_audio_channels(text)
+    count = _CHANNEL_COUNTS.get(channels[0]) if channels else None
+    if count:
+        parts.append("    <audio>\n"
+                     f"      <channels>{count}</channels>\n"
+                     "    </audio>")
+
+    if not parts:
+        return ""
+    return ("  <fileinfo>\n    <streamdetails>\n"
+            + "\n".join(parts)
+            + "\n    </streamdetails>\n  </fileinfo>\n")
+
+
+def _movie_nfo(title: str, year: int | None, imdb_id: str,
+               quality: str | None = None, release_name: str | None = None) -> str:
     year_tag = f"\n  <year>{year}</year>" if year else ""
+    details = _streamdetails_xml(quality, release_name)
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
         "<movie>\n"
         f"  <title>{_xml_escape(title)}</title>{year_tag}\n"
         f'  <uniqueid type="imdb" default="true">{imdb_id}</uniqueid>\n'
+        f"{details}"
         "</movie>\n"
     )
 
