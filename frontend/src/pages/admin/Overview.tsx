@@ -132,8 +132,8 @@ export default function Overview() {
         />
         <StatTile
           value={stats ? `${(stats.egress_bytes_month / 1e12).toFixed(2)} TB` : '-'}
-          label="Egress this month"
-          sub="TorBox plan floors start at 5 TB"
+          label="Proxied egress this month"
+          sub="MP4 proxy traffic only: MKV plays redirect to the CDN and are not counted here"
         />
       </div>
 

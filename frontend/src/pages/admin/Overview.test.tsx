@@ -95,8 +95,8 @@ describe('Overview tab', () => {
       expect(screen.getByText('6.0 GiB')).toBeInTheDocument();
       // Failures 7d
       expect(screen.getByText('7')).toBeInTheDocument();
-      // Egress this month: bytes_month / 1e12, two decimals
-      expect(screen.getByText('Egress this month')).toBeInTheDocument();
+      // Proxied egress this month: bytes_month / 1e12, two decimals
+      expect(screen.getByText('Proxied egress this month')).toBeInTheDocument();
       expect(screen.getByText('1.50 TB')).toBeInTheDocument();
     });
   });

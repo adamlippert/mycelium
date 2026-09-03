@@ -85,6 +85,9 @@ func (s *streamer) reportEgress(token string, sent int64) {
 		log.Printf("stream: egress report failed for %s: %v", token, err)
 		return
 	}
+	if resp.StatusCode >= 300 {
+		log.Printf("stream: egress report for %s rejected with HTTP %d", token, resp.StatusCode)
+	}
 	resp.Body.Close()
 }
 
