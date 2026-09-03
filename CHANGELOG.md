@@ -2,6 +2,12 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.11.1] - 2026-09-03
+
+### Changed
+
+- **The native hash index syncs only what is new.** It downloaded the full 1.45 GB community hashlist snapshot on every run, four times a day, to find the pages that had been added since the last one. Upstream adds roughly 37 pages a day, so a six hour window needs about nine of them: that is around 160 MB of transfer per page discovered, close to 6 GB a day. The sync now lists the repository in one request and fetches only the pages it has not indexed, which is a few hundred KB for a normal run. This is safe because the repository is append-only, verified against 40 consecutive upstream commits: every one added a page and none modified one, so a page indexed once never has to be read again. The full snapshot is still used where it genuinely costs less, for the first backfill or a long gap, and a failure while listing now retries on the next run instead of falling back to the 1.45 GB download.
+
 ## [0.11.0] - 2026-09-02
 
 ### Added

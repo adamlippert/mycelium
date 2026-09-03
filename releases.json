@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.11.1",
+    "date": "2026-09-03",
+    "notes": [
+      "The native hash index now fetches only the pages added since the last sync instead of downloading the full 1.45 GB snapshot four times a day"
+    ]
+  },
+  {
     "version": "0.11.0",
     "date": "2026-09-02",
     "notes": [
