@@ -2,6 +2,22 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.11.0] - 2026-09-02
+
+### Added
+
+- **Monthly proxied egress on the admin Overview.** TorBox bans permanently after three bandwidth warnings, and nothing measured how close you were. The Go streaming front now reports the bytes it served for each stream over a loopback-only endpoint, and the Overview shows the running month against your plan's floor. The tile is labelled "Proxied egress" deliberately: MKV titles redirect straight to the CDN and never pass through the proxy, so the figure is a floor, not a total.
+
+### Fixed
+
+- **The watchdog alerts when the database is empty but the library is not.** On 2 September production lost its entire database and nothing fired, because the deadman check only measured the age of the last successful add: with no activity rows at all it returned early. It now alerts when there are zero library items in the database while `.strm` files still exist on disk, which is the signature of a database pointed at the wrong volume. Keying on the media tree rather than a settings row matters, because a settings row is lost along with the database it was meant to detect.
+- **Resolved CDN links no longer outlive TorBox's window.** TorBox opens a returned link for three hours; Mycelium cached them for twenty-three, so a cached link could be dead before it was ever used. The cache now expires at two and a half hours, inside the provider's window. The liveness check and re-resolve path stay as the backstop for links that die early.
+- **A fresh install with authentication enabled can reach its setup wizard.** With `AUTH_ENABLED=true` and no users, no password hash and no single sign-on, the wizard sat behind a login that could never succeed. The setup surface is now reachable while, and only while, no credential exists at all. Note the remaining limitation: completing the wizard marks setup finished, which closes the first-admin window, so that path still needs a first-admin step before it is usable end to end.
+- **The setup endpoints refuse anonymous writes on a configured install.** `/setup/save` and `/setup/skip` checked only whether users existed, so an install whose last user had been deleted could be written to without authenticating. They now carry the same completed-setup guard their sibling already had.
+- **The egress reports were being rejected silently.** The new reporting endpoint was subject to global CSRF protection while the streaming front, a machine caller on loopback, sends no token. Every report would have been refused with the front ignoring the status, leaving the tile reading zero forever. The endpoint is now exempt like the existing webhooks, and the front logs any rejected report.
+- **Authentication no longer costs a database read on every stream request.** The credential check introduced with the setup carve-out ran before the cheap path test, so every playback and every internal resolve paid a query against the same database the egress meter writes to.
+- **The egress log is pruned** with the other volatile tables rather than growing without limit.
+
 ## [0.10.3] - 2026-09-02
 
 ### Added

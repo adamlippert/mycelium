@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.11.0",
+    "date": "2026-09-02",
+    "notes": [
+      "The watchdog now alerts when the database is empty but .strm files still exist on disk, the signature of a database pointed at the wrong volume",
+      "Monthly proxied egress is shown on the admin Overview, so you can see how close you are to your TorBox plan's bandwidth floor",
+      "Resolved CDN links expire inside TorBox's three hour window instead of after twenty-three, so a cached link is never dead on arrival",
+      "A fresh install with authentication enabled can reach its setup wizard, and the setup endpoints refuse anonymous writes once setup is complete"
+    ]
+  },
+  {
     "version": "0.10.3",
     "date": "2026-09-02",
     "notes": [
