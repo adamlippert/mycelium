@@ -65,6 +65,9 @@ export interface WatchlistItem {
   title: string;
   poster_path: string | null;
   added_at: string;
+  /** Request status for this title, joined in by GET /ui/api/watchlist.
+   * Undefined when the title has never been requested. */
+  library_status?: string | null;
 }
 
 export interface UserRecord {

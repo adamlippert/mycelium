@@ -4,7 +4,7 @@
 
 <p>
   <a href="https://github.com/adamlippert/mycelium/releases"><img src="https://img.shields.io/github/v/release/adamlippert/mycelium?include_prereleases&color=22d3ee" alt="Release"/></a>
-  <a href="https://hub.docker.com/r/corveck/mycelium"><img src="https://img.shields.io/docker/pulls/corveck/mycelium?color=2496ED&logo=docker&logoColor=white" alt="Docker Pulls"/></a>
+  <a href="https://github.com/adamlippert/mycelium/pkgs/container/mycelium"><img src="https://img.shields.io/badge/pulls-ghcr.io-2496ED?logo=docker&logoColor=white" alt="Container pulls"/></a>
   <a href="https://github.com/adamlippert/mycelium/pkgs/container/mycelium"><img src="https://img.shields.io/badge/ghcr.io-mycelium-2496ED.svg?logo=docker&logoColor=white" alt="GHCR"/></a>
   <img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python 3.12"/>
   <img src="https://img.shields.io/badge/license-MIT-22d3ee.svg" alt="MIT licensed"/>
@@ -38,14 +38,14 @@
 ---
 
 <p align="center">
-  <img src="assets/screenshot-discover.png.png" alt="Mycelium Discover UI" width="900"/>
+  <img src="assets/screenshot-discover.png" alt="Mycelium Discover UI" width="900"/>
 </p>
 
 > [!NOTE]
 > **Beta.** Mycelium is in active use and works reliably, but it's still evolving.
 > Primarily tested on Synology NAS + Jellyfin + TorBox. The setup wizard handles
 > initial configuration - no `.env` editing required.
-> [Open an issue](https://github.com/corveck79/mycelium/issues) if something breaks.
+> [Open an issue](https://github.com/adamlippert/mycelium/issues) if something breaks.
 
 ---
 
@@ -321,7 +321,7 @@ docker run -d \
   -p 8088:8088 \
   -v ./data:/data \
   --name mycelium \
-  corveck/mycelium:latest
+  ghcr.io/adamlippert/mycelium:latest
 ```
 
 Or with Docker Compose:
@@ -524,7 +524,7 @@ Admin > Blacklist tab > add the offending hash. The blacklist auto-fills after `
 
 ## 🗺 Roadmap
 
-See [open issues](https://github.com/corveck79/mycelium/issues) and [discussions](https://github.com/corveck79/mycelium/discussions).
+See [open issues](https://github.com/adamlippert/mycelium/issues) and [discussions](https://github.com/adamlippert/mycelium/discussions).
 
 ---
 
@@ -538,7 +538,7 @@ PRs and issues welcome. Keep changes focused, run the tests in `tests/`, and don
 
 [MIT](LICENSE). Do whatever, just don't blame me if your library disappears.
 
-If you use Mycelium or build on top of it, a mention or link back to [github.com/corveck79/mycelium](https://github.com/corveck79/mycelium) is appreciated.
+If you use Mycelium or build on top of it, a mention or link back to [github.com/adamlippert/mycelium](https://github.com/adamlippert/mycelium) is appreciated.
 
 ## 🙏 Credits
 

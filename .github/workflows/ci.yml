@@ -79,20 +79,11 @@ jobs:
       - name: Vitest
         run: npm test
 
-      # tsc carries a known baseline of pre-existing errors in files this
-      # project has not touched. Failing on any error would demand a cleanup
-      # first; failing on GROWTH catches every new one from today onward.
-      # Lower the baseline when those files get fixed; never raise it.
-      - name: Type check (no new errors)
-        run: |
-          baseline=4
-          count=$(npx tsc --noEmit 2>&1 | grep -c "error TS" || true)
-          echo "tsc errors: $count (baseline $baseline)"
-          if [ "$count" -gt "$baseline" ]; then
-            echo "::error::tsc reports $count errors, above the baseline of $baseline"
-            npx tsc --noEmit
-            exit 1
-          fi
+      # The baseline is zero. It was 4 until the two causes were fixed: Vite's
+      # client types were not in tsconfig, so import.meta.glob was unknown,
+      # and WatchlistItem was missing a field the endpoint really returns.
+      - name: Type check
+        run: npx tsc --noEmit
 
       - name: Filter rules model tests
         working-directory: .

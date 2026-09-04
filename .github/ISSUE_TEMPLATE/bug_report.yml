@@ -1,0 +1,52 @@
+name: Bug report
+description: Something is not working
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please scrub API keys and tokens from anything you paste.
+        For security problems, do not use this form -- see SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: From the footer of any page, e.g. mycelium v0.12.0
+      placeholder: v0.12.0
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The steps, as precisely as you can manage.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant lines from `docker logs mycelium`. Scrub credentials first.
+      render: shell
+  - type: dropdown
+    id: media-server
+    attributes:
+      label: Media server
+      options: [Jellyfin, Plex, Emby, None, Other]
+  - type: dropdown
+    id: debrid
+    attributes:
+      label: Debrid provider
+      options: [TorBox, RealDebrid, Both, Other]
+  - type: textarea
+    id: deployment
+    attributes:
+      label: How you run it
+      description: Docker Compose, Coolify, Unraid, bare metal, and the host OS.
