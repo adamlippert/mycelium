@@ -106,6 +106,14 @@ PREFER_HEVC = _env("PREFER_HEVC", "true").lower() in ("1", "true", "yes")
 MIN_SEEDERS = _env_int("MIN_SEEDERS", 3)
 # Maximum file size in GB to include a candidate (0 = no limit; unknown size always passes).
 MAX_SIZE_GB = _env_int("MAX_SIZE_GB", 0)
+# Per-resolution caps, e.g. "2160p=60,1080p=15". A resolution named here
+# overrides MAX_SIZE_GB for that resolution only; anything unnamed falls back
+# to it. Lets a library take large 4K files while keeping 1080p modest, which
+# one global cap cannot express.
+MAX_SIZE_GB_BY_RESOLUTION = [s.strip() for s in _env("MAX_SIZE_GB_BY_RESOLUTION", "").split(",") if s.strip()]
+# Which end of the size range wins a tie once every other sort term is equal.
+# True keeps the long-standing behaviour, smallest first.
+PREFER_SMALLER_FILES = _env("PREFER_SMALLER_FILES", "true").lower() in ("1", "true", "yes")
 # Audio language preference (comma-separated codes: nl, en, multi). Empty = no preference.
 AUDIO_LANGUAGE_PREFERENCE = [l.strip().lower() for l in _env("AUDIO_LANGUAGE_PREFERENCE", "").split(",") if l.strip()]
 # Languages to hard-block (comma-separated codes, e.g. ru). Torrents detected as

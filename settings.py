@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 
 # Type hints per key  -  drives parsing of stored strings.
 _BOOL_KEYS = {
+    "PREFER_SMALLER_FILES",
     "EXCLUDE_UNDERSIZED_RELEASES",
     "EXCLUDE_UNDERSIZED_STRICT",
     "CATBOX_MODE",
@@ -50,6 +51,7 @@ _BOOL_KEYS = {
     "FILTER_RULES_MIGRATED",
 }
 _LIST_KEYS = {
+    "MAX_SIZE_GB_BY_RESOLUTION",
     "QUALITY_PREFERENCE",
     "AUDIO_LANGUAGE_PREFERENCE",
     "EXCLUDE_LANGUAGES",
@@ -171,6 +173,8 @@ HOT_RELOAD = {
     "PREFER_HEVC",
     "MIN_SEEDERS",
     "MAX_SIZE_GB",
+    "MAX_SIZE_GB_BY_RESOLUTION",
+    "PREFER_SMALLER_FILES",
     "AUDIO_LANGUAGE_PREFERENCE",
     "EXCLUDE_LANGUAGES",
     "SORT_ORDER",
@@ -262,7 +266,8 @@ SETTING_GROUPS = [
         "id": "quality",
         "title": "Size & seeders",
         "keys": [
-            "MIN_SEEDERS", "MAX_SIZE_GB",
+            "MIN_SEEDERS", "MAX_SIZE_GB", "MAX_SIZE_GB_BY_RESOLUTION",
+            "PREFER_SMALLER_FILES",
             "EXCLUDE_UNDERSIZED_RELEASES", "EXCLUDE_UNDERSIZED_STRICT",
             "WEB_PLAYER_MAX_SIZE_GB",
         ],

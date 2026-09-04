@@ -13,7 +13,9 @@ from config import (
     DEFAULT_SORT_ORDER,
     EXCLUDE_UNDERSIZED_RELEASES,
     MAX_SIZE_GB,
+    MAX_SIZE_GB_BY_RESOLUTION,
     MIN_SEEDERS,
+    PREFER_SMALLER_FILES,
     SORT_ORDER,
 )
 
@@ -210,6 +212,48 @@ def _quality_rank(stream: Stream, quality_pref: list[str]) -> int:
         return len(quality_pref) + 1
 
 
+def parse_size_limits(raw) -> dict[str, float]:
+    """Parse "2160p=60,1080p=15" into {"2160p": 60.0, "1080p": 15.0}.
+
+    Malformed entries are skipped with a warning rather than raising: a bad
+    setting must narrow nothing, not break ranking for every request. Entries
+    naming a resolution Mycelium never produces (say "4k=60", where
+    Stream.quality would read "2160p") are dropped the same way, because they
+    would silently cap nothing while looking like they worked.
+    """
+    import release_tags
+
+    if isinstance(raw, str):
+        raw = raw.split(",")
+    out: dict[str, float] = {}
+    bad: list[str] = []
+    unknown: list[str] = []
+    for item in (raw or []):
+        text = str(item).strip()
+        if not text:
+            continue
+        resolution, _, value = text.partition("=")
+        resolution = resolution.strip().lower()
+        try:
+            parsed = float(value)
+        except ValueError:
+            bad.append(text)
+            continue
+        if resolution not in release_tags.RESOLUTION_VALUES:
+            unknown.append(text)
+            continue
+        out[resolution] = parsed
+    if bad:
+        log.warning("Ignoring malformed MAX_SIZE_GB_BY_RESOLUTION entries: %s",
+                    ", ".join(bad))
+    if unknown:
+        log.warning(
+            "Ignoring MAX_SIZE_GB_BY_RESOLUTION entries for resolutions Mycelium "
+            "never produces: %s  -  valid resolutions are %s",
+            ", ".join(unknown), ", ".join(sorted(release_tags.RESOLUTION_VALUES)))
+    return out
+
+
 def _apply_non_category_filters(candidates: list[Stream], override: dict) -> list[Stream]:
     """MIN_SEEDERS, MAX_SIZE_GB and the undersized-release check.
 
@@ -254,12 +298,20 @@ def _apply_non_category_filters(candidates: list[Stream], override: dict) -> lis
             log.warning("No candidates meet MIN_SEEDERS=%d; allowing all", min_seeders)
 
     max_size_gb = _settings.get("MAX_SIZE_GB", MAX_SIZE_GB)
-    if max_size_gb > 0:
-        filtered = [s for s in candidates if s.size_gb == 0.0 or s.size_gb <= max_size_gb]
+    size_limits = parse_size_limits(
+        _settings.get("MAX_SIZE_GB_BY_RESOLUTION", MAX_SIZE_GB_BY_RESOLUTION))
+    if size_limits or max_size_gb > 0:
+        def _within(s: Stream) -> bool:
+            # A resolution named in the per-resolution caps overrides the
+            # global cap for that resolution only. An unknown size (0.0)
+            # always survives, the same as every other numeric filter here.
+            limit = size_limits.get((s.quality or "").lower(), max_size_gb)
+            return limit <= 0 or s.size_gb == 0.0 or s.size_gb <= limit
+        filtered = [s for s in candidates if _within(s)]
         if filtered:
             candidates = filtered
         else:
-            log.warning("No candidates within MAX_SIZE_GB=%d; allowing all", max_size_gb)
+            log.warning("No candidates within the configured size limits; allowing all")
 
     return candidates
 
@@ -351,6 +403,8 @@ def _sort_candidates(
     # preferred, not one hardcoded value. The old _WEBDL_RE matched web-dl,
     # webrip and web alike, so hardcoding webdl here silently demoted the
     # other two.
+    prefer_smaller = _settings.get("PREFER_SMALLER_FILES", PREFER_SMALLER_FILES)
+
     scorers = {
         "season_pack": lambda s, blob: 0 if prefer_season_pack and s.is_season_pack else 1,
         "resolution": lambda s, blob: _quality_rank(s, resolution_preferred),
@@ -365,7 +419,10 @@ def _sort_candidates(
         "audio_tag": lambda s, blob: 0 if any(
             v in audio_tag_preferred for v in release_tags.detect_audio_tags(blob)) else 1,
         "seeders": lambda s, blob: -s.seeders,
-        "size": lambda s, blob: s.size_gb,
+        # Ascending by default, so the smallest file wins a tie once every
+        # other term is equal. PREFER_SMALLER_FILES false flips it, for
+        # libraries that read size as a proxy for quality.
+        "size": (lambda s, blob: s.size_gb) if prefer_smaller else (lambda s, blob: -s.size_gb),
     }
 
     order = _resolve_sort_order(_settings.get("SORT_ORDER", SORT_ORDER))
