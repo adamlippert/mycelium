@@ -2,6 +2,20 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.12.0] - 2026-09-04
+
+### Added
+
+- **The setup wizard creates your first admin account.** An install with authentication turned on and no account, no password and no single sign-on could reach its setup wizard but not survive it: finishing the wizard marked setup complete, and that is exactly what closes the window for creating the first administrator, leaving an install that was configured, locked, and impossible to get into. The wizard now asks for that account as its last step, but only when it is needed. Nothing changes for an install without authentication, or one that already has a way in.
+- **A recovery guide** at `docs/RECOVERY.md`, covering what to do when Mycelium comes back with an empty library or the wrong data. It leads with working out whether anything was actually lost, because the incident that prompted it was a container attached to the wrong volume, where restoring a backup would have turned a remount into real data loss. It also names the window where the repair job deletes stream files it cannot match to the database, which is why the first instruction is to stop the container.
+
+### Fixed
+
+- **A failed restore now says so.** It redirected to the same page whether it worked or not, so a restore that did nothing was indistinguishable from one that succeeded, which is the worst way for this particular button to fail. The response also states that a restart is required, because the running app keeps reading the old database file until it is restarted.
+- **The egress meter cannot silently stop reporting.** Its endpoint had to be exempted from cross-site request protection for the streaming front to reach it, and that exemption going missing produces no error anywhere: reports are refused and the usage figure quietly reads zero. Two tests now hold it in place, and a malformed report is refused rather than recorded as zero bytes.
+- **The rate-limit log is pruned** instead of growing forever. It stores its timestamps as numbers rather than dates, so it needed its own pass; the shared one would have deleted every row rather than the old ones.
+- Tightened the first-admin path exemption to an exact match, replaced a deprecated timestamp call in the watchdog, and covered the single sign-on branch of the credential check that had no test.
+
 ## [0.11.1] - 2026-09-03
 
 ### Changed

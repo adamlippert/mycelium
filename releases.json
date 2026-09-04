@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.12.0",
+    "date": "2026-09-04",
+    "notes": [
+      "The setup wizard now creates your first admin account, so an install with authentication enabled can no longer finish setup with no way to log into it",
+      "A new recovery guide covers what to do when Mycelium comes back with an empty library, starting with how to tell whether anything was actually lost",
+      "A failed backup restore reports the failure instead of looking identical to a successful one",
+      "The egress meter is held in place by tests, after a missing exemption made it silently report nothing"
+    ]
+  },
+  {
     "version": "0.11.1",
     "date": "2026-09-03",
     "notes": [
