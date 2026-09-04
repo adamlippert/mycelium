@@ -2,6 +2,25 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [0.13.0] - 2026-09-04
+
+### Added
+
+- **Per-resolution size caps.** `MAX_SIZE_GB_BY_RESOLUTION` takes something like `2160p=60,1080p=15` and caps each resolution on its own, falling back to `MAX_SIZE_GB` for anything it does not name. A single global cap could not say "large 4K files are fine, but keep 1080p modest", which is the case most libraries actually want. A malformed entry is skipped with a warning rather than breaking the search, and an entry naming a resolution Mycelium never produces is dropped the same way instead of silently capping nothing.
+- **A size tie-break setting.** `PREFER_SMALLER_FILES` decides which end of the size range wins once every other preference is equal. It defaults to true, which is exactly what Mycelium already did, so nothing changes unless you turn it off to prefer the largest file instead.
+
+Both are editable in **Admin, Settings, Size & seeders** and take effect without a restart.
+
+### Fixed
+
+- The screenshot in the README showed an interface that no longer existed. It now shows the current one, and is a quarter of the size.
+
+### Changed
+
+- The type checker runs clean, and the build now fails on any new type error rather than tolerating a fixed number of them.
+- Added contribution guidelines, issue templates that route security reports privately, and automated dependency updates across all five ecosystems this project uses.
+- Every link in the README that still pointed at the upstream project this was forked from now points here, including an install command that named an image this project does not publish.
+
 ## [0.12.0] - 2026-09-04
 
 ### Added
