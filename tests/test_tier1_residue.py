@@ -225,3 +225,36 @@ def test_the_wizard_is_told_whether_an_admin_is_needed():
     assert "_needs_first_admin()" in src
     for shell in ("frontend/index.html", "static/app/index.html"):
         assert '<meta name="needs-first-admin" content="false" />' in _src(shell), shell
+
+
+# -- a failed restore must not look like a successful one ---------------------
+
+def test_restore_reports_failure_instead_of_redirecting_either_way():
+    """Both branches used to redirect to the same page, so a restore that did
+    nothing was indistinguishable from one that worked. An operator walks
+    away believing their data is back."""
+    src = _src("app.py")
+    m = re.search(r"def ui_backup_restore\(\).*?\n(.*?)\n\n@app\.", src, re.S)
+    assert m, "ui_backup_restore not found"
+    body = m.group(1)
+    assert "400" in body, "a failed restore does not report an error status"
+    assert "redirect(" not in body, "the failure path still redirects, hiding the result"
+    assert "restart" in body.lower(), (
+        "the response must say a restart is required: db.py holds one SQLite "
+        "handle per thread, so the running process keeps reading the old file")
+
+
+def test_recovery_documentation_exists_and_leads_with_diagnosis():
+    """The incident this documents was a mount problem presenting as an empty
+    database, where restoring first would have made things worse."""
+    doc = _src("docs/RECOVERY.md")
+    assert "docker stop mycelium" in doc, "the doc does not say to stop the container first"
+    assert "strm_repair" in doc, "the doc does not warn about the repair job deleting strms"
+    assert "pre-restore" in doc, "the doc does not mention the undo copy"
+    assert "docker restart mycelium" in doc, "the doc does not require a restart"
+    # Diagnosis must come before restoration, not after.
+    assert doc.index("Diagnose") < doc.index("Restore from a backup")
+
+
+def test_the_readme_points_at_the_recovery_doc():
+    assert "docs/RECOVERY.md" in _src("README.md")

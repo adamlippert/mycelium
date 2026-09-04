@@ -238,6 +238,19 @@ Stream directly in the browser - no Jellyfin client needed.
 
 ---
 
+## 🚑 Recovery
+
+If Mycelium comes back with an empty library or the wrong data, read
+[docs/RECOVERY.md](docs/RECOVERY.md) before restoring anything. An empty
+database is usually a mount problem rather than data loss, and restoring a
+backup onto the wrong volume turns a recoverable situation into a worse one.
+The short version: stop the container first, because the repair job will
+delete `.strm` files it cannot match to a database row.
+
+Backups are automatic (daily, fourteen kept) and restorable from
+**Admin → Maintenance → Backup restore**. A restore requires a container
+restart to take effect.
+
 ## 🍄 Mycelium Spore *(experimental  -  work in progress)*
 
 > **Status (August 2026):** Spore was built and used in production on a

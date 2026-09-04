@@ -1937,12 +1937,22 @@ def ui_api_backups():
 
 @app.post("/ui/backup-restore")
 def ui_backup_restore():
+    """Restore a named backup over the live database.
+
+    Answers 400 on failure rather than redirecting either way: a restore that
+    silently reports success is worse than none, because the operator walks
+    away believing their data is back. The caller still has to restart
+    Mycelium, since db.py keeps one SQLite handle per thread for the life of
+    the process and those handles still point at the replaced file."""
     if not auth.is_admin():
         abort(403)
     name = request.form.get("name", "").strip()
     if not backup.restore(name):
-        return redirect(url_for("ui_dashboard") + "#catbox")
-    return redirect(url_for("ui_dashboard") + "#catbox")
+        log.error("Restore failed for %r; the live database is unchanged", name)
+        return jsonify(error="restore failed, see the logs. The live database "
+                             "is unchanged"), 400
+    return jsonify(ok=True, restored=name,
+                   message="Restored. Restart Mycelium for it to take effect.")
 
 
 # ── Upgrader / consolidation / trending triggers ──────────────────────────────
