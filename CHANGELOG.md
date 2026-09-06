@@ -14,6 +14,10 @@ All notable changes to Mycelium are documented in this file.
   Jellyfin webhook plugin's `ItemDeleted` now run the full library purge, so
   Maintainerr and deletions made in Jellyfin no longer leave rows, monitoring
   and dedup keys behind.
+- Seerr outcome reporting (`SEERR_REPORT_STATUS`): success marks the media
+  available immediately, a terminal failure declines the request, and a
+  title wanted for longer than `SEERR_DECLINE_WANTED_AFTER_DAYS` is declined
+  once. Requests no longer sit on "Processing" forever.
 
 ### Changed
 

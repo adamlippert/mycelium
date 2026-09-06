@@ -615,6 +615,12 @@ def _process_locked(req: MediaRequest, _retry_attempt: int) -> bool:
     started = time.monotonic()
     row_id = db.insert_request(req.title, req.imdb_id, req.media_type, req.seasons,
                                 tmdb_id=req.tmdb_id)
+    if req.seerr_request_id:
+        try:
+            db.upsert_media_item(req.imdb_id, req.title, req.media_type,
+                                 seerr_request_id=req.seerr_request_id)
+        except Exception as exc:
+            log.debug("media_items upsert skipped: %s", exc)
 
     # Never accept a release for a movie that isn't out yet: pre-release
     # blockbusters attract fake/junk cached torrents (mislabeled CAMs, scam
@@ -716,6 +722,11 @@ def _process_locked(req: MediaRequest, _retry_attempt: int) -> bool:
             arr_sync.mirror_add(req.imdb_id, req.media_type, req.tmdb_id, req.title)
         except Exception as exc:
             log.debug("arr_sync skipped: %s", exc)
+        try:
+            import seerr_report
+            seerr_report.on_success(req.imdb_id)
+        except Exception as exc:
+            log.debug("seerr_report skipped: %s", exc)
         quality = winner.quality if winner else "?"
         db.log_activity("added", req.title, f"{req.media_type} · {quality}", True)
         notify.send(f"Added: {req.title}", f"{req.media_type} · {quality} · {req.imdb_id}", True)
@@ -751,6 +762,11 @@ def _process_locked(req: MediaRequest, _retry_attempt: int) -> bool:
     else:
         reason = _LAST_FAIL_REASON.pop(req.imdb_id, None) or "no suitable stream found"
         db.update_request(row_id, "failed", error=reason)
+        try:
+            import seerr_report
+            seerr_report.on_failed(req.imdb_id, reason)
+        except Exception as exc:
+            log.debug("seerr_report skipped: %s", exc)
         log.warning("No content added (%s); skipping Jellyfin refresh for %s", reason, req.title)
         db.log_activity("failed", req.title, f"{reason} ({req.imdb_id})", False)
         notify.send(f"Failed: {req.title}", f"No suitable stream found · {req.imdb_id}", False)

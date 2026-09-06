@@ -377,6 +377,11 @@ def _migrate() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_virtual_items_imdb_media "
                      "ON virtual_items(imdb_id, media_type)")
 
+        wanted_cols = {r["name"] for r in conn.execute("PRAGMA table_info(wanted_movies)")}
+        if "seerr_reported" not in wanted_cols:
+            conn.execute("ALTER TABLE wanted_movies ADD COLUMN seerr_reported INTEGER NOT NULL DEFAULT 0")
+            log.info("Migration: added wanted_movies.seerr_reported")
+
         req_cols = {r["name"] for r in conn.execute("PRAGMA table_info(requests)")}
         if "tmdb_id" not in req_cols:
             conn.execute("ALTER TABLE requests ADD COLUMN tmdb_id INTEGER")
@@ -1907,6 +1912,35 @@ def touch_wanted_movie(imdb_id: str) -> None:
                WHERE imdb_id=?""",
             (imdb_id,),
         )
+
+
+def get_stale_wanted_movies(older_than_days: int) -> list[dict]:
+    """Wanted movies older than the cutoff that Seerr has not been told about."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT * FROM wanted_movies
+               WHERE seerr_reported = 0
+                 AND added_at < datetime('now', ?)
+               ORDER BY added_at""",
+            (f"-{int(older_than_days)} days",),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def mark_wanted_seerr_reported(imdb_id: str) -> None:
+    with _connect() as conn:
+        conn.execute("UPDATE wanted_movies SET seerr_reported = 1 WHERE imdb_id=?", (imdb_id,))
+        conn.commit()
+
+
+def get_seerr_request_id(imdb_id: str) -> int | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT seerr_request_id FROM media_items "
+            "WHERE imdb_id=? AND seerr_request_id IS NOT NULL LIMIT 1",
+            (imdb_id,),
+        ).fetchone()
+        return int(row["seerr_request_id"]) if row else None
 
 
 # ── playability_state ─────────────────────────────────────────────────────────

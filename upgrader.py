@@ -259,6 +259,11 @@ def recheck_wanted() -> int:
                 arr_sync.mirror_add(w["imdb_id"], "movie", w.get("tmdb_id"), w["title"])
             except Exception as exc:
                 log.debug("arr_sync skipped: %s", exc)
+            try:
+                import seerr_report
+                seerr_report.on_success(w["imdb_id"])
+            except Exception as exc:
+                log.debug("seerr_report skipped: %s", exc)
             processor._WANTED.pop(w["imdb_id"], None)
             db.log_activity("found", w["title"],
                             f"acceptable release found ({winner.quality if winner else '?'})", True)
@@ -272,4 +277,9 @@ def recheck_wanted() -> int:
     if added:
         jellyfin.refresh_library()
         log.info("Wanted: %d movie(s) became available and were added", added)
+    try:
+        import seerr_report
+        seerr_report.report_stale_wanted()
+    except Exception as exc:
+        log.debug("seerr_report stale sweep skipped: %s", exc)
     return added

@@ -88,3 +88,19 @@ While you are in Jellyfin's library settings for the Mycelium library: turn
 **off** Trickplay, chapter image extraction and intro detection for that
 library. Each of those opens every file, which for a `.strm` means pulling
 the whole title through the TorBox CDN and resetting its retention clock.
+
+## Seerr: outcome reporting
+
+With `SEERR_REPORT_STATUS=true` (the default) Mycelium reports back to Seerr
+for every request that came in through the Seerr webhook:
+
+| Mycelium outcome | Seerr |
+|---|---|
+| Added | media marked **Available** at once, no need to wait for Seerr's Jellyfin scan |
+| No suitable stream (terminal) | request **Declined**; the person can re-request |
+| Released but nothing acceptable yet | left as **Processing**, Mycelium keeps searching |
+| Still nothing after `SEERR_DECLINE_WANTED_AFTER_DAYS` (default 30) | request **Declined** once; Mycelium keeps searching anyway |
+
+The Seerr API key must belong to a user with **Manage Requests** (an admin
+key does). Titles added from Mycelium's own Discover, Trakt or MDBList have
+no Seerr request and are not reported.

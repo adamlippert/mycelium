@@ -63,6 +63,11 @@ JELLYFIN_MEDIA_PATH = _env("JELLYFIN_MEDIA_PATH", "")
 
 SEERR_URL = _env("SEERR_URL", "")
 SEERR_API_KEY = _env("SEERR_API_KEY", "")
+# Report outcomes back to Seerr: success marks the media available, a
+# terminal failure declines the request, and a title wanted for longer than
+# SEERR_DECLINE_WANTED_AFTER_DAYS is declined once (0 disables that part).
+SEERR_REPORT_STATUS = _env("SEERR_REPORT_STATUS", "true").lower() == "true"
+SEERR_DECLINE_WANTED_AFTER_DAYS = _env_int("SEERR_DECLINE_WANTED_AFTER_DAYS", 30)
 
 TMDB_API_KEY = _env("TMDB_API_KEY", "")
 

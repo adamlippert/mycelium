@@ -26,6 +26,7 @@ class MediaRequest:
     seasons: list[int] = field(default_factory=list)
     episode: int | None = None
     tmdb_id: int | None = None
+    seerr_request_id: int | None = None
 
     @property
     def is_movie(self) -> bool:
@@ -64,6 +65,13 @@ def _extract_request_id(payload: dict) -> str | None:
     req = payload.get("request") or {}
     rid = req.get("request_id") or req.get("id") or payload.get("request_id")
     return str(rid) if rid else None
+
+
+def _to_int(raw) -> int | None:
+    try:
+        return int(raw) if raw not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _fetch_from_seerr(payload: dict) -> tuple[str | None, list[int], int | None]:
@@ -195,4 +203,5 @@ def parse(payload: dict) -> MediaRequest:
     else:
         seasons = []
 
-    return MediaRequest(title=title, media_type=media_type, imdb_id=imdb_id, seasons=seasons, tmdb_id=tmdb_id)
+    return MediaRequest(title=title, media_type=media_type, imdb_id=imdb_id, seasons=seasons, tmdb_id=tmdb_id,
+                        seerr_request_id=_to_int(_extract_request_id(payload)))
