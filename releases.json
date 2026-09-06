@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.14.0",
+    "date": "2026-09-06",
+    "notes": [
+      "Radarr and Sonarr can mirror Mycelium's library as monitored, search-off entries, so Seerr, Maintainerr and calendar widgets see your titles (ARR_SYNC_ENABLED, off by default)",
+      "A new /webhook/arr endpoint purges a title when Radarr, Sonarr or Jellyfin reports it deleted, so deletions made elsewhere no longer leave rows behind",
+      "Jellyfin is told exactly which files changed instead of being asked for a full library scan after every add and purge",
+      "Seerr is told the outcome: added titles show Available at once, failed ones are declined so requests stop showing Processing forever",
+      "See docs/INTEGRATIONS.md for the setup steps"
+    ]
+  },
+  {
     "version": "0.13.0",
     "date": "2026-09-04",
     "notes": [
