@@ -5,6 +5,7 @@ Autopulse redundant for a Mycelium library.
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
 os.environ.setdefault("TORBOX_API_KEY", "test")
@@ -134,6 +135,9 @@ def test_a_failed_targeted_post_falls_back_to_a_full_scan(jf, monkeypatch):
         return FakeResp(500 if url.endswith("/Media/Updated") else 204)
 
     monkeypatch.setattr(jellyfin.requests, "post", flaky)
+    # Put the debounce in play: without force=True on the fallback, this
+    # would swallow the full-scan fallback and the assertion below would fail.
+    jellyfin._last_refresh_ts = time.monotonic()
     jellyfin.note_change("/media/movies/x.strm", "Created")
     assert jellyfin.refresh_library() is True
     assert calls == ["http://jellyfin.test/Library/Media/Updated", "http://jellyfin.test/Library/Refresh"]
