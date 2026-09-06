@@ -12,7 +12,11 @@ log = logging.getLogger(__name__)
 # upgrade batch, cleanup, etc.) into a single scan instead of queueing one per call.
 _REFRESH_DEBOUNCE_SEC = 60
 _refresh_lock = threading.Lock()
-_last_refresh_ts = 0.0
+# None until the first scan is triggered. A 0.0 sentinel compared against
+# time.monotonic() debounced the very first refresh on a freshly booted
+# host, where monotonic is still under 60 seconds (CI runners, a container
+# started right after its VM).
+_last_refresh_ts: float | None = None
 
 # Paths written or removed since the last refresh. When refresh_library() has
 # any, it sends them to /Library/Media/Updated (a path-scoped refresh) instead
@@ -124,7 +128,8 @@ def refresh_library(timeout: int = 30, force: bool = False, full: bool = False) 
     with _refresh_lock:
         global _last_refresh_ts
         now = time.monotonic()
-        if not force and now - _last_refresh_ts < _REFRESH_DEBOUNCE_SEC:
+        if (not force and _last_refresh_ts is not None
+                and now - _last_refresh_ts < _REFRESH_DEBOUNCE_SEC):
             log.info("Jellyfin refresh skipped: last triggered %.0fs ago", now - _last_refresh_ts)
             return False
         if not force and is_scanning(timeout=min(timeout, 10)):

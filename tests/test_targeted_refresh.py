@@ -59,7 +59,7 @@ def jf(monkeypatch):
     values = {"JELLYFIN_URL": "http://jellyfin.test", "JELLYFIN_API_KEY": "k", "JELLYFIN_MEDIA_PATH": ""}
     monkeypatch.setattr(jellyfin.settings, "get", lambda k, d=None: values.get(k, d))
     monkeypatch.setattr(jellyfin, "is_scanning", lambda timeout=10: False)
-    jellyfin._last_refresh_ts = 0.0
+    jellyfin._last_refresh_ts = None
     with jellyfin._pending_lock:
         jellyfin._pending.clear()
     posts = []
@@ -82,6 +82,21 @@ def test_pending_paths_go_to_media_updated_not_a_full_scan(jf):
     assert url == "http://jellyfin.test/Library/Media/Updated"
     assert body == {"Updates": [{"Path": "/media/movies/Heat (1995)/Heat (1995).strm", "UpdateType": "Created"}]}
     assert jellyfin.pending_count() == 0
+
+
+def test_the_first_scan_after_boot_is_not_debounced(jf, monkeypatch):
+    """CI runners and freshly started containers have a monotonic clock
+    under 60 seconds. A 0.0 sentinel read as "a scan ran moments ago" and
+    the very first refresh was skipped; that is how this test file failed
+    on CI while passing on a long-running laptop."""
+    import jellyfin
+    # The fixture resets the module state, so the production default is
+    # pinned by source; the guard that reads it is pinned by behaviour.
+    assert "_last_refresh_ts: float | None = None" in _src("jellyfin.py")
+    monkeypatch.setattr(jellyfin.time, "monotonic", lambda: 5.0)
+    assert jellyfin._last_refresh_ts is None
+    assert jellyfin.refresh_library() is True
+    assert jf[1][0][0] == "http://jellyfin.test/Library/Refresh"
 
 
 def test_no_pending_paths_means_the_old_full_scan(jf):
