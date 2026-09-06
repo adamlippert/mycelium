@@ -21,7 +21,7 @@
 
 - Work on branch `main`. The repo is public: never commit secrets, tokens, hostnames or IP addresses. Test fixtures use `http://radarr.test`, `http://sonarr.test`, `http://seerr.test`, `http://jellyfin.test`.
 - No em-dashes and no `--` anywhere, not in code, comments, docs or commit messages. Use `-` or a comma. Existing code writes `  -  ` for a spaced dash; match it.
-- No `Co-Authored-By` trailer. End every commit message with the line `Claude-Session: https://claude.ai/code/session_01AmtUbsRXaaKWpc8JsBFpGn`.
+- No `Co-Authored-By` trailer. End every commit message with the line `Claude-Session: https://claude.ai/code/session_01EZbQf8PvzNCADFo6bW74ko`.
 - Test runner: `.venv-sdd/bin/python -m pytest tests/ -q`. Baseline at `5d953f5`: **632 passed**. Every task must leave the full suite green.
 - Tests **never import `app.py`** (it starts the scheduler). Route-level checks assert on the source text through the `_src()` helper shown in each task.
 - Every test that touches the database uses the `_isolated_db` autouse fixture shown in each task (`_drop_cached_conn()` + `monkeypatch db.DB_PATH` + `db.init()`), so no test reads `/data/requests.db`.
@@ -864,7 +864,7 @@ One direction: Mycelium adds on success and removes on purge, and a
 six-hourly reconcile catches drift. The arrs keep no download client, so
 mirrored titles show as Missing there; that is the accepted cost of Level A.
 
-Claude-Session: https://claude.ai/code/session_01AmtUbsRXaaKWpc8JsBFpGn"
+Claude-Session: https://claude.ai/code/session_01EZbQf8PvzNCADFo6bW74ko"
 ```
 
 ---
@@ -1320,7 +1320,7 @@ Mycelium had no inbound delete signal. /webhook/arr maps MovieDelete,
 SeriesDelete and ItemDeleted onto cleanup.purge_title; unknown titles are
 ignored so the arr's echo of our own removal cannot loop.
 
-Claude-Session: https://claude.ai/code/session_01AmtUbsRXaaKWpc8JsBFpGn"
+Claude-Session: https://claude.ai/code/session_01EZbQf8PvzNCADFo6bW74ko"
 ```
 
 ---
@@ -1780,7 +1780,7 @@ keeps the full scan for the cleanup run and as a fallback. Every .strm
 write and delete notes its path. JELLYFIN_MEDIA_PATH translates paths when
 the containers mount the media differently.
 
-Claude-Session: https://claude.ai/code/session_01AmtUbsRXaaKWpc8JsBFpGn"
+Claude-Session: https://claude.ai/code/session_01EZbQf8PvzNCADFo6bW74ko"
 ```
 
 ---
@@ -2385,7 +2385,7 @@ request, and a title wanted for longer than SEERR_DECLINE_WANTED_AFTER_DAYS
 is declined once while Mycelium keeps searching. The Seerr request id from
 the webhook is now persisted in media_items.
 
-Claude-Session: https://claude.ai/code/session_01AmtUbsRXaaKWpc8JsBFpGn"
+Claude-Session: https://claude.ai/code/session_01EZbQf8PvzNCADFo6bW74ko"
 ```
 
 ---
