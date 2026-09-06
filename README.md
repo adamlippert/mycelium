@@ -405,6 +405,8 @@ Most settings are hot-reloadable via the Settings tab. Only scheduler intervals 
 
 Full reference: [`.env.example`](.env.example). Key variables:
 
+Talking to the rest of the stack (Radarr, Sonarr, Seerr, Jellyfin webhooks and targeted refresh): [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
+
 Release filtering is a four-state rule model. Every one of seven categories -
 `RESOLUTION`, `SOURCE`, `ENCODE`, `VISUAL_TAG`, `AUDIO_TAG`, `AUDIO_CHANNELS`,
 `LANGUAGE` - has its own `{CATEGORY}_PREFERRED` / `_EXCLUDED` / `_REQUIRED` /
