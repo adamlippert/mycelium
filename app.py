@@ -669,6 +669,44 @@ def torbox_webhook():
     return jsonify(status="ok")
 
 
+@app.post("/webhook/arr")
+@_csrf.exempt
+def arr_webhook_route():
+    """Delete notifications from Radarr (MovieDelete), Sonarr (SeriesDelete)
+    and the Jellyfin webhook plugin (ItemDeleted). Same secret as /webhook.
+
+    A title Mycelium does not own is answered with "ignored" and no purge:
+    that is how the echo of our own mirror_remove, and Jellyfin's ItemDeleted
+    after our own purge, are kept from looping."""
+    _check_auth()
+    import arr_webhook
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify(status="error", error="expected a JSON object"), 400
+    try:
+        ev = arr_webhook.parse(payload)
+    except ValueError as exc:
+        log.warning("Arr webhook: %s", exc)
+        return jsonify(status="error", error=str(exc)), 400
+    if ev is None:
+        return jsonify(status="ignored", reason="not a title deletion")
+    imdb_id = arr_webhook.resolve_imdb(ev)
+    if not imdb_id:
+        log.warning("Arr webhook: could not resolve %s %s to an imdb id", ev.source, ev.event)
+        return jsonify(status="error", error="unresolvable id"), 400
+    req_row = db.get_request_by_imdb(imdb_id)
+    if not req_row and not db.get_virtual_items_by_imdb(imdb_id):
+        log.info("Arr webhook: %s %s for %s ignored: unknown title", ev.source, ev.event, imdb_id)
+        return jsonify(status="ignored", reason="unknown title", imdb_id=imdb_id)
+    log.info("Arr webhook: %s %s -> purging %s", ev.source, ev.event, imdb_id)
+    threading.Thread(
+        target=cleanup.purge_title,
+        args=(imdb_id,), kwargs={"row_id": req_row["id"] if req_row else None},
+        name=f"arr-purge-{imdb_id}", daemon=True,
+    ).start()
+    return jsonify(status="accepted", imdb_id=imdb_id, source=ev.source), 202
+
+
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
 @app.get("/admin")

@@ -10,6 +10,10 @@ All notable changes to Mycelium are documented in this file.
   in the arr as monitored, search-off entries and removed on purge, with a
   six-hourly reconcile. The arrs are bookkeeping for Seerr, Maintainerr and
   calendar widgets; they never download anything.
+- `/webhook/arr`: Radarr `MovieDelete`, Sonarr `SeriesDelete` and the
+  Jellyfin webhook plugin's `ItemDeleted` now run the full library purge, so
+  Maintainerr and deletions made in Jellyfin no longer leave rows, monitoring
+  and dedup keys behind.
 
 ## [0.13.0] - 2026-09-04
 

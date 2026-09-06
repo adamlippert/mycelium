@@ -73,7 +73,8 @@ def test_the_only_csrf_exemptions_are_the_machine_callers():
         r'@app\.(?:post|route)\(["\']([^"\']+)["\'][^)]*\)\s*\n'
         r'(?:\s*#[^\n]*\n)*\s*@_csrf\.exempt', src)
     assert sorted(exempted) == sorted([
-        "/webhook", "/torbox-webhook", "/internal/stream-report/<token>"]), (
+        "/webhook", "/torbox-webhook", "/webhook/arr",
+        "/internal/stream-report/<token>"]), (
         f"the CSRF exemption set changed: {exempted}")
 
 

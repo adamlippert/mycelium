@@ -61,6 +61,16 @@ def tvdb_id_for(tmdb_id: int | str) -> int | None:
         return None
 
 
+def imdb_from_tvdb(tvdb_id: int | str) -> str | None:
+    """TVDB id -> IMDB id, via /find (external_source=tvdb_id) then external_ids.
+    Sonarr's delete webhook carries tvdbId and sometimes no imdbId."""
+    data = _get(f"/find/{tvdb_id}", params={"external_source": "tvdb_id"})
+    hits = (data or {}).get("tv_results") or []
+    if not hits:
+        return None
+    return tmdb_to_imdb(hits[0]["id"], media_type="tv")
+
+
 def find_by_imdb(imdb_id: str, kind: str = "tv") -> int | None:
     """Reverse-lookup: IMDB ID → TMDB ID using the /find endpoint."""
     data = _get(f"/find/{imdb_id}", params={"external_source": "imdb_id"})
