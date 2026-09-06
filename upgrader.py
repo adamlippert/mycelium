@@ -254,6 +254,11 @@ def recheck_wanted() -> int:
             continue
         if ok:
             db.remove_wanted_movie(w["imdb_id"])
+            try:
+                import arr_sync
+                arr_sync.mirror_add(w["imdb_id"], "movie", w.get("tmdb_id"), w["title"])
+            except Exception as exc:
+                log.debug("arr_sync skipped: %s", exc)
             processor._WANTED.pop(w["imdb_id"], None)
             db.log_activity("found", w["title"],
                             f"acceptable release found ({winner.quality if winner else '?'})", True)

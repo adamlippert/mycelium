@@ -711,6 +711,11 @@ def _process_locked(req: MediaRequest, _retry_attempt: int) -> bool:
             except Exception as exc:
                 log.debug("Subtitle fetch skipped: %s", exc)
         jellyfin.refresh_library()
+        try:
+            import arr_sync
+            arr_sync.mirror_add(req.imdb_id, req.media_type, req.tmdb_id, req.title)
+        except Exception as exc:
+            log.debug("arr_sync skipped: %s", exc)
         quality = winner.quality if winner else "?"
         db.log_activity("added", req.title, f"{req.media_type} · {quality}", True)
         notify.send(f"Added: {req.title}", f"{req.media_type} · {quality} · {req.imdb_id}", True)

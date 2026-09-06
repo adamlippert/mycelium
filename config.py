@@ -298,6 +298,13 @@ RADARR_API_KEY = _env("RADARR_API_KEY", "")
 SONARR_URL = _env("SONARR_URL", "")
 SONARR_API_KEY = _env("SONARR_API_KEY", "")
 
+# Mirror Mycelium's library into Radarr/Sonarr as monitored, search-off
+# entries so Seerr, Maintainerr and calendar widgets see the titles. One
+# direction only. Blank root folder = the arr's first root folder.
+ARR_SYNC_ENABLED = _env("ARR_SYNC_ENABLED", "false").lower() == "true"
+RADARR_ROOT_FOLDER = _env("RADARR_ROOT_FOLDER", "")
+SONARR_ROOT_FOLDER = _env("SONARR_ROOT_FOLDER", "")
+
 # ── Health-aware processing ───────────────────────────────────────────────────
 # Cache health status for this many seconds; skip services that recently failed.
 HEALTH_CACHE_SECONDS = _env_int("HEALTH_CACHE_SECONDS", 60)

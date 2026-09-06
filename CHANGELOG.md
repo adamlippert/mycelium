@@ -2,6 +2,15 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Radarr/Sonarr mirror (`ARR_SYNC_ENABLED`): titles Mycelium adds are created
+  in the arr as monitored, search-off entries and removed on purge, with a
+  six-hourly reconcile. The arrs are bookkeeping for Seerr, Maintainerr and
+  calendar widgets; they never download anything.
+
 ## [0.13.0] - 2026-09-04
 
 ### Added

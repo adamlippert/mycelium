@@ -958,6 +958,9 @@ def purge_title(imdb_id: str, row_id: int | None = None) -> dict:
     rest of the title half-purged. Returns a per-category count."""
     result = {"strms": 0, "items": 0, "errors": 0}
     dirs: set[Path] = set()
+    req_row = db.get_request_by_imdb(imdb_id) or {}
+    media_type = req_row.get("media_type") or "movie"
+    tmdb_id = req_row.get("tmdb_id")
 
     for item in db.get_virtual_items_by_imdb(imdb_id):
         token = item.get("token")
@@ -994,6 +997,12 @@ def purge_title(imdb_id: str, row_id: int | None = None) -> dict:
     result["retries"] = db.clear_retries(imdb_id)
     if row_id is not None:
         db.delete_request(row_id)
+
+    try:
+        import arr_sync
+        result["arr_removed"] = arr_sync.mirror_remove(imdb_id, media_type, tmdb_id)
+    except Exception as exc:
+        log.debug("Purge %s: arr_sync skipped: %s", imdb_id, exc)
 
     log.info("Purged %s from library: %s", imdb_id, result)
     try:

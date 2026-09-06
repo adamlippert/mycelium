@@ -51,6 +51,16 @@ def tmdb_to_imdb(tmdb_id: int | str, media_type: str = "movie") -> str | None:
     return imdb_id
 
 
+def tvdb_id_for(tmdb_id: int | str) -> int | None:
+    """TVDB id for a TMDB show, via /tv/{id}/external_ids. Sonarr keys on TVDB."""
+    data = _get(f"/tv/{tmdb_id}/external_ids")
+    raw = (data or {}).get("tvdb_id")
+    try:
+        return int(raw) if raw else None
+    except (TypeError, ValueError):
+        return None
+
+
 def find_by_imdb(imdb_id: str, kind: str = "tv") -> int | None:
     """Reverse-lookup: IMDB ID → TMDB ID using the /find endpoint."""
     data = _get(f"/find/{imdb_id}", params={"external_source": "imdb_id"})
