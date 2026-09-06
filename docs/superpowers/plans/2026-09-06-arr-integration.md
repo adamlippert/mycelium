@@ -1347,7 +1347,7 @@ Claude-Session: https://claude.ai/code/session_01EZbQf8PvzNCADFo6bW74ko"
 Behaviour of `refresh_library()` after this task:
 
 1. `full=True`: drain the pending list and run the old `/Library/Refresh` full scan, with the old debounce and is-scanning checks. Used by the cleanup run, which renames and merges folders it cannot itemise.
-2. Otherwise, if paths are pending: `POST /Library/Media/Updated` with all of them (batches of 200), no debounce, no is-scanning check. Returns `True` on 204/200. On failure the paths are put back and it falls through to the full scan so nothing is lost.
+2. Otherwise, if paths are pending: `POST /Library/Media/Updated` with all of them (batches of 200), no debounce, no is-scanning check. Returns `True` on 204/200. On failure the paths are consumed and it falls through to a forced full scan, which covers them, so nothing is lost.
 3. Otherwise: the old full-scan behaviour, unchanged. Anything that writes or deletes a path without calling `note_change` still ends up with a full scan, exactly as today.
 
 - [ ] **Step 1: Register the setting**
