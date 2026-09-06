@@ -695,9 +695,17 @@ def arr_webhook_route():
         log.warning("Arr webhook: could not resolve %s %s to an imdb id", ev.source, ev.event)
         return jsonify(status="error", error="unresolvable id"), 400
     req_row = db.get_request_by_imdb(imdb_id)
-    if not req_row and not db.get_virtual_items_by_imdb(imdb_id):
+    items = db.get_virtual_items_by_imdb(imdb_id)
+    if not req_row and not items:
         log.info("Arr webhook: %s %s for %s ignored: unknown title", ev.source, ev.event, imdb_id)
         return jsonify(status="ignored", reason="unknown title", imdb_id=imdb_id)
+    # A targeted refresh can report a repair/upgrade's old path as Deleted while
+    # a fresh .strm for the same title still exists. A person deleting in
+    # Jellyfin removes the .strm too (the containers share PUID), so only the
+    # echo case has files left; arr events hold no files and keep purging.
+    if ev.source == "jellyfin" and arr_webhook.files_still_present(items):
+        log.info("Arr webhook: %s %s for %s ignored: files still present", ev.source, ev.event, imdb_id)
+        return jsonify(status="ignored", reason="files still present", imdb_id=imdb_id)
     log.info("Arr webhook: %s %s -> purging %s", ev.source, ev.event, imdb_id)
     threading.Thread(
         target=cleanup.purge_title,

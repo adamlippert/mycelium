@@ -27,7 +27,8 @@ What to expect:
 - Root folder: blank means the arr's first root folder. Set
   `RADARR_ROOT_FOLDER` / `SONARR_ROOT_FOLDER` to pick another. The quality
   profile is the arr's first one; it does not matter, nothing is searched.
-- Mycelium sends `imdb:` lookups; for a series Sonarr cannot find that way it
+- Mycelium sends `imdb:` lookups; for a movie it also falls back to a `tmdb:`
+  lookup when one is known, and for a series Sonarr cannot find that way it
   resolves the TVDB id through TMDB and retries.
 
 ## Delete webhooks

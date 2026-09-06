@@ -762,11 +762,6 @@ def _process_locked(req: MediaRequest, _retry_attempt: int) -> bool:
     else:
         reason = _LAST_FAIL_REASON.pop(req.imdb_id, None) or "no suitable stream found"
         db.update_request(row_id, "failed", error=reason)
-        try:
-            import seerr_report
-            seerr_report.on_failed(req.imdb_id, reason)
-        except Exception as exc:
-            log.debug("seerr_report skipped: %s", exc)
         log.warning("No content added (%s); skipping Jellyfin refresh for %s", reason, req.title)
         db.log_activity("failed", req.title, f"{reason} ({req.imdb_id})", False)
         notify.send(f"Failed: {req.title}", f"No suitable stream found · {req.imdb_id}", False)
@@ -777,6 +772,15 @@ def _process_locked(req: MediaRequest, _retry_attempt: int) -> bool:
         except Exception as exc:
             log.debug("metrics_prom (failed) skipped: %s", exc)
         import retry_queue
-        retry_queue.schedule(req, _retry_attempt)
+        will_retry = retry_queue.schedule(req, _retry_attempt)
+        # Seerr has no un-decline: only report a terminal failure once no
+        # further retry will fire, or a later successful retry would leave
+        # the request declined forever.
+        if not will_retry:
+            try:
+                import seerr_report
+                seerr_report.on_failed(req.imdb_id, reason)
+            except Exception as exc:
+                log.debug("seerr_report skipped: %s", exc)
 
     return success

@@ -964,10 +964,15 @@ def purge_title(imdb_id: str, row_id: int | None = None) -> dict:
     result = {"strms": 0, "items": 0, "errors": 0}
     dirs: set[Path] = set()
     req_row = db.get_request_by_imdb(imdb_id) or {}
-    media_type = req_row.get("media_type") or "movie"
+    items = db.get_virtual_items_by_imdb(imdb_id)
+    # No request row (e.g. an arr/Jellyfin-only delete signal): fall back to
+    # the media_type of the virtual_items themselves before defaulting to
+    # "movie", or a series with no request row is reported to Radarr instead
+    # of Sonarr.
+    media_type = req_row.get("media_type") or (items[0].get("media_type") if items else None) or "movie"
     tmdb_id = req_row.get("tmdb_id")
 
-    for item in db.get_virtual_items_by_imdb(imdb_id):
+    for item in items:
         token = item.get("token")
         strm_path = item.get("strm_path")
         if strm_path:
@@ -1012,10 +1017,10 @@ def purge_title(imdb_id: str, row_id: int | None = None) -> dict:
 
     log.info("Purged %s from library: %s", imdb_id, result)
     try:
-        # force: the 60s debounce exists so bulk strm generation does not hammer
-        # Jellyfin. A person clicking "Remove from library" is exactly the case
-        # that must not be swallowed by it - otherwise the files are gone and
-        # Jellyfin is never told, so the title just stays on screen.
+        # The deleted paths were noted above, so this normally sends a targeted
+        # refresh. force=True only matters for the full-scan fallback: it keeps
+        # that fallback from being debounced if the targeted call fails, since a
+        # dropped scan here looks like the title was never removed.
         jellyfin.refresh_library(force=True)
     except Exception as exc:
         log.warning("Purge %s: Jellyfin refresh failed: %s", imdb_id, exc)

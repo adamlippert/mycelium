@@ -3,7 +3,6 @@
 Autopulse redundant for a Mycelium library.
 """
 import os
-import re
 import sys
 import time
 from pathlib import Path
@@ -101,7 +100,6 @@ def test_full_true_drains_pending_and_runs_a_full_scan(jf):
 
 def test_targeted_refresh_ignores_the_debounce(jf):
     import jellyfin
-    import time
     jellyfin._last_refresh_ts = time.monotonic()
     jellyfin.note_change("/media/movies/x.strm", "Created")
     assert jellyfin.refresh_library() is True
@@ -170,6 +168,22 @@ def test_purge_notes_each_deleted_strm():
 def test_cleanup_deletions_are_noted():
     src = _src("cleanup.py")
     assert src.count('jellyfin.note_change(') >= 6, "every unlink of a .strm in cleanup notes Deleted"
+
+
+def test_upgrader_and_generator_deletions_are_noted():
+    """Season-pack consolidation, repair's requeue and the duplicate-strm
+    cleanup all unlink a .strm directly; each must note the deletion, or
+    Jellyfin never learns those paths went away."""
+    upgrader_src = _src("upgrader.py")
+    pack_body = upgrader_src.split("def run_pack_consolidation(", 1)[1].split("\ndef ", 1)[0]
+    assert '"Deleted")' in pack_body
+
+    generator_src = _src("strm_generator.py")
+    requeue_body = generator_src.split("def _requeue(", 1)[1].split("\n    def ", 1)[0]
+    assert '"Deleted")' in requeue_body
+    # The unlink lives in the locked worker, not the lock-acquiring wrapper.
+    dup_body = generator_src.split("def _cleanup_duplicate_strms_locked(", 1)[1].split("\ndef ", 1)[0]
+    assert '"Deleted")' in dup_body
 
 
 def test_the_cleanup_run_asks_for_a_full_scan():

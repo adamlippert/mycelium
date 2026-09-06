@@ -61,6 +61,10 @@ def on_failed(imdb_id: str, reason: str) -> bool:
         return False
     if ok:
         log.info("Seerr: request %s (%s) declined: %s", rid, imdb_id, reason)
+        try:
+            db.clear_webhook_events(imdb_id)
+        except Exception as exc:
+            log.debug("seerr_report: clearing webhook dedup keys for %s failed: %s", imdb_id, exc)
     return ok
 
 

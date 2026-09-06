@@ -26,6 +26,20 @@ All notable changes to Mycelium are documented in this file.
   cleanup job still requests a full scan. `JELLYFIN_MEDIA_PATH` translates
   paths when the two containers mount the media differently.
 
+### Fixed
+
+- `/webhook/arr` no longer purges a title on a Jellyfin `ItemDeleted` echo of
+  our own repair or upgrade: it now checks whether a `.strm` for the title
+  still exists on disk before acting, and ignores the event if so. Arr-sourced
+  events keep purging unconditionally.
+- Three more `.strm` deletion sites (season-pack consolidation, repair's
+  requeue, duplicate-strm cleanup) now call `jellyfin.note_change(..., "Deleted")`,
+  so the targeted refresh actually knows about them.
+- `seerr_report.on_failed` no longer declines a request while the retry queue
+  still has an attempt left; a later successful retry could not un-decline it.
+- A successful decline now clears the title's webhook dedup key, so a person
+  can re-request it right away instead of waiting out the 24h window.
+
 ## [0.13.0] - 2026-09-04
 
 ### Added

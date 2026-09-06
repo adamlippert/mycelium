@@ -212,6 +212,7 @@ def run_pack_consolidation() -> int:
             for s in strms:
                 try:
                     s.unlink()
+                    jellyfin.note_change(s, "Deleted")
                 except Exception:
                     pass
             db.log_activity("consolidated", f"{title} S{season:02d}",

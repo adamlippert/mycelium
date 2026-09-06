@@ -163,6 +163,42 @@ def test_route_purges_in_a_thread_and_returns_202():
     assert "202" in body
 
 
+def test_route_ignores_a_jellyfin_echo_when_files_still_present():
+    """A targeted refresh reports a repair/upgrade's old path as Deleted;
+    Jellyfin's ItemDeleted for that title must not purge it while a fresh
+    .strm still exists on disk. Arr-sourced events keep purging unconditionally,
+    since in this version the arrs hold no files of their own."""
+    body = _route_body()
+    assert '"files still present"' in body
+    guarded = body.split('"files still present"', 1)[0]
+    assert 'ev.source == "jellyfin"' in guarded
+    assert "arr_webhook.files_still_present(" in guarded
+
+
 def test_exemption_pin_includes_the_arr_webhook():
     src = _src("tests/test_tier1_residue.py")
     assert '"/webhook/arr"' in src
+
+
+# -- files_still_present -------------------------------------------------------
+
+def test_files_still_present_true_when_a_strm_path_exists(tmp_path):
+    import arr_webhook
+    existing = tmp_path / "Heat (1995).strm"
+    existing.write_text("http://example.test/stream/token", encoding="utf-8")
+    items = [
+        {"strm_path": str(tmp_path / "gone.strm")},
+        {"strm_path": str(existing)},
+    ]
+    assert arr_webhook.files_still_present(items) is True
+
+
+def test_files_still_present_false_when_missing_or_absent(tmp_path):
+    import arr_webhook
+    items = [
+        {"strm_path": str(tmp_path / "gone-1.strm")},
+        {"strm_path": None},
+        {},
+    ]
+    assert arr_webhook.files_still_present(items) is False
+    assert arr_webhook.files_still_present([]) is False

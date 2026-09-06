@@ -2195,6 +2195,7 @@ def _repair_expired_strms_locked(media_type: str = "movie") -> dict:
         if strm_path and strm_path.exists():
             try:
                 strm_path.unlink()
+                jellyfin.note_change(strm_path, "Deleted")
             except Exception:
                 pass
         try:
@@ -2382,6 +2383,7 @@ def _cleanup_duplicate_strms_locked() -> dict:
                     log.warning("cleanup_duplicate_strms: could not remove %s: %s", nfo, exc)
             try:
                 s.unlink()
+                jellyfin.note_change(s, "Deleted")
                 log.info("cleanup_duplicate_strms: removed extra strm %s in %s", s.name, movie_dir.name)
                 cleaned += 1
             except Exception as exc:

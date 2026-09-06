@@ -2,7 +2,6 @@
 knew the outcome and kept it to itself.
 """
 import os
-import re
 import sys
 
 os.environ.setdefault("TORBOX_API_KEY", "test")
@@ -135,6 +134,19 @@ def test_failed_declines(seerr_env):
     assert seerr_env[1] == [("POST", "http://seerr.test/api/v1/request/42/decline", None)]
 
 
+def test_failed_decline_clears_the_webhook_dedup_key(seerr_env):
+    """Seerr has no un-decline, but a decline should not leave the 24h dedup
+    key behind either, or a later re-request for the same title is silently
+    swallowed as a duplicate until the key expires on its own."""
+    import seerr_report
+    db.upsert_media_item("tt0113277", "Heat", "movie", seerr_request_id=42)
+    key = "tt0113277:movie:"
+    assert db.webhook_seen(key) is False
+    assert db.webhook_seen(key) is True
+    assert seerr_report.on_failed("tt0113277", "no suitable stream found") is True
+    assert db.webhook_seen(key) is False
+
+
 def test_titles_without_a_seerr_request_are_skipped(seerr_env):
     import seerr_report
     assert seerr_report.on_success("tt0113277") is False
@@ -231,13 +243,26 @@ def test_media_request_carries_the_seerr_request_id():
     assert "seerr_request_id=" in src.split("def parse(", 1)[1]
 
 
+def test_failed_is_reported_only_when_no_retry_remains():
+    """Seerr has no un-decline: on_failed must run only once retry_queue.schedule
+    says no further attempt will fire, or a later successful retry leaves the
+    request declined forever."""
+    src = _src("processor.py")
+    locked = src.split("def _process_locked(", 1)[1]
+    failed = locked.split('db.update_request(row_id, "failed", error=reason)', 1)[1][:1100]
+    assert "will_retry = retry_queue.schedule(req, _retry_attempt)" in failed
+    assert "if not will_retry:" in failed
+    assert failed.index("retry_queue.schedule(req, _retry_attempt)") < \
+        failed.index("seerr_report.on_failed(req.imdb_id, reason)")
+
+
 def test_processor_persists_the_id_and_reports_both_outcomes():
     src = _src("processor.py")
     locked = src.split("def _process_locked(", 1)[1]
     assert "seerr_request_id=req.seerr_request_id" in locked.split("db.insert_request(", 1)[1][:600]
     success = locked.split("jellyfin.refresh_library()", 1)[1][:1500]
     assert "seerr_report.on_success(req.imdb_id)" in success
-    failed = locked.split('db.update_request(row_id, "failed", error=reason)', 1)[1][:800]
+    failed = locked.split('db.update_request(row_id, "failed", error=reason)', 1)[1][:1100]
     assert "seerr_report.on_failed(req.imdb_id, reason)" in failed
 
 

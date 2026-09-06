@@ -14,15 +14,18 @@ from webhook_parser import MediaRequest
 log = logging.getLogger(__name__)
 
 
-def schedule(req: MediaRequest, attempt: int) -> None:
-    """Enqueue a failed request for retry at the next backoff interval."""
+def schedule(req: MediaRequest, attempt: int) -> bool:
+    """Enqueue a failed request for retry at the next backoff interval.
+    Returns True when a retry was queued, False when this was the last
+    attempt and the request was given up on instead."""
     if attempt >= len(RETRY_BACKOFF_MINUTES):
         log.info("Retry: giving up on %s after %d attempts", req.title, attempt)
-        return
+        return False
     delay = RETRY_BACKOFF_MINUTES[attempt] * 60
     db.enqueue_retry(req.imdb_id, req.title, req.media_type, req.seasons, attempt + 1, delay)
     log.info("Retry: queued %s for attempt %d in %dmin",
              req.title, attempt + 1, RETRY_BACKOFF_MINUTES[attempt])
+    return True
 
 
 # A mutex miss means another worker holds this imdb right now. Re-queueing is
