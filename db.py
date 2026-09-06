@@ -668,7 +668,14 @@ def record_egress(token: str, byte_count: int) -> None:
 
 def egress_this_month() -> int:
     """Bytes served since the start of the current calendar month. TorBox's
-    bandwidth floors are monthly, so the window matches the policy."""
+    bandwidth floors are monthly, so the window matches the policy.
+
+    This sums every row in the window. That is fine while the proxy is rarely
+    in the byte path, which is the normal case: MKV titles redirect to the CDN
+    and report nothing, so only MP4s produce rows. If MP4s ever become common
+    here the sum gets expensive (measured: 454ms at 12M rows) and wants a
+    daily rollup table instead. See docs/SCALING.md for the measurements and
+    the trigger to watch."""
     with _connect() as conn:
         row = conn.execute(
             "SELECT COALESCE(SUM(bytes), 0) AS n FROM egress_log "

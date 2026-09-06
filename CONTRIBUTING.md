@@ -69,6 +69,10 @@ source change, or the image ships a stale UI.
   golden fixtures generated from the Python implementation
   (`spore-stream/testdata/generate.py`); if you change one side, regenerate
   and check the other.
+- `docs/SCALING.md` -- measured answers to "will this hold up": what the
+  database actually sustains, why the proxy is usually not in the byte path,
+  and which limits bind first. Read it before optimising anything on the
+  strength of intuition.
 - `filter_rules.py` -- the four-state release filter. Each category votes
   independently over the whole candidate pool, so behaviour does not depend
   on rule order.
