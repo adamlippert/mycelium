@@ -163,6 +163,39 @@ def test_stale_wanted_is_declined_once(seerr_env):
     assert db.get_wanted_movies()[0]["imdb_id"] == "tt0113277", "Mycelium keeps searching"
 
 
+def test_a_seerr_outage_leaves_the_stale_decline_for_the_next_sweep(seerr_env, monkeypatch):
+    import seerr
+    import seerr_report
+    db.upsert_media_item("tt0113277", "Heat", "movie", seerr_request_id=42)
+    db.upsert_wanted_movie("tt0113277", 949, "Heat", "nothing acceptable")
+    with db._connect() as conn:
+        conn.execute("UPDATE wanted_movies SET added_at = datetime('now', '-40 days')")
+        conn.commit()
+
+    def boom(*a, **k):
+        raise ConnectionError("down")
+
+    monkeypatch.setattr(seerr.requests, "post", boom)
+    assert seerr_report.report_stale_wanted() == 0
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        seerr_env[1].append(("POST", url, json))
+        return FakeResp(200, {"id": 1})
+
+    monkeypatch.setattr(seerr.requests, "post", fake_post)
+    assert seerr_report.report_stale_wanted() == 1
+
+
+def test_stale_wanted_without_a_seerr_id_is_marked_and_not_rescanned(seerr_env):
+    import seerr_report
+    db.upsert_wanted_movie("tt0113277", 949, "Heat", "nothing acceptable")
+    with db._connect() as conn:
+        conn.execute("UPDATE wanted_movies SET added_at = datetime('now', '-40 days')")
+        conn.commit()
+    assert seerr_report.report_stale_wanted() == 0
+    assert db.get_stale_wanted_movies(30) == []
+
+
 def test_stale_wanted_is_off_at_zero_days(seerr_env):
     import seerr_report
     seerr_env[0]["SEERR_DECLINE_WANTED_AFTER_DAYS"] = 0

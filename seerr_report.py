@@ -74,10 +74,15 @@ def report_stale_wanted() -> int:
         return 0
     declined = 0
     for row in db.get_stale_wanted_movies(days):
+        rid = _request_id(row["imdb_id"])
+        if rid is None:
+            # No Seerr id, ever: nothing to report, so mark it done rather
+            # than re-scanning the same unreportable row on every sweep.
+            db.mark_wanted_seerr_reported(row["imdb_id"])
+            continue
         if on_failed(row["imdb_id"], f"no acceptable release after {days} days"):
             declined += 1
-        # Mark it either way. A row with no Seerr id can never be reported,
-        # and a decline that failed on a Seerr outage is not worth retrying
-        # on every run for a title that is a month old already.
-        db.mark_wanted_seerr_reported(row["imdb_id"])
+            db.mark_wanted_seerr_reported(row["imdb_id"])
+        # Otherwise leave seerr_reported = 0: a Seerr outage today should not
+        # stop the decline from being retried on the next sweep.
     return declined
