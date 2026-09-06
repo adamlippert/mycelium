@@ -162,6 +162,7 @@ def _repair_strm(path: Path, run_id: int, mylist: list[dict]) -> str:
         log.warning("Could not resolve IMDB ID for '%s'; marking unfixable", title)
         try:
             path.unlink()
+            jellyfin.note_change(path, "Deleted")
             path.with_suffix(".nfo").unlink(missing_ok=True)
         except Exception:
             pass
@@ -186,6 +187,7 @@ def _repair_strm(path: Path, run_id: int, mylist: list[dict]) -> str:
         log.warning("No replacement candidates for '%s' (%s); deleting strm", title, imdb_id)
         try:
             path.unlink()
+            jellyfin.note_change(path, "Deleted")
             path.with_suffix(".nfo").unlink(missing_ok=True)
         except Exception:
             pass
@@ -225,6 +227,7 @@ def _repair_strm(path: Path, run_id: int, mylist: list[dict]) -> str:
             return "failed"
         try:
             path.unlink(missing_ok=True)
+            jellyfin.note_change(path, "Deleted")
             path.with_suffix(".nfo").unlink(missing_ok=True)
             strm_generator._delete_spore_stubs(path)
         except Exception:
@@ -241,6 +244,7 @@ def _repair_strm(path: Path, run_id: int, mylist: list[dict]) -> str:
     log.warning("All replacement candidates failed for '%s'; marking unfixable", title)
     try:
         path.unlink()
+        jellyfin.note_change(path, "Deleted")
         strm_generator._delete_spore_stubs(path)
     except Exception:
         pass
@@ -309,6 +313,7 @@ def _remove_duplicates(strm_files: list[Path], run_id: int) -> tuple[int, list[P
                 continue
             try:
                 dup.unlink()
+                jellyfin.note_change(dup, "Deleted")
                 # Remove the sibling NFO sidecar so the folder can be emptied  -
                 # otherwise the leftover .nfo keeps the (now media-less) folder
                 # alive and Jellyfin may retain a ghost entry for it.
@@ -884,7 +889,7 @@ def _run_cleanup_locked() -> None:
 
     if changed:
         strm_generator.run_and_refresh()
-        jellyfin.refresh_library()
+        jellyfin.refresh_library(full=True)
 
 
 # Artwork and metadata that Mycelium (via nfo_generator) writes beside the
@@ -971,6 +976,7 @@ def purge_title(imdb_id: str, row_id: int | None = None) -> dict:
                 if path.exists():
                     path.unlink()
                     result["strms"] += 1
+                    jellyfin.note_change(path, "Deleted")
                 path.with_suffix(".nfo").unlink(missing_ok=True)
                 # The episode still. Without it the season folder never empties,
                 # so the show keeps its folder and Jellyfin keeps showing it.

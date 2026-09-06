@@ -152,6 +152,7 @@ HOT_RELOAD = {
     "TORBOX_BASE_URL",
     "JELLYFIN_URL",
     "JELLYFIN_API_KEY",
+    "JELLYFIN_MEDIA_PATH",
     "SEERR_URL",
     "SEERR_API_KEY",
     "TMDB_API_KEY",
@@ -234,7 +235,7 @@ SETTING_GROUPS = [
         "title": "Connections",
         "keys": [
             "TORBOX_API_KEY", "TORBOX_BASE_URL",
-            "JELLYFIN_URL", "JELLYFIN_API_KEY",
+            "JELLYFIN_URL", "JELLYFIN_API_KEY", "JELLYFIN_MEDIA_PATH",
             "SEERR_URL", "SEERR_API_KEY",
             "TMDB_API_KEY",
             "DEBRIDIO_ENABLED", "DEBRIDIO_API_KEY", "DEBRIDIO_BASE_URL",

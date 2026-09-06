@@ -56,6 +56,10 @@ DEBRIDIO_CONFIG_TOKEN = _env("DEBRIDIO_CONFIG_TOKEN", "")
 
 JELLYFIN_URL = _env("JELLYFIN_URL", "")
 JELLYFIN_API_KEY = _env("JELLYFIN_API_KEY", "")
+# The path at which the Jellyfin container sees MEDIA_PATH. Blank means the
+# two containers mount the media at the same path. Used to translate the
+# paths in targeted refresh calls (/Library/Media/Updated).
+JELLYFIN_MEDIA_PATH = _env("JELLYFIN_MEDIA_PATH", "")
 
 SEERR_URL = _env("SEERR_URL", "")
 SEERR_API_KEY = _env("SEERR_API_KEY", "")

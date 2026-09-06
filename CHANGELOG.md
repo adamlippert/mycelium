@@ -15,6 +15,13 @@ All notable changes to Mycelium are documented in this file.
   Maintainerr and deletions made in Jellyfin no longer leave rows, monitoring
   and dedup keys behind.
 
+### Changed
+
+- Jellyfin is told which paths changed (`/Library/Media/Updated`) after adds,
+  upgrades and purges instead of being asked for a full library scan. The
+  cleanup job still requests a full scan. `JELLYFIN_MEDIA_PATH` translates
+  paths when the two containers mount the media differently.
+
 ## [0.13.0] - 2026-09-04
 
 ### Added

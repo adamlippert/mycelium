@@ -1565,6 +1565,7 @@ def _write_strm(path: Path, url: str) -> bool:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(url, encoding='utf-8')
+        jellyfin.note_change(path, "Created")
         log.info("Created .strm: %s", path)
         return True
     except Exception as exc:

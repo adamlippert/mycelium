@@ -66,3 +66,25 @@ removal back into a loop. `Test` events return `ignored` too, so the arr's
 Deleting a single **episode** in Jellyfin removes that `.strm` file (Jellyfin
 has the rights to do so) but is not a title deletion, so it is ignored here;
 the repair job may regenerate the file. Delete the series instead.
+
+## Jellyfin: targeted refresh
+
+After an add, an upgrade or a purge, Mycelium now tells Jellyfin exactly
+which files changed (`POST /Library/Media/Updated`) instead of asking for a
+full library scan. New titles appear within seconds and a large library is
+no longer rescanned on every request. The full scan is still used by the
+cleanup job, which renames and merges folders, and as a fallback whenever
+the targeted call fails.
+
+If Jellyfin mounts the media at a different path than Mycelium does, set
+`JELLYFIN_MEDIA_PATH` to Jellyfin's path (Settings > Connections). Blank
+means both containers use the same path, which is what the compose in this
+repo does.
+
+**Autopulse** is redundant for a Mycelium library once this is in place; you
+can keep it for other sources.
+
+While you are in Jellyfin's library settings for the Mycelium library: turn
+**off** Trickplay, chapter image extraction and intro detection for that
+library. Each of those opens every file, which for a `.strm` means pulling
+the whole title through the TorBox CDN and resetting its retention clock.

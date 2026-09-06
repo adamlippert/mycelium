@@ -14,6 +14,13 @@ _REFRESH_DEBOUNCE_SEC = 60
 _refresh_lock = threading.Lock()
 _last_refresh_ts = 0.0
 
+# Paths written or removed since the last refresh. When refresh_library() has
+# any, it sends them to /Library/Media/Updated (a path-scoped refresh) instead
+# of asking for a full library scan. Ordered, deduplicated on (path, type).
+_pending_lock = threading.Lock()
+_pending: dict[tuple[str, str], None] = {}
+_TARGETED_BATCH = 200
+
 
 def _jf_headers() -> dict:
     JELLYFIN_API_KEY = settings.get("JELLYFIN_API_KEY")
@@ -21,6 +28,52 @@ def _jf_headers() -> dict:
     if JELLYFIN_API_KEY:
         h["X-Emby-Token"] = JELLYFIN_API_KEY
     return h
+
+
+def note_change(path, update_type: str) -> None:
+    """Record that a path was Created, Modified or Deleted, for the next refresh."""
+    if update_type not in ("Created", "Modified", "Deleted"):
+        raise ValueError(f"bad UpdateType {update_type!r}")
+    with _pending_lock:
+        _pending[(str(path), update_type)] = None
+
+
+def pending_count() -> int:
+    with _pending_lock:
+        return len(_pending)
+
+
+def _take_pending() -> list[tuple[str, str]]:
+    with _pending_lock:
+        items = list(_pending)
+        _pending.clear()
+    return items
+
+
+def _map_path(path: str) -> str:
+    """Translate a Mycelium path into the path Jellyfin's container sees."""
+    import config
+    target = (settings.get("JELLYFIN_MEDIA_PATH", "") or "").strip().rstrip("/")
+    if not target:
+        return path
+    source = config.MEDIA_PATH.rstrip("/")
+    if path == source or path.startswith(source + "/"):
+        return target + path[len(source):]
+    return path
+
+
+def _post_targeted(base: str, items: list[tuple[str, str]], timeout: int) -> bool:
+    """POST /Library/Media/Updated in batches. False on the first failure."""
+    url = f"{base}/Library/Media/Updated"
+    for start in range(0, len(items), _TARGETED_BATCH):
+        chunk = items[start:start + _TARGETED_BATCH]
+        body = {"Updates": [{"Path": _map_path(p), "UpdateType": t} for p, t in chunk]}
+        resp = requests.post(url, headers=_jf_headers(), json=body, timeout=timeout)
+        if resp.status_code >= 400:
+            log.error("Jellyfin targeted refresh failed: %s %s", resp.status_code, resp.text[:200])
+            return False
+    log.info("Jellyfin targeted refresh: %d path(s)", len(items))
+    return True
 
 
 def is_scanning(timeout: int = 10) -> bool:
@@ -39,20 +92,35 @@ def is_scanning(timeout: int = 10) -> bool:
     return any(t.get("Category") == "Library" and t.get("State") == "Running" for t in tasks)
 
 
-def refresh_library(timeout: int = 30, force: bool = False) -> bool:
-    """Trigger a Jellyfin library scan, unless one was already triggered in the
-    last _REFRESH_DEBOUNCE_SEC or Jellyfin reports a scan already in progress.
+def refresh_library(timeout: int = 30, force: bool = False, full: bool = False) -> bool:
+    """Tell Jellyfin what changed.
 
-    force=True skips the debounce. The debounce protects Jellyfin from the burst
-    of refreshes that bulk .strm generation would otherwise produce; a scan
-    asked for by a person acting on one title must never be dropped, because
-    the visible result of dropping it is a title that looks like it was not
-    removed at all."""
+    If paths were noted with note_change() since the last call, they are sent
+    to /Library/Media/Updated, which refreshes only those paths. That is cheap
+    enough to skip the debounce. If the targeted call fails, or nothing was
+    noted, or full=True (the cleanup run, which renames and merges folders it
+    cannot itemise), this falls back to a full /Library/Refresh scan.
+
+    The full scan keeps its debounce (_REFRESH_DEBOUNCE_SEC) and its
+    is-scanning check unless force=True. force exists for a person acting on
+    one title: a dropped scan there looks like the title was never removed."""
     JELLYFIN_URL = settings.get("JELLYFIN_URL")
-    JELLYFIN_API_KEY = settings.get("JELLYFIN_API_KEY")
     if not JELLYFIN_URL:
+        # Drop what was noted, or the list grows for the life of the process
+        # on an install that has no Jellyfin.
+        _take_pending()
         log.warning("JELLYFIN_URL not set; skipping library refresh")
         return False
+    base = JELLYFIN_URL.rstrip("/")
+    pending = _take_pending()
+    if pending and not full:
+        try:
+            if _post_targeted(base, pending, timeout):
+                return True
+        except Exception as exc:
+            log.warning("Jellyfin targeted refresh error: %s", exc)
+        # Fall through: the paths are consumed, so a full scan must cover them.
+        force = True
     with _refresh_lock:
         global _last_refresh_ts
         now = time.monotonic()
@@ -62,12 +130,9 @@ def refresh_library(timeout: int = 30, force: bool = False) -> bool:
         if not force and is_scanning(timeout=min(timeout, 10)):
             log.info("Jellyfin refresh skipped: a scan is already running")
             return False
-        url = f"{JELLYFIN_URL.rstrip('/')}/Library/Refresh"
-        headers = {}
-        if JELLYFIN_API_KEY:
-            headers["X-Emby-Token"] = JELLYFIN_API_KEY
+        url = f"{base}/Library/Refresh"
         log.info("Triggering Jellyfin library refresh: %s", url)
-        resp = requests.post(url, headers=headers, timeout=timeout)
+        resp = requests.post(url, headers=_jf_headers(), timeout=timeout)
         if resp.status_code >= 400:
             log.error("Jellyfin refresh failed: %s %s", resp.status_code, resp.text[:200])
             return False
