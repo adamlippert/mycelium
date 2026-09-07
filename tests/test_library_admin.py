@@ -178,3 +178,40 @@ def test_the_routes_exist_and_are_admin_only():
         assert "auth.is_admin()" in body and "library_admin" in body
     body = src.split('@app.get("/ui/api/library")', 1)[1].split("\n\n\n", 1)[0]
     assert 'request.args.getlist("status")' in body
+
+
+def test_title_detail_gathers_every_record(seeded):
+    db.log_activity("added", "Heat", "movie", True, imdb_id="tt1")
+    db.upsert_show_override("tt1", "1080p", True, False, "keep small")
+    d = la.title_detail("tt1")
+    assert d["request"]["imdb_id"] == "tt1"
+    assert d["items"][0]["token"] == "t1" and d["items"][0]["torbox_id"] == 5
+    assert d["user_requests"][0]["username"] == "adam"
+    assert d["override"]["quality_preference"] == "1080p"
+    assert d["hashes"][0]["info_hash"] == "h" and d["hashes"][0]["blacklisted"] is False
+    assert d["activity"][0]["event"] == "added"
+    assert d["arr"]["mirrored_at"] is not None
+    assert d["retry"] is None and d["playability"] == [] and d["episodes"] is None
+    assert la.title_detail("tt404") is None
+
+
+def test_series_detail_summarises_seasons_and_lists_episodes(seeded):
+    with db._connect() as conn:
+        for ep in (1, 2):
+            conn.execute("INSERT INTO virtual_items (token, info_hash, magnet, title, media_type, strm_path, imdb_id, season, episode) "
+                         "VALUES (?, 'h', 'm', 'Loki', 'series', ?, 'tt4', 2, ?)", (f"e{ep}", f"/s/e{ep}.strm", ep))
+        conn.commit()
+    d = la.title_detail("tt4")
+    assert d["episodes"] == [{"season": 2, "present": 2, "wanted": 1}]
+    eps = la.season_episodes("tt4", 2)
+    assert [(e["episode"], e["present"], e["wanted_status"]) for e in eps] == [(1, True, None), (2, True, None), (3, False, "wanted")]
+    assert eps[2]["air_date"] == "2024-01-01"
+
+
+def test_detail_routes_exist():
+    src = _src("app.py")
+    for route in ('@app.get("/ui/api/library/<imdb_id>")', '@app.get("/ui/api/library/<imdb_id>/season/<int:season>")',
+                  '@app.get("/ui/api/library/<imdb_id>/activity")'):
+        assert route in src, route
+        body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
+        assert "auth.is_admin()" in body

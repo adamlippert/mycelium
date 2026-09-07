@@ -172,3 +172,58 @@ def view_counts() -> dict[str, int]:
         for view in VIEWS:
             out[view] = conn.execute(f"SELECT COUNT(*) FROM ({_BASE}) t WHERE {_VIEW_WHERE[view]}").fetchone()[0]
     return out
+
+
+def _seasons_summary(imdb_id: str) -> list[dict]:
+    with db._connect() as conn:
+        present = {r["season"]: r["n"] for r in conn.execute(
+            "SELECT season, COUNT(*) AS n FROM virtual_items WHERE imdb_id = ? AND season IS NOT NULL GROUP BY season",
+            (imdb_id,))}
+        wanted = {r["season"]: r["n"] for r in conn.execute(
+            "SELECT season, COUNT(*) AS n FROM wanted_episodes WHERE imdb_id = ? AND status = 'wanted' GROUP BY season",
+            (imdb_id,))}
+    return [{"season": s, "present": present.get(s, 0), "wanted": wanted.get(s, 0)}
+            for s in sorted(set(present) | set(wanted))]
+
+
+def title_detail(imdb_id: str) -> dict | None:
+    req = db.get_request_by_imdb(imdb_id)
+    if not req:
+        return None
+    is_series = req["media_type"] != "movie"
+    items = db.get_virtual_items_by_imdb(imdb_id)
+    return {
+        "request": req,
+        "items": [{k: i.get(k) for k in ("token", "info_hash", "strm_path", "torbox_id", "last_played",
+                                         "play_count", "season", "episode", "debrid_provider", "quality")}
+                  for i in items],
+        "playability": db.get_playability_for_title(imdb_id),
+        "episodes": _seasons_summary(imdb_id) if is_series else None,
+        "monitored": db.get_monitored_series_by_imdb(imdb_id) if is_series else None,
+        "retry": db.get_retry_by_imdb(imdb_id),
+        "wanted_movie": None if is_series else db.get_wanted_movie(imdb_id),
+        "user_requests": db.get_user_requests_for_title(imdb_id),
+        "seerr_request_id": db.get_seerr_request_id(imdb_id),
+        "override": db.get_show_override(imdb_id),
+        "hashes": db.get_hashes_for_title(imdb_id),
+        "activity": db.get_activity_for_title(imdb_id, req.get("title")),
+        "arr": {"mirrored_at": req.get("arr_mirrored_at")},
+    }
+
+
+def season_episodes(imdb_id: str, season: int) -> list[dict]:
+    with db._connect() as conn:
+        present = {r["episode"]: dict(r) for r in conn.execute(
+            "SELECT episode, token, strm_path FROM virtual_items WHERE imdb_id = ? AND season = ? AND episode IS NOT NULL",
+            (imdb_id, season))}
+    wanted = {w["episode"]: w for w in db.get_wanted_episodes_for_title(imdb_id) if w["season"] == season}
+    out = []
+    for ep in sorted(set(present) | set(wanted)):
+        p, w = present.get(ep), wanted.get(ep)
+        out.append({"season": season, "episode": ep, "present": p is not None,
+                    "strm_path": p["strm_path"] if p else None, "token": p["token"] if p else None,
+                    "wanted_status": w["status"] if w else None,
+                    "attempt_count": w["attempt_count"] if w else 0,
+                    "air_date": w["air_date"] if w else None,
+                    "last_attempted": w["last_attempted"] if w else None})
+    return out

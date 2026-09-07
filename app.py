@@ -2010,6 +2010,34 @@ def ui_api_library_views():
     return jsonify(library_admin.view_counts())
 
 
+@app.get("/ui/api/library/<imdb_id>")
+def ui_api_library_detail(imdb_id: str):
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import library_admin
+    d = library_admin.title_detail(imdb_id)
+    if d is None:
+        return jsonify(error="not found"), 404
+    return jsonify(d)
+
+
+@app.get("/ui/api/library/<imdb_id>/season/<int:season>")
+def ui_api_library_season(imdb_id: str, season: int):
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import library_admin
+    return jsonify(episodes=library_admin.season_episodes(imdb_id, season))
+
+
+@app.get("/ui/api/library/<imdb_id>/activity")
+def ui_api_library_activity(imdb_id: str):
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    req = db.get_request_by_imdb(imdb_id)
+    before = request.args.get("before", type=int)
+    return jsonify(activity=db.get_activity_for_title(imdb_id, (req or {}).get("title"), limit=20, before_id=before))
+
+
 _NOTIFICATION_KEYS = {"NOTIFY_ON_SUCCESS", "NOTIFY_ON_FAILURE",
                       "DISCORD_WEBHOOK_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"}
 
