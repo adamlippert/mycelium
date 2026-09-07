@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.14.4",
+    "date": "2026-09-07",
+    "notes": [
+      "A root folder picked in Settings > Radarr / Sonarr now takes effect immediately instead of after a restart",
+      "The delete webhook checks ownership locally first, so Jellyfin deletions in other libraries no longer cost a TMDB lookup",
+      "The Radarr/Sonarr reconcile job reports already-present titles separately from adds, and arr calls time out after 8 seconds"
+    ]
+  },
+  {
     "version": "0.14.3",
     "date": "2026-09-07",
     "notes": [
