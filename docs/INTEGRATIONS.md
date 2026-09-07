@@ -19,9 +19,9 @@ What this gives you:
 
 What to expect:
 
-- The arrs **never import `.strm` files**, so every mirrored title shows as
-  **Missing** in Radarr/Sonarr. That is cosmetic. Do not "fix" it by giving
-  the arr a download client.
+- The arrs **never import `.strm` files**. Without the stub tree below,
+  every mirrored title shows as **Missing**; that is cosmetic. Do not "fix"
+  it by giving the arr a download client.
 - Give the arrs **no download client**. Radarr logs a "no download client is
   available" health warning; ignore it.
 - Root folder: blank means the arr's first root folder. Settings > Radarr /
@@ -32,6 +32,43 @@ What to expect:
 - Mycelium sends `imdb:` lookups; for a movie it also falls back to a `tmdb:`
   lookup when one is known, and for a series Sonarr cannot find that way it
   resolves the TVDB id through TMDB and retries.
+
+### Stub files (so titles show as owned)
+
+Turn on `ARR_STUBS_ENABLED` and Mycelium writes a tiny fake `.mkv` per title
+into a folder tree the arrs scan as their root folder. Radarr and Sonarr
+then show the title with a file and the quality Mycelium found, Maintainerr's
+"delete files" has something to delete, and calendar widgets show the title
+as owned. The stubs are a few kilobytes: a valid MKV header with a runtime
+and no video, the same trick Mycelium Spore uses for Plex.
+
+Setup, once:
+
+1. Create a host folder, for example `/opt/mycelium/arr-stubs`, owned by the
+   same `PUID:PGID` as Mycelium.
+2. Mount it into three containers: Mycelium at `ARR_STUB_PATH` (default
+   `/arr-stubs`), Radarr and Sonarr anywhere, for example `/mycelium`.
+3. In Radarr add `/mycelium/movies` as a root folder, in Sonarr
+   `/mycelium/series`, then pick them in Settings > Radarr / Sonarr with the
+   Load folders buttons.
+4. Set `ARR_STUBS_ENABLED=true`. The six-hourly reconcile fills the tree for
+   every title already in the library; new titles get their stub as they are
+   added.
+
+What to expect:
+
+- Names are truthful: `Heat (1995) - WEBDL-1080p.mkv` is what Mycelium
+  found. Titles below your profile cutoff appear under Cutoff Unmet, which is
+  harmless with search off and no download client; the stub is rewritten
+  when Mycelium upgrades the title.
+- Mycelium writes into the folder the arr chose, so your folder naming
+  format is respected, and marks each folder with a `.mycelium` file. It
+  only ever deletes folders carrying that marker.
+- Deleting the file in Radarr (or Maintainerr with "delete files") removes
+  the title from Mycelium, like deleting the movie. Deleting a single
+  episode file in Sonarr does nothing; delete the series.
+- The health card shows "Arr stubs: not mounted" when the folder is missing
+  inside the Mycelium container.
 
 ## Delete webhooks
 

@@ -2,6 +2,16 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Stub files for Radarr and Sonarr (`ARR_STUBS_ENABLED`): a tiny fake
+  `.mkv` per title in a folder the arrs scan as their root, so mirrored
+  titles show as owned with the quality Mycelium found instead of Missing.
+  Maintainerr's "delete files" and a manual file delete in Radarr now remove
+  the title from Mycelium. A health row reports a missing mount.
+
 ## [0.14.4] - 2026-09-07
 
 ### Fixed
