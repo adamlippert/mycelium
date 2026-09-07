@@ -304,8 +304,10 @@ def _ensure(imdb_id: str, media_type: str, tmdb_id: int | None, title: str) -> s
 
 
 def _ensure_with_stubs(imdb_id: str, media_type: str, tmdb_id: int | None,
-                       title: str) -> tuple[str, int]:
-    """(state, stubs written)."""
+                       title: str, write_stubs: bool = True) -> tuple[str, int]:
+    """(state, stubs written). write_stubs=False lets a caller (reconcile,
+    when the stub root turned out unmounted for this run) suppress stub
+    writes without touching the ARR_STUBS_ENABLED setting itself."""
     if not is_enabled() or not imdb_id:
         return "skipped", 0
     try:
@@ -316,7 +318,7 @@ def _ensure_with_stubs(imdb_id: str, media_type: str, tmdb_id: int | None,
     except Exception as exc:
         log.warning("Arr sync: add of %s failed: %s", imdb_id, exc)
         return "failed", 0
-    stubs = _write_stubs(imdb_id, media_type, arr_obj) if state in ("added", "present") else 0
+    stubs = _write_stubs(imdb_id, media_type, arr_obj) if write_stubs and state in ("added", "present") else 0
     return state, stubs
 
 
@@ -341,24 +343,40 @@ def mirror_remove(imdb_id: str, media_type: str, tmdb_id: int | None = None) -> 
 
 
 def reconcile() -> dict:
-    """Add every successful Mycelium title the arrs lack, and backfill any
-    stub the arr entry has but the stub tree does not. Never removes from
-    the arrs: they may hold titles Mycelium does not own. Scheduled."""
+    """Add every successful Mycelium title the arrs lack, and write stubs
+    for it: a title the listing already shows the arr holds gets its stub
+    straight from that listing entry (no lookup call needed); a title
+    Mycelium finds unknown goes through _ensure_with_stubs, which adds or
+    matches it in the arr first. Never removes from the arrs: they may
+    hold titles Mycelium does not own. Scheduled."""
     out = {"checked": 0, "added": 0, "present": 0, "failed": 0, "skipped": 0, "stubs": 0}
     if not is_enabled():
         return out
     import radarr
     import sonarr
-    have: dict[str, set] = {"movie": set(), "series": set()}
+    stubs_enabled = _stubs_enabled()
+    if stubs_enabled:
+        import arr_stubs
+        ok, note = arr_stubs.root_status()
+        if not ok:
+            log.warning("Arr stubs: %s", note)
+            stubs_enabled = False
+    have: dict[str, dict] = {"movie": {}, "series": {}}
     r_base, r_key = _conn("radarr")
     s_base, s_key = _conn("sonarr")
     try:
         if r_base and r_key:
             for m in radarr.list_movies(r_base, r_key):
-                have["movie"].update(x for x in (m.get("imdb_id"), m.get("tmdb_id")) if x)
+                entry = {"id": m.get("id"), "path": m.get("path")}
+                for k in (m.get("imdb_id"), m.get("tmdb_id")):
+                    if k:
+                        have["movie"][k] = entry
         if s_base and s_key:
             for s in sonarr.list_series(s_base, s_key):
-                have["series"].update(x for x in (s.get("imdb_id"), s.get("tmdb_id")) if x)
+                entry = {"id": s.get("id"), "path": s.get("path")}
+                for k in (s.get("imdb_id"), s.get("tmdb_id")):
+                    if k:
+                        have["series"][k] = entry
     except Exception as exc:
         log.warning("Arr sync: reconcile could not list the arrs: %s", exc)
         return out
@@ -368,15 +386,23 @@ def reconcile() -> dict:
             continue
         out["checked"] += 1
         kind = "movie" if row["media_type"] == "movie" else "series"
-        known = row["imdb_id"] in have[kind] or (row.get("tmdb_id") and row["tmdb_id"] in have[kind])
-        if known and not _stubs_enabled():
+        entry = have[kind].get(row["imdb_id"]) or (row.get("tmdb_id") and have[kind].get(row["tmdb_id"]))
+        if entry is not None:
+            if not stubs_enabled:
+                # Known already and nothing to write: the old short-circuit,
+                # unaffected by whether the listing carried id/path.
+                continue
+            # Counts a title the listing already showed the arr holds.
+            out["present"] += 1
+            if entry.get("id") and entry.get("path"):
+                out["stubs"] += _write_stubs(row["imdb_id"], row["media_type"], entry)
             continue
         state, stubs = _ensure_with_stubs(row["imdb_id"], row["media_type"], row.get("tmdb_id"),
-                                          row.get("title") or "")
+                                          row.get("title") or "", write_stubs=stubs_enabled)
         out["stubs"] += stubs
         if state == "present":
-            # In the arr under an id the listing did not carry (Sonarr with
-            # no imdb/tmdb for the series); not an add.
+            # Counts a title the listing missed (Sonarr with no imdb/tmdb
+            # for the series) but the arr lookup found already added.
             out["present"] += 1
         elif state == "added":
             out["added"] += 1

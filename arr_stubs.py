@@ -7,16 +7,18 @@ Segment Duration from the TMDB runtime so MediaInfo reports a runtime and
 the arrs' sample detection accepts it. The file name carries the quality
 Mycelium actually found (truthful naming), which the arrs parse.
 
-Mycelium writes into the folder the arr chose for the title (its naming
-format is respected) and marks each folder with a `.mycelium` file holding
-the imdb id, so removal can find the folder even if the arr renamed it or
-is unreachable. Nothing here raises into the pipeline.
+Mycelium writes into the folder the arr chose for the title: the arr's
+naming format is respected for the title folder, and season subfolders
+follow Mycelium's `.strm` layout. Each folder is marked with a `.mycelium`
+file holding the imdb id, so removal can find the folder even if the arr
+renamed it or is unreachable. Nothing here raises into the pipeline.
 
 Paths: ARR_STUB_PATH is Mycelium's mount of the shared folder; the arr's
 mount of <ARR_STUB_PATH>/movies and /series is RADARR_ROOT_FOLDER and
 SONARR_ROOT_FOLDER. local_dir() translates one into the other.
 """
 import logging
+import re
 import shutil
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -29,6 +31,9 @@ log = logging.getLogger(__name__)
 
 MARKER = ".mycelium"
 _IGNORE = ".ignore"
+_STUB_MAGIC = b"\x1a\x45\xdf\xa3"
+_STUB_MAX_SIZE = 64 * 1024
+_SXXEXX = re.compile(r"S\d{1,2}E\d{1,3}")
 
 # release_tags source -> the arr's quality source word. Anything else is
 # left off and the resolution alone is used, which the arrs still parse.
@@ -48,25 +53,32 @@ def is_enabled() -> bool:
 
 
 def _root() -> Path:
-    return Path((_settings.get("ARR_STUB_PATH", "/arr-stubs") or "/arr-stubs").strip())
+    raw = (_settings.get("ARR_STUB_PATH", "/arr-stubs") or "").strip()
+    return Path(raw or "/arr-stubs")
 
 
 def root_status() -> tuple[bool, str]:
     """(ok, note). The mount point is never created by Mycelium: a missing
     directory means the bind mount is absent, and creating it would hide
-    that behind an empty tree the arrs cannot see. Both arr root folders
-    are required too: with one left blank, that arr was never pointed at
-    the stub tree, so its titles would keep showing Missing."""
+    that behind an empty tree the arrs cannot see. Stubs are built from
+    catbox virtual items, so CATBOX_MODE is required too. A root folder is
+    only required for an arr that is actually configured (its URL setting
+    is non-blank): a single-arr deployment must not be locked out because
+    the other arr's root folder was never set."""
     root = _root()
+    if not root.is_absolute():
+        return False, f"{root} is not an absolute path"
     if not root.is_dir():
         return False, f"{root} not mounted"
     try:
         (root / _IGNORE).touch(exist_ok=True)
     except OSError as exc:
         return False, f"{root} not writable: {exc}"
-    if not (_settings.get("RADARR_ROOT_FOLDER", "") or "").strip():
+    if not _settings.get("CATBOX_MODE", False):
+        return False, "stub files need CATBOX_MODE (they are built from virtual items)"
+    if (_settings.get("RADARR_URL", "") or "").strip() and not (_settings.get("RADARR_ROOT_FOLDER", "") or "").strip():
         return False, "RADARR_ROOT_FOLDER not set"
-    if not (_settings.get("SONARR_ROOT_FOLDER", "") or "").strip():
+    if (_settings.get("SONARR_URL", "") or "").strip() and not (_settings.get("SONARR_ROOT_FOLDER", "") or "").strip():
         return False, "SONARR_ROOT_FOLDER not set"
     return True, str(root)
 
@@ -121,11 +133,15 @@ def _release_name(magnet: str) -> str:
         return ""
 
 
-def _duration(imdb_id: str, item: dict) -> float:
+def _resolve_duration(imdb_id: str, kind: str, items: list[dict]) -> float:
+    """One TMDB lookup per write_title() call, reused for every stub it
+    writes: a movie's runtime, or a series' first item's episode runtime.
+    Per-item TMDB calls would make reconcile (one write_title per title)
+    uncached and expensive."""
     import tmdb
     try:
-        season, episode = item.get("season"), item.get("episode")
-        if season and episode:
+        if kind == "series" and items:
+            season, episode = items[0].get("season"), items[0].get("episode")
             dur = tmdb.get_episode_runtime_sec(imdb_id, season, episode)
         else:
             dur = tmdb.get_movie_runtime_sec(imdb_id)
@@ -134,6 +150,40 @@ def _duration(imdb_id: str, item: dict) -> float:
     except Exception as exc:
         log.debug("Arr stubs: runtime lookup for %s failed: %s", imdb_id, exc)
     return 7200.0
+
+
+def _looks_like_our_stub(path: Path) -> bool:
+    """True when path is small and starts with the EBML magic Mycelium (and
+    Spore) write stub MKVs with. Used to keep the stale-stub sweep from ever
+    touching a real file in a misconfigured root. False on any OSError."""
+    try:
+        if path.stat().st_size >= _STUB_MAX_SIZE:
+            return False
+        with path.open("rb") as f:
+            return f.read(4) == _STUB_MAGIC
+    except OSError:
+        return False
+
+
+def _equivalent(target_dir: Path, stem: str, tag: str) -> Path | None:
+    """An existing stub in target_dir that already represents this title
+    (possibly renamed by the arr's "Rename Files"): one of our stubs whose
+    name carries the wanted quality tag and, for an episode, the same
+    SxxExx token as the strm stem. None when nothing matches, so the
+    caller writes a fresh one."""
+    if not target_dir.is_dir():
+        return None
+    ep_match = _SXXEXX.search(stem)
+    ep_token = ep_match.group(0) if ep_match else None
+    for candidate in target_dir.glob("*.mkv"):
+        if not _looks_like_our_stub(candidate):
+            continue
+        if tag not in candidate.name:
+            continue
+        if ep_token and ep_token not in candidate.name:
+            continue
+        return candidate
+    return None
 
 
 def write_title(imdb_id: str, media_type: str, arr_path: str) -> int:
@@ -151,12 +201,15 @@ def write_title(imdb_id: str, media_type: str, arr_path: str) -> int:
     if folder is None:
         log.warning("Arr stubs: %s is outside the %s root folder; skipping %s", arr_path, kind, imdb_id)
         return 0
+    import strm_generator
     try:
-        items = [i for i in db.get_virtual_items_by_imdb(imdb_id) if i.get("strm_path")]
+        items = [i for i in db.get_virtual_items_by_imdb(imdb_id)
+                if i.get("strm_path") and Path(i["strm_path"]).exists()]
     except Exception as exc:
         log.warning("Arr stubs: could not read virtual items for %s: %s", imdb_id, exc)
         return 0
     if not items:
+        log.debug("Arr stubs: no virtual items for %s; nothing to write", imdb_id)
         return 0
     try:
         req = db.get_request_by_imdb(imdb_id) or {}
@@ -164,6 +217,7 @@ def write_title(imdb_id: str, media_type: str, arr_path: str) -> int:
         log.warning("Arr stubs: could not read request for %s: %s", imdb_id, exc)
         return 0
     title = req.get("title") or items[0].get("title") or imdb_id
+    duration = _resolve_duration(imdb_id, kind, items)
     written = 0
     wanted: dict[Path, set[str]] = {}
     for item in items:
@@ -176,15 +230,21 @@ def write_title(imdb_id: str, media_type: str, arr_path: str) -> int:
         target_dir = folder
         if kind == "series" and strm.parent.name.lower().startswith("season"):
             target_dir = folder / strm.parent.name
-        wanted.setdefault(target_dir, set()).add(stub_name(strm, tag))
         target = target_dir / stub_name(strm, tag)
         if target.exists():
+            wanted.setdefault(target_dir, set()).add(target.name)
             continue
+        existing = _equivalent(target_dir, strm.stem, tag)
+        if existing is not None:
+            # Already present, possibly under a name the arr's own "Rename
+            # Files" gave it: keep it, do not rewrite it on every reconcile.
+            wanted.setdefault(target_dir, set()).add(existing.name)
+            continue
+        wanted.setdefault(target_dir, set()).add(target.name)
         try:
             target_dir.mkdir(parents=True, exist_ok=True)
-            import strm_generator
             target.write_bytes(strm_generator.make_stub_mkv(
-                title, quality, duration_sec=_duration(imdb_id, item)))
+                title, quality, duration_sec=duration))
             written += 1
         except Exception as exc:
             log.warning("Arr stubs: could not write %s: %s", target, exc)
@@ -194,11 +254,16 @@ def write_title(imdb_id: str, media_type: str, arr_path: str) -> int:
         log.warning("Arr stubs: could not mark %s: %s", folder, exc)
     for target_dir, names in wanted.items():
         for stale in target_dir.glob("*.mkv"):
-            if stale.name not in names:
-                try:
-                    stale.unlink()
-                except OSError as exc:
-                    log.warning("Arr stubs: could not remove stale %s: %s", stale, exc)
+            if stale.name in names:
+                continue
+            if not _looks_like_our_stub(stale):
+                # Not one of ours (a real file in a misconfigured root, or
+                # anything else): never touch it.
+                continue
+            try:
+                stale.unlink()
+            except OSError as exc:
+                log.warning("Arr stubs: could not remove stale %s: %s", stale, exc)
     if written:
         log.info("Arr stubs: wrote %d stub(s) for %s in %s", written, imdb_id, folder)
     return written
@@ -216,6 +281,9 @@ def remove_title(media_type: str, imdb_id: str, arr_path: str | None = None) -> 
     with this imdb id are touched, so a foreign folder under the same name
     survives. Returns folders removed."""
     if not is_enabled():
+        return 0
+    if not _root().is_absolute():
+        log.warning("Arr stubs: %s is not an absolute path", _root())
         return 0
     kind = _kind(media_type)
     candidates: list[Path] = []

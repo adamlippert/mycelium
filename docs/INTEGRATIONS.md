@@ -42,6 +42,9 @@ then show the title with a file and the quality Mycelium found, Maintainerr's
 as owned. The stubs are a few kilobytes: a valid MKV header with a runtime
 and no video, the same trick Mycelium Spore uses for Plex.
 
+Needs `CATBOX_MODE=true`; the stubs are built from Mycelium's virtual
+items.
+
 Setup, once:
 
 1. Create a host folder, for example `/opt/mycelium/arr-stubs`, owned by the
@@ -81,8 +84,11 @@ secret as the Seerr webhook: send it as the `X-Webhook-Secret` header
 (preferred) or as `?secret=` in the URL.
 
 **Radarr** Settings > Connect > Webhook: URL as above, method POST, tick
-**On Movie Delete**. Add the secret under Headers. Leave the file-delete
-events unticked; Mycelium ignores them in this version anyway.
+**On Movie Delete**. Add the secret under Headers. Tick **On Movie File
+Delete** as well if you use the stub files (see above): a manual file
+delete in Radarr, or Maintainerr with "delete files", then removes the
+title from Mycelium. Radarr's own upgrade and missing-from-disk file events
+are ignored.
 
 **Sonarr** Settings > Connect > Webhook: same, tick **On Series Delete**.
 

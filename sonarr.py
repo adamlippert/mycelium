@@ -11,7 +11,7 @@ def _headers(api_key: str) -> dict:
 
 
 def list_series(url: str, api_key: str, timeout: int = 30) -> list[dict]:
-    """Return all series from Sonarr. Each item has tvdbId, imdbId, tmdbId, title, monitored, seasons."""
+    """Return all series from Sonarr. Each item has id, tvdbId, imdbId, tmdbId, title, monitored, seasons, path."""
     base = url.rstrip("/")
     log.info("Sonarr: fetching series from %s", base)
     resp = requests.get(f"{base}/api/v3/series", headers=_headers(api_key), timeout=timeout)
@@ -22,6 +22,7 @@ def list_series(url: str, api_key: str, timeout: int = 30) -> list[dict]:
         seasons = [se.get("seasonNumber") for se in (s.get("seasons") or [])
                    if se.get("seasonNumber", 0) >= 1 and se.get("monitored")]
         out.append({
+            "id": s.get("id"),
             "tvdb_id": s.get("tvdbId"),
             "tmdb_id": s.get("tmdbId"),
             "imdb_id": s.get("imdbId") or "",
@@ -29,6 +30,7 @@ def list_series(url: str, api_key: str, timeout: int = 30) -> list[dict]:
             "year": s.get("year"),
             "monitored": bool(s.get("monitored")),
             "seasons": seasons,
+            "path": s.get("path"),
         })
     log.info("Sonarr: %d series returned", len(out))
     return out

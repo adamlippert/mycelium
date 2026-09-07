@@ -57,8 +57,9 @@ def stubs_env(tmp_path, monkeypatch):
     stubs.mkdir()
     monkeypatch.setattr(config, "MEDIA_PATH", str(media))
     values = {
-        "ARR_STUBS_ENABLED": True, "ARR_SYNC_ENABLED": True,
+        "ARR_STUBS_ENABLED": True, "ARR_SYNC_ENABLED": True, "CATBOX_MODE": True,
         "ARR_STUB_PATH": str(stubs),
+        "RADARR_URL": "http://radarr.test", "SONARR_URL": "http://sonarr.test",
         "RADARR_ROOT_FOLDER": "/mnt/arr/movies", "SONARR_ROOT_FOLDER": "/mnt/arr/series",
     }
     monkeypatch.setattr(settings, "get", lambda k, d=None: values.get(k, d))
@@ -174,6 +175,44 @@ def test_write_title_replaces_a_stale_stub_after_an_upgrade(stubs_env):
     assert names == ["Heat (1995) - Bluray-2160p.mkv"]
 
 
+def test_sweep_never_deletes_a_file_that_is_not_our_stub(stubs_env):
+    import arr_stubs
+    values, media, stubs = stubs_env
+    _movie(media)
+    folder = stubs / "movies" / "Heat (1995)"
+    folder.mkdir(parents=True)
+    foreign = folder / "Some Real File.mkv"
+    foreign.write_bytes(b"not a stub" * 5)
+    assert arr_stubs.write_title("tt0113277", "movie", "/mnt/arr/movies/Heat (1995)") == 1
+    assert foreign.exists()
+    assert foreign.read_bytes() == b"not a stub" * 5
+
+
+def test_a_stub_renamed_by_the_arr_is_kept_not_duplicated(stubs_env):
+    import arr_stubs
+    values, media, stubs = stubs_env
+    _movie(media)
+    assert arr_stubs.write_title("tt0113277", "movie", "/mnt/arr/movies/Heat (1995)") == 1
+    folder = stubs / "movies" / "Heat (1995)"
+    old = folder / "Heat (1995) - WEBDL-1080p.mkv"
+    renamed = folder / "Heat (1995) WEBDL-1080p [Radarr].mkv"
+    old.rename(renamed)
+    assert arr_stubs.write_title("tt0113277", "movie", "/mnt/arr/movies/Heat (1995)") == 0
+    mkvs = list(folder.glob("*.mkv"))
+    assert len(mkvs) == 1
+    assert mkvs[0] == renamed
+
+
+def test_write_title_skips_items_whose_strm_is_gone(stubs_env):
+    import arr_stubs
+    values, media, stubs = stubs_env
+    paths = _series(media)
+    paths[0].unlink()
+    assert arr_stubs.write_title("tt11280740", "series", "/mnt/arr/series/Severance") == 1
+    season = stubs / "series" / "Severance" / "Season 01"
+    assert sorted(p.name for p in season.glob("*.mkv")) == ["Severance - S01E02 - WEBDL-2160p.mkv"]
+
+
 def test_write_title_is_idempotent(stubs_env):
     import arr_stubs
     values, media, stubs = stubs_env
@@ -185,15 +224,24 @@ def test_write_title_is_idempotent(stubs_env):
     assert mkv.stat().st_mtime_ns == before
 
 
-def test_write_title_places_episodes_in_their_season_folders(stubs_env):
+def test_write_title_places_episodes_in_their_season_folders(stubs_env, monkeypatch):
     import arr_stubs
+    import tmdb
     values, media, stubs = stubs_env
+    calls = []
+
+    def counting_runtime(imdb, season, episode):
+        calls.append((imdb, season, episode))
+        return 2700
+
+    monkeypatch.setattr(tmdb, "get_episode_runtime_sec", counting_runtime)
     _series(media)
     assert arr_stubs.write_title("tt11280740", "series", "/mnt/arr/series/Severance") == 2
     season = stubs / "series" / "Severance" / "Season 01"
     assert sorted(p.name for p in season.glob("*.mkv")) == [
         "Severance - S01E01 - WEBDL-2160p.mkv", "Severance - S01E02 - WEBDL-2160p.mkv"]
     assert (stubs / "series" / "Severance" / ".mycelium").read_text().strip() == "tt11280740"
+    assert len(calls) == 1, "one runtime lookup reused for every stub in the call, not one per episode"
 
 
 def test_write_title_uses_the_tmdb_runtime(stubs_env, monkeypatch):
@@ -256,6 +304,43 @@ def test_root_status_reports_a_missing_mount(stubs_env):
     values["RADARR_ROOT_FOLDER"] = ""
     ok, note = arr_stubs.root_status()
     assert ok is False and "RADARR_ROOT_FOLDER" in note
+    values["RADARR_ROOT_FOLDER"] = "/mnt/arr/movies"
+    values["SONARR_URL"] = ""
+    values["SONARR_ROOT_FOLDER"] = ""
+    assert arr_stubs.root_status() == (True, str(stubs)), \
+        "no Sonarr configured: its root folder is not required"
+
+
+def test_root_status_requires_a_root_folder_only_for_a_configured_arr(stubs_env):
+    import arr_stubs
+    values, media, stubs = stubs_env
+    values["SONARR_URL"] = ""
+    values["SONARR_ROOT_FOLDER"] = ""
+    assert arr_stubs.root_status() == (True, str(stubs)), "Sonarr not configured: ok without its root folder"
+    values["RADARR_URL"] = ""
+    values["RADARR_ROOT_FOLDER"] = ""
+    assert arr_stubs.root_status() == (True, str(stubs)), "neither arr configured: still ok"
+    values["SONARR_URL"] = "http://sonarr.test"
+    ok, note = arr_stubs.root_status()
+    assert ok is False and "SONARR_ROOT_FOLDER" in note, "Sonarr configured again: its root folder is required"
+
+
+def test_root_status_needs_catbox_mode(stubs_env):
+    import arr_stubs
+    values, media, stubs = stubs_env
+    values["CATBOX_MODE"] = False
+    ok, note = arr_stubs.root_status()
+    assert ok is False and "CATBOX_MODE" in note
+
+
+def test_a_relative_stub_path_is_refused(stubs_env):
+    import arr_stubs
+    values, media, stubs = stubs_env
+    values["ARR_STUB_PATH"] = "relative/stubs"
+    ok, note = arr_stubs.root_status()
+    assert ok is False and "not an absolute path" in note
+    assert arr_stubs.write_title("tt0113277", "movie", "/mnt/arr/movies/Heat (1995)") == 0
+    assert arr_stubs.remove_title("movie", "tt0113277", "/mnt/arr/movies/Heat (1995)") == 0
 
 
 # -- removing ----------------------------------------------------------------

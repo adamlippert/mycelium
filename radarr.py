@@ -11,7 +11,7 @@ def _headers(api_key: str) -> dict:
 
 
 def list_movies(url: str, api_key: str, timeout: int = 30) -> list[dict]:
-    """Return all movies from Radarr. Each item has tmdbId, imdbId, title, year, monitored."""
+    """Return all movies from Radarr. Each item has id, tmdbId, imdbId, title, year, monitored, path."""
     base = url.rstrip("/")
     log.info("Radarr: fetching movies from %s", base)
     resp = requests.get(f"{base}/api/v3/movie", headers=_headers(api_key), timeout=timeout)
@@ -20,12 +20,14 @@ def list_movies(url: str, api_key: str, timeout: int = 30) -> list[dict]:
     out = []
     for m in items:
         out.append({
+            "id": m.get("id"),
             "tmdb_id": m.get("tmdbId"),
             "imdb_id": m.get("imdbId") or "",
             "title": m.get("title") or "",
             "year": m.get("year"),
             "monitored": bool(m.get("monitored")),
             "has_file": bool(m.get("hasFile")),
+            "path": m.get("path"),
         })
     log.info("Radarr: %d movie(s) returned", len(out))
     return out

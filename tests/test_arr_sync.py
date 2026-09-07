@@ -233,7 +233,7 @@ def test_reconcile_adds_only_what_the_arr_lacks(enabled, monkeypatch):
     monkeypatch.setattr(sonarr, "list_series", lambda u, k: [])
     added = []
     monkeypatch.setattr(arr_sync, "_ensure_with_stubs",
-                        lambda imdb, mt, tmdb_id, title: (added.append(imdb) or "added", 0))
+                        lambda imdb, mt, tmdb_id, title, write_stubs=True: (added.append(imdb) or "added", 0))
     out = arr_sync.reconcile()
     assert added == ["tt0113277"]
     assert out == {"checked": 2, "added": 1, "present": 0, "failed": 0, "skipped": 1, "stubs": 0}
@@ -244,6 +244,41 @@ def test_reconcile_is_a_noop_when_disabled(monkeypatch):
     import settings
     monkeypatch.setattr(settings, "get", lambda k, d=None: {"ARR_SYNC_ENABLED": False}.get(k, d))
     assert arr_sync.reconcile() == {"checked": 0, "added": 0, "present": 0, "failed": 0, "skipped": 0, "stubs": 0}
+
+
+class _FakeListResp:
+    def __init__(self, body):
+        self._body = body
+        self.status_code = 200
+
+    def json(self):
+        return self._body
+
+    def raise_for_status(self):
+        pass
+
+
+def test_radarr_list_movies_exposes_id_and_path(monkeypatch):
+    """reconcile() needs id and path from the listing to write a stub and
+    rescan a known title without a separate lookup call."""
+    import radarr
+    body = [{"id": 10, "tmdbId": 949, "imdbId": "tt0113277", "title": "Heat", "year": 1995,
+            "monitored": True, "hasFile": False, "path": "/movies/Heat (1995)"}]
+    monkeypatch.setattr(radarr.requests, "get", lambda *a, **k: _FakeListResp(body))
+    out = radarr.list_movies("http://radarr.test", "k")
+    assert out[0]["id"] == 10
+    assert out[0]["path"] == "/movies/Heat (1995)"
+
+
+def test_sonarr_list_series_exposes_id_and_path(monkeypatch):
+    import sonarr
+    body = [{"id": 7, "tvdbId": 371980, "tmdbId": 95396, "imdbId": "tt11280740",
+            "title": "Severance", "year": 2022, "monitored": True, "seasons": [],
+            "path": "/tv/Severance"}]
+    monkeypatch.setattr(sonarr.requests, "get", lambda *a, **k: _FakeListResp(body))
+    out = sonarr.list_series("http://sonarr.test", "k")
+    assert out[0]["id"] == 7
+    assert out[0]["path"] == "/tv/Severance"
 
 
 # -- wiring ------------------------------------------------------------------
@@ -339,7 +374,7 @@ def stubs_on(enabled, tmp_path, monkeypatch):
     stubs.mkdir()
     media = tmp_path / "media"
     monkeypatch.setattr(config, "MEDIA_PATH", str(media))
-    enabled.update({"ARR_STUBS_ENABLED": True, "ARR_STUB_PATH": str(stubs),
+    enabled.update({"ARR_STUBS_ENABLED": True, "ARR_STUB_PATH": str(stubs), "CATBOX_MODE": True,
                     "RADARR_ROOT_FOLDER": "/mnt/arr/movies", "SONARR_ROOT_FOLDER": "/mnt/arr/series"})
     import tmdb
     monkeypatch.setattr(tmdb, "get_movie_runtime_sec", lambda imdb: 5400)
@@ -470,22 +505,46 @@ def test_reconcile_backfills_a_title_the_arr_already_lists(enabled, stubs_on, mo
     import arr_sync
     import radarr
     import sonarr
-    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [{"imdb_id": "tt0113277", "tmdb_id": 949}])
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [
+        {"imdb_id": "tt0113277", "tmdb_id": 949, "id": 10, "path": "/mnt/arr/movies/Heat (1995)"}])
     monkeypatch.setattr(sonarr, "list_series", lambda u, k: [])
     fake = FakeArr({
-        ("GET", "/movie/lookup"): (200, RADARR_LOOKUP),
-        ("GET", "/movie"): (200, [{"id": 10, "tmdbId": 949, "path": "/mnt/arr/movies/Heat (1995)"}]),
         ("POST", "/command"): (201, {"id": 1}),
     })
     monkeypatch.setattr(arr_sync, "_request", fake)
     out = arr_sync.reconcile()
     assert out == {"checked": 1, "added": 0, "present": 1, "failed": 0, "skipped": 0, "stubs": 1}
     assert (stubs_on / "movies" / "Heat (1995)" / "Heat (1995) - WEBDL-1080p.mkv").exists()
+    assert not [c for c in fake.calls if c[1] == "/movie/lookup"], \
+        "known title with stubs on: the listing entry is enough, no lookup needed"
 
     enabled["ARR_STUBS_ENABLED"] = False
     fake.calls.clear()
     arr_sync.reconcile()
     assert not [c for c in fake.calls if c[1] == "/movie/lookup"]
+
+
+def test_reconcile_warns_once_when_the_stub_root_is_missing(enabled, stubs_on, monkeypatch, caplog):
+    """The stub root was checked once per item before this fix; a missing
+    mount then warned once per title, every reconcile. One check, one
+    warning, and neither the listing path nor _ensure_with_stubs writes a
+    stub for the rest of the run."""
+    import arr_sync
+    import radarr
+    import sonarr
+    enabled["ARR_STUB_PATH"] = str(stubs_on / "gone")
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [])
+    monkeypatch.setattr(sonarr, "list_series", lambda u, k: [])
+    fake = FakeArr({
+        ("GET", "/movie/lookup"): (200, RADARR_LOOKUP),
+        ("GET", "/movie"): (200, [{"id": 10, "tmdbId": 949, "path": "/mnt/arr/movies/Heat (1995)"}]),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    with caplog.at_level("WARNING"):
+        out = arr_sync.reconcile()
+    assert out["stubs"] == 0
+    warnings = [r for r in caplog.records if "Arr stubs" in r.getMessage()]
+    assert len(warnings) == 1, warnings
 
 
 def test_present_via_lookup_id_still_writes_the_stub(stubs_on, monkeypatch):

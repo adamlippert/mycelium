@@ -10,7 +10,10 @@ All notable changes to Mycelium are documented in this file.
   `.mkv` per title in a folder the arrs scan as their root, so mirrored
   titles show as owned with the quality Mycelium found instead of Missing.
   Maintainerr's "delete files" and a manual file delete in Radarr now remove
-  the title from Mycelium. A health row reports a missing mount.
+  the title from Mycelium. A health row reports a missing mount. Needs
+  `CATBOX_MODE=true` (stubs are built from Mycelium's virtual items), and a
+  root folder is only required for whichever arr is actually configured, so
+  a single-arr setup is not locked out.
 
 ## [0.14.4] - 2026-09-07
 
