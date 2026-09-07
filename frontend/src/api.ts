@@ -504,6 +504,18 @@ export const api = {
     http<{ groups: Array<{ id: string; title: string; items: SettingItem[] }>; hot_reload: string[] }>(
       '/ui/api/settings',
     ),
+  settingsSchema: () =>
+    http<{ sections: SettingsSection[]; hot_reload: string[] }>('/ui/api/settings/schema'),
+  settingsTest: (service: string, values: Record<string, string>) =>
+    http<{ ok: boolean; message: string }>(`/ui/api/settings/test/${service}`, {
+      method: 'POST',
+      body: JSON.stringify({ values }),
+    }),
+  settingsPicker: (name: string, values: Record<string, string>) =>
+    http<{ ok: boolean; options?: { value: string; label: string }[]; error?: string }>(
+      `/ui/api/settings/picker/${name}`,
+      { method: 'POST', body: JSON.stringify({ values }) },
+    ),
   setNotificationSettings: (values: Record<string, boolean | string>) =>
     http<{ ok: boolean }>('/ui/api/settings/notifications', {
       method: 'POST',
@@ -674,6 +686,39 @@ export interface SettingItem {
   options?: string[] | null;
   overridden: boolean;
   hot_reload: boolean;
+}
+
+export type SettingKind =
+  | 'bool' | 'int' | 'float' | 'str' | 'list' | 'url' | 'path' | 'secret'
+  | 'select' | 'multiselect' | 'ordered' | 'custom';
+
+export interface SettingsField {
+  key: string;
+  label: string;
+  help: string;
+  kind: SettingKind;
+  options: { value: string; label: string }[] | null;
+  placeholder: string | null;
+  unit: string | null;
+  min: number | null;
+  max: number | null;
+  advanced: boolean;
+  depends_on: string | null;
+  test: string | null;
+  picker: string | null;
+  component: string | null;
+  readonly: boolean;
+  value: any;
+  overridden: boolean;
+  hot_reload: boolean;
+}
+
+export interface SettingsSection {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  fields: SettingsField[];
 }
 
 export interface RequestRow {

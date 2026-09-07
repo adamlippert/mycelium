@@ -15,6 +15,7 @@ export function Button({
   className = '',
   children,
   disabled,
+  type: _type,
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; loading?: boolean; loadingLabel?: string }) {
   return (
