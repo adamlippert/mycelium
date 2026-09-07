@@ -316,8 +316,13 @@ def test_upgrades_refresh_the_stubs():
     src = _src("upgrader.py")
     auto = src.split("def run_auto_upgrade(", 1)[1].split("\ndef ", 1)[0]
     assert 'arr_sync.mirror_add(row["imdb_id"], "movie", row.get("tmdb_id"), row["title"])' in auto
+    assert auto.index('strm_generator._cache_cdn_url(') < auto.index('arr_sync.mirror_add(')
+    catbox = src.split("def _run_auto_upgrade_catbox(", 1)[1].split("\ndef ", 1)[0]
+    assert 'arr_sync.mirror_add(item["imdb_id"], "movie", item.get("tmdb_id"), item["title"])' in catbox
+    assert catbox.index('db.update_virtual_item_upgrade(') < catbox.index('arr_sync.mirror_add(')
     pack = src.split("def run_pack_consolidation(", 1)[1].split("\ndef ", 1)[0]
     assert "arr_sync.mirror_add(" in pack
+    assert pack.index('db.log_activity("consolidated"') < pack.index('arr_sync.mirror_add(')
 
 
 def test_health_reports_the_stub_mount(stubs_env, monkeypatch):

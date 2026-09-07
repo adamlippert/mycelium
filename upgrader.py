@@ -105,6 +105,11 @@ def _run_auto_upgrade_catbox() -> int:
             catbox.invalidate_url_cache(item["token"])
             db.log_activity("upgraded", item["title"],
                             f"{item.get('quality')} → {better.quality}", True)
+            try:
+                import arr_sync
+                arr_sync.mirror_add(item["imdb_id"], "movie", item.get("tmdb_id"), item["title"])
+            except Exception as exc:
+                log.debug("arr_sync skipped: %s", exc)
             upgraded += 1
         except Exception as exc:
             log.warning("Catbox upgrade failed for %s: %s", item.get("title"), exc)
