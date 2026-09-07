@@ -1158,9 +1158,18 @@ def get_user_requests_for_title(imdb_id: str) -> list[dict]:
 BLACKLIST_THRESHOLD = 3
 
 
+def _blacklist_threshold() -> int:
+    """The configured blacklist threshold, shared by every helper here so they
+    all agree with blacklist.py and metrics_prom.py. Imported locally to avoid
+    a circular import: settings.py imports db."""
+    import settings
+    return settings.get("BLACKLIST_FAIL_THRESHOLD", BLACKLIST_THRESHOLD)
+
+
 def get_hashes_for_title(imdb_id: str) -> list[dict]:
     """Every hash this title has used (request row and virtual items), with
     its blacklist state. `current` marks the request row's hash."""
+    threshold = _blacklist_threshold()
     with _connect() as conn:
         req = conn.execute("SELECT info_hash FROM requests WHERE imdb_id=?", (imdb_id,)).fetchone()
         current = (req["info_hash"] if req else None) or ""
@@ -1171,18 +1180,15 @@ def get_hashes_for_title(imdb_id: str) -> list[dict]:
                LEFT JOIN failed_hashes f ON f.info_hash = h.info_hash
                ORDER BY h.info_hash""", (imdb_id, imdb_id)).fetchall()
     return [{"info_hash": r["info_hash"], "fail_count": r["fail_count"] or 0,
-             "blacklisted": (r["fail_count"] or 0) >= BLACKLIST_THRESHOLD,
+             "blacklisted": (r["fail_count"] or 0) >= threshold,
              "last_error": r["last_error"], "last_attempt": r["last_attempt"],
              "current": r["info_hash"] == current} for r in rows]
 
 
 def blacklist_hash(info_hash: str, note: str) -> None:
     """Put a hash on the blacklist by hand: its fail count jumps to the
-    configured threshold, so get_blacklisted_hashes() reports it from now on.
-
-    Imported locally to avoid a circular import: settings.py imports db."""
-    import settings
-    threshold = settings.get("BLACKLIST_FAIL_THRESHOLD", BLACKLIST_THRESHOLD)
+    configured threshold, so get_blacklisted_hashes() reports it from now on."""
+    threshold = _blacklist_threshold()
     with _connect() as conn:
         conn.execute(
             """INSERT INTO failed_hashes (info_hash, fail_count, last_error)

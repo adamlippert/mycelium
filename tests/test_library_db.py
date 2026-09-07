@@ -99,6 +99,21 @@ def test_hashes_for_title_join_the_blacklist_and_mark_the_current_one():
     assert ("a" * 40) not in db.get_blacklisted_hashes()
 
 
+def test_hashes_for_title_uses_the_configured_threshold_like_blacklist_hash_does(monkeypatch):
+    """get_hashes_for_title must agree with blacklist_hash and
+    get_blacklisted_hashes about what counts as blacklisted; all three read
+    BLACKLIST_FAIL_THRESHOLD through settings, not a hardcoded 3."""
+    import settings
+    monkeypatch.setattr(settings, "get", lambda key, default=None:
+                        1 if key == "BLACKLIST_FAIL_THRESHOLD" else default)
+    db.insert_request("Heat", "tt0113277", "movie")
+    _item("tt0113277", "tok1", "a" * 40)
+    db.record_failed_hash("a" * 40, "cdn 404")
+    rows = {r["info_hash"]: r for r in db.get_hashes_for_title("tt0113277")}
+    assert rows["a" * 40]["fail_count"] == 1
+    assert rows["a" * 40]["blacklisted"] is True
+
+
 def test_playability_for_title_covers_movie_and_episode_keys():
     db.update_playability_fail("tt1", "cdn 404")
     db.update_playability_fail("tt2:S01E02", "timeout")
