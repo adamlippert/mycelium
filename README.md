@@ -177,6 +177,19 @@ sequenceDiagram
 
 </details>
 
+<details open>
+<summary><b>Plays well with the rest of the stack</b></summary>
+
+- **Radarr / Sonarr mirror** (`ARR_SYNC_ENABLED`): every title Mycelium adds is created in the arr as a monitored, search-off entry and removed on purge, so Seerr, Maintainerr and calendar widgets see your library. The arrs need no download client
+- **Stub files** (`ARR_STUBS_ENABLED`): a tiny fake `.mkv` per title in a folder the arrs scan as their root, so titles show as owned with the quality Mycelium found instead of Missing
+- **Delete webhooks** (`/webhook/arr`): a delete in Radarr, Sonarr or Jellyfin, by you or by Maintainerr, purges the title from Mycelium
+- **Targeted Jellyfin refresh**: Jellyfin is told which files changed instead of being asked for a full scan; Autopulse is not needed
+- **Seerr outcome reporting**: added titles show Available at once, failed ones are declined, removed ones are cleared, so requests never sit on Processing forever
+- **Test buttons and root-folder dropdowns** in Settings > Radarr / Sonarr
+- Setup steps: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) and the built-in manual
+
+</details>
+
 <details>
 <summary><b>Auto-approve</b></summary>
 
@@ -361,8 +374,10 @@ Open **`http://<your-host>:8088`** - the setup wizard walks you through everythi
 flowchart LR
     User[👤 User in SPA] -->|+ Add| Mycelium
     Seerr -.->|optional webhook| Mycelium
-    Radarr -.->|bulk import| Mycelium
-    Sonarr -.->|bulk import| Mycelium
+    Mycelium -.->|outcome: available / declined / cleared| Seerr
+    Mycelium -.->|mirror + stub files| Radarr & Sonarr
+    Radarr & Sonarr -.->|delete webhook| Mycelium
+    Jellyfin -.->|delete webhook| Mycelium
     Mycelium -->|search| Zilean & Torrentio
     Mycelium -->|cache-check + add| TorBox
     Mycelium -->|TMDB lookup| TMDB
@@ -442,6 +457,11 @@ every other rule in every category, so use it deliberately.
 | `AUTO_APPROVE_DAILY_LIMIT` / `AUTO_APPROVE_ACTOR_DAILY_LIMIT` | `5` | Daily budget for genre-rule fill / favorite-actor fill |
 | `EXCLUDE_UNDERSIZED_RELEASES` / `EXCLUDE_UNDERSIZED_STRICT` | `true` / `false` | Reject releases too small to be real for their claimed quality + runtime; `_STRICT` hard-fails instead of falling back when only undersized candidates remain |
 | `METRICS_TOKEN` | *(empty)* | Bearer token for `/metrics` scraping |
+| `ARR_SYNC_ENABLED` | `false` | Mirror every title into Radarr/Sonarr as a monitored, search-off entry; remove on purge |
+| `ARR_STUBS_ENABLED` / `ARR_STUB_PATH` | `false` / `/arr-stubs` | Stub `.mkv` per title in a folder the arrs mount as their root, so titles show as owned. Needs `CATBOX_MODE` |
+| `RADARR_ROOT_FOLDER` / `SONARR_ROOT_FOLDER` | *(empty)* | The arr's root folder for mirrored titles; pick with Load folders in Settings |
+| `JELLYFIN_MEDIA_PATH` | *(empty)* | Where Jellyfin's container sees `MEDIA_PATH`, for the targeted refresh; blank means the same path |
+| `SEERR_REPORT_STATUS` / `SEERR_DECLINE_WANTED_AFTER_DAYS` | `true` / `30` | Report outcomes to Seerr; decline a title still wanted after this many days |
 
 ---
 
@@ -501,7 +521,7 @@ Use **Mycelium Spore**  -  see the [Spore section](#-mycelium-spore-experimental
 <details>
 <summary><b>Does this work with Radarr / Sonarr?</b></summary>
 
-Yes, for bulk migration. Admin > Radarr/Sonarr import pulls your entire monitored library in one click. For ongoing requests, use the built-in SPA or Seerr webhook - Mycelium doesn't act as a Radarr download client.
+Yes, in two directions. Admin > Radarr/Sonarr import pulls an existing library into Mycelium in one click. The other way, `ARR_SYNC_ENABLED` mirrors everything Mycelium adds into the arrs as monitored, search-off entries, and `ARR_STUBS_ENABLED` gives each title a stub file so it shows as owned; the arrs' delete webhooks then let Maintainerr and manual deletes flow back. Mycelium is not a download client and the arrs need none; they are bookkeeping for Seerr, Maintainerr and calendar widgets. Setup in [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 </details>
 
 <details>

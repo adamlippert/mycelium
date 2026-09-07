@@ -138,6 +138,7 @@
   <a href="#mycelium"><span class="lang-en">7. Mycelium wizard</span><span class="lang-nl">7. Mycelium wizard</span></a>
   <div class="nav-section"><span class="lang-en">Optional</span><span class="lang-nl">Optional</span></div>
   <a href="#seerr"><span class="lang-en">Seerr setup</span><span class="lang-nl">Seerr setup</span></a>
+  <a href="#arrs"><span class="lang-en">Radarr, Sonarr &amp; Maintainerr</span><span class="lang-nl">Radarr, Sonarr &amp; Maintainerr</span></a>
   <a href="#plex"><span class="lang-en">Plex activation</span><span class="lang-nl">Plex activation</span></a>
   <a href="#webdav">WebDAV</a>
   <div class="nav-section"><span class="lang-en">Management</span><span class="lang-nl">Management</span></div>
@@ -475,6 +476,45 @@
         <span class="lang-nl"><strong style="color:var(--text)">Similar titles</strong> (like the movie "Ghosts (2019)" and the series "Ghosts") can be mixed up by Mycelium. This is a known metadata bug where the wrong item gets requested. Report this to the Mycelium developer with the TMDB/IMDB ID of the incorrect result.</span>
       </span>
     </div>
+
+    <h3><span class="lang-en">Library settings that matter for streams</span><span class="lang-nl">Library settings that matter for streams</span></h3>
+    <div class="alert warn">
+      <span class="alert-icon">&#9888;</span>
+      <span>
+        <span class="lang-en"><strong style="color:var(--text)">Turn off Trickplay, chapter image extraction and intro detection</strong> for the Mycelium libraries (Dashboard &rarr; Libraries &rarr; Manage library). Each of them opens every file, which for a <code>.strm</code> means pulling the whole title through the TorBox CDN and resetting its retention clock.</span>
+        <span class="lang-nl"><strong style="color:var(--text)">Turn off Trickplay, chapter image extraction and intro detection</strong> for the Mycelium libraries (Dashboard &rarr; Libraries &rarr; Manage library). Each of them opens every file, which for a <code>.strm</code> means pulling the whole title through the TorBox CDN and resetting its retention clock.</span>
+      </span>
+    </div>
+    <div class="lang-en"><p>Mycelium tells Jellyfin exactly which files changed after every add, upgrade and removal, so no full library scan is needed. Jellyfin still waits about a minute (its library monitor delay, 60 seconds by default) before it acts, so a new title appears roughly a minute after it was added. If Jellyfin mounts the media at a different path than Mycelium does, set <code>JELLYFIN_MEDIA_PATH</code> to Jellyfin's path in Settings &rarr; Connections.</p></div>
+    <div class="lang-nl"><p>Mycelium tells Jellyfin exactly which files changed after every add, upgrade and removal, so no full library scan is needed. Jellyfin still waits about a minute (its library monitor delay, 60 seconds by default) before it acts, so a new title appears roughly a minute after it was added. If Jellyfin mounts the media at a different path than Mycelium does, set <code>JELLYFIN_MEDIA_PATH</code> to Jellyfin's path in Settings &rarr; Connections.</p></div>
+
+    <h3><span class="lang-en">Tell Mycelium about deletions (Webhook plugin)</span><span class="lang-nl">Tell Mycelium about deletions (Webhook plugin)</span></h3>
+    <div class="lang-en"><p>When someone deletes a movie or series in Jellyfin, Mycelium should forget it too, otherwise the title cannot be requested again for 24 hours. Install the <strong>Webhook</strong> plugin (Dashboard &rarr; Plugins &rarr; Catalog), then:</p></div>
+    <div class="lang-nl"><p>When someone deletes a movie or series in Jellyfin, Mycelium should forget it too, otherwise the title cannot be requested again for 24 hours. Install the <strong>Webhook</strong> plugin (Dashboard &rarr; Plugins &rarr; Catalog), then:</p></div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en">Add a <strong>Generic</strong> destination with this URL and tick <em>Item Deleted</em>, item types <em>Movies</em> and <em>Series</em>:</span>
+          <span class="lang-nl">Add a <strong>Generic</strong> destination with this URL and tick <em>Item Deleted</em>, item types <em>Movies</em> and <em>Series</em>:</span><br>
+          <div class="cmd">http://mycelium:8088/webhook/arr</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en">Paste this template:</span>
+          <span class="lang-nl">Paste this template:</span><br>
+          <div class="cmd">{"eventType":"ItemDeleted","itemType":"{{ItemType}}","name":"{{Name}}","imdb":"{{Provider_imdb}}","tmdb":"{{Provider_tmdb}}","tvdb":"{{Provider_tvdb}}"}</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en">Add a request header <code>X-Webhook-Secret</code> with the secret from Admin &rarr; Integration Endpoints (or append <code>?secret=&lt;secret&gt;</code> to the URL).</span>
+          <span class="lang-nl">Add a request header <code>X-Webhook-Secret</code> with the secret from Admin &rarr; Integration Endpoints (or append <code>?secret=&lt;secret&gt;</code> to the URL).</span>
+        </div>
+      </div>
+    </div>
+    <div class="lang-en"><p>Deleting a single episode in Jellyfin is not a title deletion and is ignored; delete the series instead.</p></div>
+    <div class="lang-nl"><p>Deleting a single episode in Jellyfin is not a title deletion and is ignored; delete the series instead.</p></div>
   </section>
 
   <!-- 7. Mycelium wizard -->
@@ -620,6 +660,101 @@
         <span class="lang-nl"><strong style="color:var(--text)">Webhook not arriving?</strong> Check the network name: <code>docker network inspect Myc3l1um-Net</code>. Both containers must be on the same network. Also verify that <code>SEERR_API_KEY</code> and <code>JELLYFIN_API_KEY</code> are correct in <code>.env</code> and that you restarted Mycelium after filling them in.</span>
       </span>
     </div>
+
+    <h3><span class="lang-en">What Seerr hears back</span><span class="lang-nl">What Seerr hears back</span></h3>
+    <div class="lang-en"><p>With <code>SEERR_REPORT_STATUS</code> on (the default) Mycelium reports outcomes to Seerr: an added title is marked <em>Available</em> at once, a title with no suitable stream is <em>Declined</em> so it can be re-requested, a title still wanted after <code>SEERR_DECLINE_WANTED_AFTER_DAYS</code> (30) is declined once while Mycelium keeps searching, and a title removed from the library is cleared in Seerr so it is requestable again immediately. The Seerr API key must belong to a user with <strong>Manage Requests</strong>; an admin key does.</p></div>
+    <div class="lang-nl"><p>With <code>SEERR_REPORT_STATUS</code> on (the default) Mycelium reports outcomes to Seerr: an added title is marked <em>Available</em> at once, a title with no suitable stream is <em>Declined</em> so it can be re-requested, a title still wanted after <code>SEERR_DECLINE_WANTED_AFTER_DAYS</code> (30) is declined once while Mycelium keeps searching, and a title removed from the library is cleared in Seerr so it is requestable again immediately. The Seerr API key must belong to a user with <strong>Manage Requests</strong>; an admin key does.</p></div>
+  </section>
+
+  <!-- Optional: Radarr, Sonarr, Maintainerr -->
+  <section id="arrs">
+    <h2><span class="section-opt">&#9679;</span><span class="lang-en">Optional: Radarr, Sonarr &amp; Maintainerr</span><span class="lang-nl">Optional: Radarr, Sonarr &amp; Maintainerr</span></h2>
+    <div class="alert info">
+      <span class="alert-icon">&#8505;</span>
+      <span>
+        <span class="lang-en"><strong style="color:var(--text)">The arrs are bookkeeping here, not downloaders.</strong> Mycelium finds and streams everything itself. Radarr and Sonarr are useful only because other tools read them: Seerr for availability, Maintainerr for cleanup rules, and calendar widgets such as Jellyfin Enhanced and Homarr. Give them <strong>no download client</strong>; Radarr's "no download client is available" health warning is expected.</span>
+        <span class="lang-nl"><strong style="color:var(--text)">The arrs are bookkeeping here, not downloaders.</strong> Mycelium finds and streams everything itself. Radarr and Sonarr are useful only because other tools read them: Seerr for availability, Maintainerr for cleanup rules, and calendar widgets such as Jellyfin Enhanced and Homarr. Give them <strong>no download client</strong>; Radarr's "no download client is available" health warning is expected.</span>
+      </span>
+    </div>
+
+    <h3><span class="lang-en">1. Connect and mirror</span><span class="lang-nl">1. Connect and mirror</span></h3>
+    <div class="steps">
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en">In Mycelium go to <strong>Admin &rarr; Settings &rarr; Radarr / Sonarr</strong>, enter each arr's URL and API key (Radarr &rarr; Settings &rarr; General &rarr; Security) and press <em>Test Radarr</em> / <em>Test Sonarr</em>. A green line with the arr's version means the connection works.</span>
+          <span class="lang-nl">In Mycelium go to <strong>Admin &rarr; Settings &rarr; Radarr / Sonarr</strong>, enter each arr's URL and API key (Radarr &rarr; Settings &rarr; General &rarr; Security) and press <em>Test Radarr</em> / <em>Test Sonarr</em>. A green line with the arr's version means the connection works.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en">Switch on <code>ARR_SYNC_ENABLED</code>. Every title Mycelium adds is now created in the arr as a monitored entry with search off, removed again on "Remove from library", and a reconcile job runs every six hours to add anything the arr is missing.</span>
+          <span class="lang-nl">Switch on <code>ARR_SYNC_ENABLED</code>. Every title Mycelium adds is now created in the arr as a monitored entry with search off, removed again on "Remove from library", and a reconcile job runs every six hours to add anything the arr is missing.</span>
+        </div>
+      </div>
+    </div>
+    <div class="lang-en"><p>Without the stub files below, mirrored titles show as <em>Missing</em> in the arrs. That is cosmetic; Seerr and Maintainerr already work.</p></div>
+    <div class="lang-nl"><p>Without the stub files below, mirrored titles show as <em>Missing</em> in the arrs. That is cosmetic; Seerr and Maintainerr already work.</p></div>
+
+    <h3><span class="lang-en">2. Stub files, so titles show as owned</span><span class="lang-nl">2. Stub files, so titles show as owned</span></h3>
+    <div class="lang-en"><p>Mycelium can write a tiny fake <code>.mkv</code> per title (a valid MKV header with a runtime, a few kilobytes, no video) into a folder the arrs scan as their root folder. Radarr and Sonarr then show each title with a file and the quality Mycelium found, and Maintainerr's "delete files" has something to delete. Needs <code>CATBOX_MODE=true</code>.</p></div>
+    <div class="lang-nl"><p>Mycelium can write a tiny fake <code>.mkv</code> per title (a valid MKV header with a runtime, a few kilobytes, no video) into a folder the arrs scan as their root folder. Radarr and Sonarr then show each title with a file and the quality Mycelium found, and Maintainerr's "delete files" has something to delete. Needs <code>CATBOX_MODE=true</code>.</p></div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en">Create a host folder owned by the same user as Mycelium:</span>
+          <span class="lang-nl">Create a host folder owned by the same user as Mycelium:</span><br>
+          <div class="cmd">mkdir -p /opt/Myc3l1um/arr-stubs<br>chown 1000:1000 /opt/Myc3l1um/arr-stubs</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en">Mount it into three containers: Mycelium at <code>/arr-stubs</code> (the <code>ARR_STUB_PATH</code> default), Radarr and Sonarr anywhere, for example <code>/mycelium</code>:</span>
+          <span class="lang-nl">Mount it into three containers: Mycelium at <code>/arr-stubs</code> (the <code>ARR_STUB_PATH</code> default), Radarr and Sonarr anywhere, for example <code>/mycelium</code>:</span><br>
+          <div class="cmd"><span class="comment"># mycelium</span><br>- /opt/Myc3l1um/arr-stubs:/arr-stubs<br><span class="comment"># radarr and sonarr</span><br>- /opt/Myc3l1um/arr-stubs:/mycelium</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en">In Radarr add <code>/mycelium/movies</code> as a root folder, in Sonarr <code>/mycelium/series</code>. Back in Mycelium's Settings &rarr; Radarr / Sonarr press <em>Load folders</em> next to each root-folder field and pick them.</span>
+          <span class="lang-nl">In Radarr add <code>/mycelium/movies</code> as a root folder, in Sonarr <code>/mycelium/series</code>. Back in Mycelium's Settings &rarr; Radarr / Sonarr press <em>Load folders</em> next to each root-folder field and pick them.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en">Switch on <code>ARR_STUBS_ENABLED</code>. The six-hourly reconcile fills the tree for every title already in the library; new titles get their stub as they are added. The health card shows <em>Arr stubs: ok</em>, or the reason it is not (folder not mounted, a root folder not chosen, Catbox mode off).</span>
+          <span class="lang-nl">Switch on <code>ARR_STUBS_ENABLED</code>. The six-hourly reconcile fills the tree for every title already in the library; new titles get their stub as they are added. The health card shows <em>Arr stubs: ok</em>, or the reason it is not (folder not mounted, a root folder not chosen, Catbox mode off).</span>
+        </div>
+      </div>
+    </div>
+    <div class="lang-en"><p>Names are truthful: <code>Heat (1995) - WEBDL-1080p.mkv</code> is what Mycelium found. Titles below your profile cutoff appear under Cutoff Unmet, which is harmless with search off. Mycelium writes into the folder the arr chose and marks it with a <code>.mycelium</code> file; it only ever deletes folders carrying that marker.</p></div>
+    <div class="lang-nl"><p>Names are truthful: <code>Heat (1995) - WEBDL-1080p.mkv</code> is what Mycelium found. Titles below your profile cutoff appear under Cutoff Unmet, which is harmless with search off. Mycelium writes into the folder the arr chose and marks it with a <code>.mycelium</code> file; it only ever deletes folders carrying that marker.</p></div>
+
+    <h3><span class="lang-en">3. Delete webhooks (Maintainerr and manual deletes)</span><span class="lang-nl">3. Delete webhooks (Maintainerr and manual deletes)</span></h3>
+    <div class="lang-en"><p>A deletion made in Radarr or Sonarr, by you or by Maintainerr, must reach Mycelium so the title's files and records go too. Point both arrs at:</p></div>
+    <div class="lang-nl"><p>A deletion made in Radarr or Sonarr, by you or by Maintainerr, must reach Mycelium so the title's files and records go too. Point both arrs at:</p></div>
+    <div class="cmd">http://mycelium:8088/webhook/arr</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en"><strong>Radarr</strong>  -  Settings &rarr; Connect &rarr; Webhook: URL as above, method POST, tick <em>On Movie Delete</em>, and <em>On Movie File Delete</em> as well if you use the stub files. Add the secret as a header <code>X-Webhook-Secret</code> (from Admin &rarr; Integration Endpoints) or append <code>?secret=&lt;secret&gt;</code> to the URL.</span>
+          <span class="lang-nl"><strong>Radarr</strong>  -  Settings &rarr; Connect &rarr; Webhook: URL as above, method POST, tick <em>On Movie Delete</em>, and <em>On Movie File Delete</em> as well if you use the stub files. Add the secret as a header <code>X-Webhook-Secret</code> (from Admin &rarr; Integration Endpoints) or append <code>?secret=&lt;secret&gt;</code> to the URL.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en"><strong>Sonarr</strong>  -  the same, tick <em>On Series Delete</em>. Single-episode deletes are ignored; delete the series.</span>
+          <span class="lang-nl"><strong>Sonarr</strong>  -  the same, tick <em>On Series Delete</em>. Single-episode deletes are ignored; delete the series.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en"><strong>Maintainerr</strong>  -  needs nothing extra. Let its rules delete through Radarr and Sonarr; the arr's webhook does the rest and Seerr is told at the same time.</span>
+          <span class="lang-nl"><strong>Maintainerr</strong>  -  needs nothing extra. Let its rules delete through Radarr and Sonarr; the arr's webhook does the rest and Seerr is told at the same time.</span>
+        </div>
+      </div>
+    </div>
+    <div class="lang-en"><p>The arr's "Test" button returns <em>ignored</em> and succeeds. Deletions of titles Mycelium does not own are ignored too, which is what stops the arr echoing Mycelium's own removals back in a loop. Full details: <code>docs/INTEGRATIONS.md</code> in the repository.</p></div>
+    <div class="lang-nl"><p>The arr's "Test" button returns <em>ignored</em> and succeeds. Deletions of titles Mycelium does not own are ignored too, which is what stops the arr echoing Mycelium's own removals back in a loop. Full details: <code>docs/INTEGRATIONS.md</code> in the repository.</p></div>
   </section>
 
   <!-- Optional: Plex -->
