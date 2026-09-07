@@ -232,18 +232,18 @@ def test_reconcile_adds_only_what_the_arr_lacks(enabled, monkeypatch):
     monkeypatch.setattr(radarr, "list_movies", lambda u, k: [{"imdb_id": "tt0078748", "tmdb_id": 348}])
     monkeypatch.setattr(sonarr, "list_series", lambda u, k: [])
     added = []
-    monkeypatch.setattr(arr_sync, "_ensure",
-                        lambda imdb, mt, tmdb_id, title: added.append(imdb) or "added")
+    monkeypatch.setattr(arr_sync, "_ensure_with_stubs",
+                        lambda imdb, mt, tmdb_id, title: (added.append(imdb) or "added", 0))
     out = arr_sync.reconcile()
     assert added == ["tt0113277"]
-    assert out == {"checked": 2, "added": 1, "present": 0, "failed": 0, "skipped": 1}
+    assert out == {"checked": 2, "added": 1, "present": 0, "failed": 0, "skipped": 1, "stubs": 0}
 
 
 def test_reconcile_is_a_noop_when_disabled(monkeypatch):
     import arr_sync
     import settings
     monkeypatch.setattr(settings, "get", lambda k, d=None: {"ARR_SYNC_ENABLED": False}.get(k, d))
-    assert arr_sync.reconcile() == {"checked": 0, "added": 0, "present": 0, "failed": 0, "skipped": 0}
+    assert arr_sync.reconcile() == {"checked": 0, "added": 0, "present": 0, "failed": 0, "skipped": 0, "stubs": 0}
 
 
 # -- wiring ------------------------------------------------------------------
@@ -326,5 +326,137 @@ def test_reconcile_does_not_count_already_present_as_added(enabled, monkeypatch)
     })
     monkeypatch.setattr(arr_sync, "_request", fake)
     out = arr_sync.reconcile()
-    assert out == {"checked": 1, "added": 0, "present": 1, "failed": 0, "skipped": 0}
+    assert out == {"checked": 1, "added": 0, "present": 1, "failed": 0, "skipped": 0, "stubs": 0}
     assert not [c for c in fake.calls if c[0] == "POST"]
+
+
+# -- Level B: stubs ------------------------------------------------------------
+
+@pytest.fixture
+def stubs_on(enabled, tmp_path, monkeypatch):
+    import config
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    media = tmp_path / "media"
+    monkeypatch.setattr(config, "MEDIA_PATH", str(media))
+    enabled.update({"ARR_STUBS_ENABLED": True, "ARR_STUB_PATH": str(stubs),
+                    "RADARR_ROOT_FOLDER": "/mnt/arr/movies", "SONARR_ROOT_FOLDER": "/mnt/arr/series"})
+    import tmdb
+    monkeypatch.setattr(tmdb, "get_movie_runtime_sec", lambda imdb: 5400)
+    monkeypatch.setattr(tmdb, "get_episode_runtime_sec", lambda imdb, s, e: 2700)
+    folder = media / "movies" / "Heat (1995)"
+    folder.mkdir(parents=True)
+    strm = folder / "Heat (1995).strm"
+    strm.write_text("http://x/stream/abc")
+    db.insert_request("Heat", "tt0113277", "movie", tmdb_id=949)
+    db.update_request(db.get_request_by_imdb("tt0113277")["id"], "success", quality="1080p")
+    with db._connect() as conn:
+        conn.execute(
+            "INSERT INTO virtual_items (token, info_hash, magnet, title, media_type, strm_path, imdb_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("tok1", "h" * 40, f"magnet:?xt=urn:btih:{'h' * 40}&dn=Heat.1995.1080p.WEB-DL.x264",
+             "Heat", "movie", str(strm), "tt0113277"))
+        conn.commit()
+    return stubs
+
+
+def test_add_writes_the_stub_into_the_arr_folder_and_asks_for_a_rescan(stubs_on, monkeypatch):
+    import arr_sync
+    fake = FakeArr({
+        ("GET", "/movie/lookup"): (200, RADARR_LOOKUP),
+        ("GET", "/movie"): (200, []),
+        ("GET", "/qualityprofile"): (200, [{"id": 4}]),
+        ("GET", "/rootfolder"): (200, [{"path": "/mnt/arr/movies"}]),
+        ("POST", "/movie"): (201, {"id": 10, "path": "/mnt/arr/movies/Heat (1995)"}),
+        ("POST", "/command"): (201, {"id": 1}),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    assert arr_sync.mirror_add("tt0113277", "movie", 949, "Heat") is True
+    assert (stubs_on / "movies" / "Heat (1995)" / "Heat (1995) - WEBDL-1080p.mkv").exists()
+    cmd = [c for c in fake.calls if c[1] == "/command"]
+    assert cmd and cmd[0][3] == {"name": "RescanMovie", "movieId": 10}
+
+
+def test_present_title_gets_its_stub_too(stubs_on, monkeypatch):
+    """Backfill: a title the arr already has (Level A left it Missing)."""
+    import arr_sync
+    fake = FakeArr({
+        ("GET", "/movie/lookup"): (200, RADARR_LOOKUP),
+        ("GET", "/movie"): (200, [{"id": 10, "tmdbId": 949, "path": "/mnt/arr/movies/Heat (1995)"}]),
+        ("POST", "/command"): (201, {"id": 1}),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    assert arr_sync.mirror_add("tt0113277", "movie", 949, "Heat") is True
+    assert (stubs_on / "movies" / "Heat (1995)" / "Heat (1995) - WEBDL-1080p.mkv").exists()
+    assert [c for c in fake.calls if c[1] == "/command"]
+
+
+def test_no_rescan_when_nothing_was_written(stubs_on, monkeypatch):
+    import arr_sync
+    fake = FakeArr({
+        ("GET", "/movie/lookup"): (200, RADARR_LOOKUP),
+        ("GET", "/movie"): (200, [{"id": 10, "tmdbId": 949, "path": "/mnt/arr/movies/Heat (1995)"}]),
+        ("POST", "/command"): (201, {"id": 1}),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    arr_sync.mirror_add("tt0113277", "movie", 949, "Heat")
+    fake.calls.clear()
+    arr_sync.mirror_add("tt0113277", "movie", 949, "Heat")
+    assert not [c for c in fake.calls if c[1] == "/command"], "idempotent: no second rescan"
+
+
+def test_remove_deletes_the_stubs_before_the_arr_entry(stubs_on, monkeypatch):
+    """Order matters: with the stub gone first, the arr's own delete has no
+    file to report, so no MovieFileDelete echoes back at the webhook."""
+    import arr_sync
+    fake = FakeArr({
+        ("GET", "/movie/lookup"): (200, RADARR_LOOKUP),
+        ("GET", "/movie"): (200, [{"id": 10, "tmdbId": 949, "path": "/mnt/arr/movies/Heat (1995)"}]),
+        ("POST", "/command"): (201, {"id": 1}),
+        ("DELETE", "/movie/10"): (200, None),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    arr_sync.mirror_add("tt0113277", "movie", 949, "Heat")
+    folder = stubs_on / "movies" / "Heat (1995)"
+    assert folder.exists()
+    existed_at_delete = {}
+    real_request = fake
+
+    def spying(method, url, key, *, params=None, json=None):
+        if method == "DELETE":
+            existed_at_delete["folder"] = folder.exists()
+        return real_request(method, url, key, params=params, json=json)
+
+    monkeypatch.setattr(arr_sync, "_request", spying)
+    assert arr_sync.mirror_remove("tt0113277", "movie", 949) is True
+    assert existed_at_delete == {"folder": False}
+    assert not folder.exists()
+
+
+def test_stub_failure_does_not_fail_the_add(stubs_on, monkeypatch):
+    import arr_stubs
+    import arr_sync
+    monkeypatch.setattr(arr_stubs, "write_title", lambda *a, **k: (_ for _ in ()).throw(OSError("disk")))
+    fake = FakeArr({
+        ("GET", "/movie/lookup"): (200, RADARR_LOOKUP),
+        ("GET", "/movie"): (200, [{"id": 10, "tmdbId": 949, "path": "/mnt/arr/movies/Heat (1995)"}]),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    assert arr_sync.mirror_add("tt0113277", "movie", 949, "Heat") is True
+
+
+def test_reconcile_backfills_stubs_and_reports_them(stubs_on, monkeypatch):
+    import arr_sync
+    import radarr
+    import sonarr
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [])
+    monkeypatch.setattr(sonarr, "list_series", lambda u, k: [])
+    fake = FakeArr({
+        ("GET", "/movie/lookup"): (200, RADARR_LOOKUP),
+        ("GET", "/movie"): (200, [{"id": 10, "tmdbId": 949, "path": "/mnt/arr/movies/Heat (1995)"}]),
+        ("POST", "/command"): (201, {"id": 1}),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    out = arr_sync.reconcile()
+    assert out == {"checked": 1, "added": 0, "present": 1, "failed": 0, "skipped": 0, "stubs": 1}
+    assert (stubs_on / "movies" / "Heat (1995)" / "Heat (1995) - WEBDL-1080p.mkv").exists()

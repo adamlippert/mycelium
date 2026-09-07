@@ -107,20 +107,58 @@ def _existing(base: str, key: str, resource: str, id_field: str, value) -> dict 
     return None
 
 
+def rescan(kind: str, base: str, key: str, arr_id: int) -> bool:
+    """Ask the arr to look at one title's folder now. Without this a new
+    stub is only noticed by the arr's 12-hourly refresh."""
+    if kind == "movie":
+        body = {"name": "RescanMovie", "movieId": int(arr_id)}
+    else:
+        body = {"name": "RescanSeries", "seriesId": int(arr_id)}
+    status, resp = _request("POST", f"{base}/api/v3/command", key, json=body)
+    if status in (200, 201):
+        return True
+    log.warning("Arr sync: %s rescan of %s failed: %s %s", kind, arr_id, status, str(resp)[:200])
+    return False
+
+
+def _write_stubs(imdb_id: str, media_type: str, arr_obj: dict | None) -> int:
+    """Stubs for a title the arr now knows; rescan if anything was written.
+    Best-effort: a stub problem never fails the mirror."""
+    import arr_stubs
+    if not arr_stubs.is_enabled() or not arr_obj or not arr_obj.get("path"):
+        return 0
+    kind = "movie" if media_type == "movie" else "series"
+    try:
+        written = arr_stubs.write_title(imdb_id, media_type, arr_obj["path"])
+    except Exception as exc:
+        log.warning("Arr sync: stubs for %s failed: %s", imdb_id, exc)
+        return 0
+    if written and arr_obj.get("id"):
+        base, key = _conn("radarr" if kind == "movie" else "sonarr")
+        try:
+            rescan(kind, base, key, arr_obj["id"])
+        except Exception as exc:
+            log.warning("Arr sync: rescan for %s failed: %s", imdb_id, exc)
+    return written
+
+
 # -- Radarr --------------------------------------------------------------------
 
-def _add_movie(imdb_id: str, tmdb_id: int | None, title: str) -> str:
+def _add_movie(imdb_id: str, tmdb_id: int | None, title: str) -> tuple[str, dict | None]:
     base, key = _conn("radarr")
     if not base or not key:
         log.debug("Arr sync: Radarr not configured; skipping %s", imdb_id)
-        return "skipped"
+        return "skipped", None
     terms = [f"imdb:{imdb_id}"] + ([f"tmdb:{tmdb_id}"] if tmdb_id else [])
     found = _lookup(base, key, "movie", terms, "tmdbId")
     if not found:
         log.info("Arr sync: Radarr has no match for %s (%s)", title or imdb_id, imdb_id)
-        return "unmatched"
-    if found.get("id") or _existing(base, key, "movie", "tmdbId", found["tmdbId"]):
-        return "present"
+        return "unmatched", None
+    if found.get("id"):
+        return "present", found
+    existing = _existing(base, key, "movie", "tmdbId", found["tmdbId"])
+    if existing:
+        return "present", existing
     profile_id, root = _defaults("radarr", base, key)
     body = dict(found)
     body.update({
@@ -133,11 +171,11 @@ def _add_movie(imdb_id: str, tmdb_id: int | None, title: str) -> str:
     status, resp = _request("POST", f"{base}/api/v3/movie", key, json=body)
     if status in (200, 201):
         log.info("Arr sync: mirrored %s (%s) into Radarr", title or imdb_id, imdb_id)
-        return "added"
+        return "added", resp if isinstance(resp, dict) else None
     if status == 400 and "exist" in str(resp).lower():
-        return "present"
+        return "present", _existing(base, key, "movie", "tmdbId", found["tmdbId"])
     log.warning("Arr sync: Radarr refused %s: %s %s", imdb_id, status, str(resp)[:200])
-    return "failed"
+    return "failed", None
 
 
 def _remove_movie(imdb_id: str, tmdb_id: int | None) -> bool:
@@ -152,7 +190,17 @@ def _remove_movie(imdb_id: str, tmdb_id: int | None) -> bool:
         return False
     existing = _existing(base, key, "movie", "tmdbId", tmdb_id)
     if not existing:
+        try:
+            import arr_stubs
+            arr_stubs.remove_title("movie", imdb_id)
+        except Exception as exc:
+            log.warning("Arr sync: stub removal for %s failed: %s", imdb_id, exc)
         return True
+    try:
+        import arr_stubs
+        arr_stubs.remove_title("movie", imdb_id, existing.get("path"))
+    except Exception as exc:
+        log.warning("Arr sync: stub removal for %s failed: %s", imdb_id, exc)
     status, _ = _request("DELETE", f"{base}/api/v3/movie/{existing['id']}", key,
                          params={"deleteFiles": "false", "addImportExclusion": "false"})
     if status in (200, 204, 404):
@@ -175,17 +223,20 @@ def _sonarr_find(base: str, key: str, imdb_id: str, tmdb_id: int | None) -> dict
     return _lookup(base, key, "series", [f"tvdb:{tvdb_id}"], "tvdbId")
 
 
-def _add_series(imdb_id: str, tmdb_id: int | None, title: str) -> str:
+def _add_series(imdb_id: str, tmdb_id: int | None, title: str) -> tuple[str, dict | None]:
     base, key = _conn("sonarr")
     if not base or not key:
         log.debug("Arr sync: Sonarr not configured; skipping %s", imdb_id)
-        return "skipped"
+        return "skipped", None
     found = _sonarr_find(base, key, imdb_id, tmdb_id)
     if not found:
         log.info("Arr sync: Sonarr has no match for %s (%s)", title or imdb_id, imdb_id)
-        return "unmatched"
-    if found.get("id") or _existing(base, key, "series", "tvdbId", found["tvdbId"]):
-        return "present"
+        return "unmatched", None
+    if found.get("id"):
+        return "present", found
+    existing = _existing(base, key, "series", "tvdbId", found["tvdbId"])
+    if existing:
+        return "present", existing
     profile_id, root = _defaults("sonarr", base, key)
     body = dict(found)
     body.update({
@@ -202,11 +253,11 @@ def _add_series(imdb_id: str, tmdb_id: int | None, title: str) -> str:
     status, resp = _request("POST", f"{base}/api/v3/series", key, json=body)
     if status in (200, 201):
         log.info("Arr sync: mirrored %s (%s) into Sonarr", title or imdb_id, imdb_id)
-        return "added"
+        return "added", resp if isinstance(resp, dict) else None
     if status == 400 and "exist" in str(resp).lower():
-        return "present"
+        return "present", _existing(base, key, "series", "tvdbId", found["tvdbId"])
     log.warning("Arr sync: Sonarr refused %s: %s %s", imdb_id, status, str(resp)[:200])
-    return "failed"
+    return "failed", None
 
 
 def _remove_series(imdb_id: str, tmdb_id: int | None) -> bool:
@@ -219,7 +270,17 @@ def _remove_series(imdb_id: str, tmdb_id: int | None) -> bool:
         return False
     existing = _existing(base, key, "series", "tvdbId", found["tvdbId"])
     if not existing:
+        try:
+            import arr_stubs
+            arr_stubs.remove_title("series", imdb_id)
+        except Exception as exc:
+            log.warning("Arr sync: stub removal for %s failed: %s", imdb_id, exc)
         return True
+    try:
+        import arr_stubs
+        arr_stubs.remove_title("series", imdb_id, existing.get("path"))
+    except Exception as exc:
+        log.warning("Arr sync: stub removal for %s failed: %s", imdb_id, exc)
     status, _ = _request("DELETE", f"{base}/api/v3/series/{existing['id']}", key,
                          params={"deleteFiles": "false", "addImportListExclusion": "false"})
     if status in (200, 204, 404):
@@ -231,17 +292,32 @@ def _remove_series(imdb_id: str, tmdb_id: int | None) -> bool:
 
 # -- public --------------------------------------------------------------------
 
+def _stubs_enabled() -> bool:
+    import arr_stubs
+    return arr_stubs.is_enabled()
+
+
 def _ensure(imdb_id: str, media_type: str, tmdb_id: int | None, title: str) -> str:
     """One of "added", "present", "unmatched", "failed", "skipped". Never raises."""
+    state, _ = _ensure_with_stubs(imdb_id, media_type, tmdb_id, title)
+    return state
+
+
+def _ensure_with_stubs(imdb_id: str, media_type: str, tmdb_id: int | None,
+                       title: str) -> tuple[str, int]:
+    """(state, stubs written)."""
     if not is_enabled() or not imdb_id:
-        return "skipped"
+        return "skipped", 0
     try:
         if media_type == "movie":
-            return _add_movie(imdb_id, tmdb_id, title)
-        return _add_series(imdb_id, tmdb_id, title)
+            state, arr_obj = _add_movie(imdb_id, tmdb_id, title)
+        else:
+            state, arr_obj = _add_series(imdb_id, tmdb_id, title)
     except Exception as exc:
         log.warning("Arr sync: add of %s failed: %s", imdb_id, exc)
-        return "failed"
+        return "failed", 0
+    stubs = _write_stubs(imdb_id, media_type, arr_obj) if state in ("added", "present") else 0
+    return state, stubs
 
 
 def mirror_add(imdb_id: str, media_type: str, tmdb_id: int | None = None, title: str = "") -> bool:
@@ -265,9 +341,10 @@ def mirror_remove(imdb_id: str, media_type: str, tmdb_id: int | None = None) -> 
 
 
 def reconcile() -> dict:
-    """Add every successful Mycelium title the arrs lack. Never removes from
+    """Add every successful Mycelium title the arrs lack, and backfill any
+    stub the arr entry has but the stub tree does not. Never removes from
     the arrs: they may hold titles Mycelium does not own. Scheduled."""
-    out = {"checked": 0, "added": 0, "present": 0, "failed": 0, "skipped": 0}
+    out = {"checked": 0, "added": 0, "present": 0, "failed": 0, "skipped": 0, "stubs": 0}
     if not is_enabled():
         return out
     import radarr
@@ -291,9 +368,12 @@ def reconcile() -> dict:
             continue
         out["checked"] += 1
         kind = "movie" if row["media_type"] == "movie" else "series"
-        if row["imdb_id"] in have[kind] or (row.get("tmdb_id") and row["tmdb_id"] in have[kind]):
+        known = row["imdb_id"] in have[kind] or (row.get("tmdb_id") and row["tmdb_id"] in have[kind])
+        if known and not _stubs_enabled():
             continue
-        state = _ensure(row["imdb_id"], row["media_type"], row.get("tmdb_id"), row.get("title") or "")
+        state, stubs = _ensure_with_stubs(row["imdb_id"], row["media_type"], row.get("tmdb_id"),
+                                          row.get("title") or "")
+        out["stubs"] += stubs
         if state == "present":
             # In the arr under an id the listing did not carry (Sonarr with
             # no imdb/tmdb for the series); not an add.
