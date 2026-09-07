@@ -460,3 +460,46 @@ def test_reconcile_backfills_stubs_and_reports_them(stubs_on, monkeypatch):
     out = arr_sync.reconcile()
     assert out == {"checked": 1, "added": 0, "present": 1, "failed": 0, "skipped": 0, "stubs": 1}
     assert (stubs_on / "movies" / "Heat (1995)" / "Heat (1995) - WEBDL-1080p.mkv").exists()
+
+
+def test_reconcile_backfills_a_title_the_arr_already_lists(enabled, stubs_on, monkeypatch):
+    """The have-set short-circuit must not skip the stub backfill when
+    Level B is on: a title Level A already left "Missing" in the arr still
+    needs its stub written. With stubs off, the old short-circuit applies
+    again and the listing is never even looked up."""
+    import arr_sync
+    import radarr
+    import sonarr
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [{"imdb_id": "tt0113277", "tmdb_id": 949}])
+    monkeypatch.setattr(sonarr, "list_series", lambda u, k: [])
+    fake = FakeArr({
+        ("GET", "/movie/lookup"): (200, RADARR_LOOKUP),
+        ("GET", "/movie"): (200, [{"id": 10, "tmdbId": 949, "path": "/mnt/arr/movies/Heat (1995)"}]),
+        ("POST", "/command"): (201, {"id": 1}),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    out = arr_sync.reconcile()
+    assert out == {"checked": 1, "added": 0, "present": 1, "failed": 0, "skipped": 0, "stubs": 1}
+    assert (stubs_on / "movies" / "Heat (1995)" / "Heat (1995) - WEBDL-1080p.mkv").exists()
+
+    enabled["ARR_STUBS_ENABLED"] = False
+    fake.calls.clear()
+    arr_sync.reconcile()
+    assert not [c for c in fake.calls if c[1] == "/movie/lookup"]
+
+
+def test_present_via_lookup_id_still_writes_the_stub(stubs_on, monkeypatch):
+    """found.get("id") is enough to call a title present; that branch must
+    still hand its object (with path) to the stub writer without a
+    needless call to /movie."""
+    import arr_sync
+    fake = FakeArr({
+        ("GET", "/movie/lookup"): (200, [{**RADARR_LOOKUP[0], "id": 10,
+                                          "path": "/mnt/arr/movies/Heat (1995)"}]),
+        ("POST", "/command"): (201, {"id": 1}),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    assert arr_sync.mirror_add("tt0113277", "movie", 949, "Heat") is True
+    assert (stubs_on / "movies" / "Heat (1995)" / "Heat (1995) - WEBDL-1080p.mkv").exists()
+    assert not [c for c in fake.calls if c[0] == "GET" and c[1] == "/movie"]
+    assert [c for c in fake.calls if c[1] == "/command"]
