@@ -131,3 +131,69 @@ def test_gate_allows_setup_and_create_user_when_bricked_denies_others(monkeypatc
     # And authenticated routes still gated
     assert client.get("/ui/api/settings").status_code == 401, "GET /ui/api/settings should still return 401"
     assert client.get("/admin").status_code == 302, "GET /admin should still return 302"
+
+
+# -- who may use the setup surface --------------------------------------------
+
+def _ctx():
+    from flask import Flask
+    app = Flask(__name__)
+    app.secret_key = "test"
+    return app.test_request_context("/setup/schema")
+
+
+def _auth_on(monkeypatch, password_hash=""):
+    monkeypatch.setattr(auth.settings, "get", lambda k, d=None: (
+        True if k == "AUTH_ENABLED" else password_hash if k == "AUTH_PASSWORD_HASH" else d))
+
+
+def test_setup_is_open_when_auth_is_off(monkeypatch):
+    monkeypatch.setattr(auth.settings, "get", lambda k, d=None: d)
+    with _ctx():
+        assert auth.may_use_setup() is True
+
+
+def test_setup_is_open_to_anyone_while_nothing_can_log_in(monkeypatch):
+    _auth_on(monkeypatch)
+    with _ctx():
+        assert auth.may_use_setup() is True
+
+
+def test_setup_closes_to_anonymous_once_a_user_exists(monkeypatch):
+    _auth_on(monkeypatch)
+    db.create_user("admin", "scrypt$x$y", role="admin")
+    with _ctx():
+        assert auth.may_use_setup() is False
+
+
+def test_a_logged_in_non_admin_may_not_use_setup(monkeypatch):
+    """The regression this predicate exists for: a user session on an install
+    whose wizard never completed used to reach /setup/schema."""
+    _auth_on(monkeypatch)
+    db.create_user("admin", "scrypt$x$y", role="admin")
+    uid = db.create_user("viewer", "scrypt$x$y", role="user")
+    from flask import session
+    with _ctx():
+        session["user"], session["user_id"] = "viewer", uid
+        assert auth.may_use_setup() is False
+
+
+def test_an_admin_session_may_use_setup(monkeypatch):
+    _auth_on(monkeypatch)
+    uid = db.create_user("admin", "scrypt$x$y", role="admin")
+    from flask import session
+    with _ctx():
+        session["user"], session["user_id"] = "admin", uid
+        assert auth.may_use_setup() is True
+
+
+def test_a_legacy_password_only_install_keeps_its_first_run(monkeypatch):
+    """AUTH_PASSWORD only, no users table rows: a credential exists, so the
+    surface is closed to anonymous callers, but the legacy login sets role
+    admin and gets through. Tightening the gate must not lock this path out."""
+    _auth_on(monkeypatch, password_hash="scrypt$x$y")
+    from flask import session
+    with _ctx():
+        assert auth.may_use_setup() is False
+        session["user"], session["role"] = "admin", "admin"
+        assert auth.may_use_setup() is True

@@ -244,6 +244,16 @@ def current_user_record() -> dict | None:
     return u
 
 
+def may_use_setup() -> bool:
+    """True when the caller may use the setup surface (/setup/schema, save,
+    test and picker): nothing can log in yet (a first run, or a bricked
+    install), or the session is an admin. A logged-in non-admin on an
+    install whose wizard never completed is refused: the schema route shows
+    integration URLs and which keys are set. The legacy password login sets
+    role admin, so a password-only install keeps its first run."""
+    return no_credentials_exist() or is_admin()
+
+
 def is_admin() -> bool:
     # Auth disabled → single-user mode, full admin access.
     if not is_enabled():

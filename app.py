@@ -773,10 +773,9 @@ def setup_wizard():
 
 
 def _setup_gate():
-    """None when the caller may use the setup surface: setup not yet
-    complete (first run), or an admin re-running it. Otherwise a 401."""
-    import settings as _settings
-    if _settings.get("SETUP_COMPLETE", False) and not auth.is_admin():
+    """None when the caller may use the setup surface (see
+    auth.may_use_setup): nothing can log in yet, or an admin. Otherwise 401."""
+    if not auth.may_use_setup():
         return jsonify(error="unauthorized"), 401
     return None
 

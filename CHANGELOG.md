@@ -15,8 +15,11 @@ All notable changes to Mycelium are documented in this file.
   `QUALITY_PREFERENCE`, `ALLOW_4K`, `PREFER_HEVC` and
   `AUDIO_LANGUAGE_PREFERENCE` names is gone.
 - New `GET /setup/schema` and `POST /setup/picker/<name>`; `POST
-  /setup/test/<kind>` also accepts a JSON body. All three share the setup
-  gate (open until setup completes, admin afterwards).
+  /setup/test/<kind>` also accepts a JSON body. All three share one setup
+  gate, `auth.may_use_setup()`: open while nothing can log in (a first run
+  or a bricked install), admin-only otherwise. A logged-in non-admin on an
+  install whose wizard never completed could previously reach the save and
+  test routes; it no longer can. The legacy password login counts as admin.
 
 ## [0.17.0] - 2026-09-07
 

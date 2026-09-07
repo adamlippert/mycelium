@@ -119,7 +119,7 @@ def test_the_retired_translator_is_gone_and_save_accepts_rule_keys():
 def test_the_setup_routes_share_one_gate():
     src = _src("app.py")
     gate = re.search(r"def _setup_gate\(\).*?\n(.*?)\n\n\n", src, re.S)
-    assert gate and 'SETUP_COMPLETE' in gate.group(1) and "auth.is_admin()" in gate.group(1)
+    assert gate and "auth.may_use_setup()" in gate.group(1) and "SETUP_COMPLETE" not in gate.group(1)
     for route in ('@app.get("/setup/schema")', '@app.post("/setup/picker/<name>")', '@app.post("/setup/test/<kind>")'):
         assert route in src, route
         body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
