@@ -728,7 +728,7 @@ def _process_locked(req: MediaRequest, _retry_attempt: int) -> bool:
         except Exception as exc:
             log.debug("seerr_report skipped: %s", exc)
         quality = winner.quality if winner else "?"
-        db.log_activity("added", req.title, f"{req.media_type} · {quality}", True)
+        db.log_activity("added", req.title, f"{req.media_type} · {quality}", True, imdb_id=req.imdb_id)
         notify.send(f"Added: {req.title}", f"{req.media_type} · {quality} · {req.imdb_id}", True)
         # Metrics
         elapsed = time.monotonic() - started
@@ -758,12 +758,12 @@ def _process_locked(req: MediaRequest, _retry_attempt: int) -> bool:
             tmdb_id = None
         db.upsert_wanted_movie(req.imdb_id, tmdb_id, req.title, reason)
         log.info("Marked %s as wanted  -  will recheck for an acceptable release", req.title)
-        db.log_activity("wanted", req.title, f"{reason} ({req.imdb_id})", False)
+        db.log_activity("wanted", req.title, f"{reason} ({req.imdb_id})", False, imdb_id=req.imdb_id)
     else:
         reason = _LAST_FAIL_REASON.pop(req.imdb_id, None) or "no suitable stream found"
         db.update_request(row_id, "failed", error=reason)
         log.warning("No content added (%s); skipping Jellyfin refresh for %s", reason, req.title)
-        db.log_activity("failed", req.title, f"{reason} ({req.imdb_id})", False)
+        db.log_activity("failed", req.title, f"{reason} ({req.imdb_id})", False, imdb_id=req.imdb_id)
         notify.send(f"Failed: {req.title}", f"No suitable stream found · {req.imdb_id}", False)
         db.record_metric("request_failed", req.media_type, value_int=1)
         try:

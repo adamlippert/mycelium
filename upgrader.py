@@ -103,8 +103,7 @@ def _run_auto_upgrade_catbox() -> int:
             db.update_virtual_item_upgrade(item["token"], better.info_hash, better.magnet,
                                             better.quality, source)
             catbox.invalidate_url_cache(item["token"])
-            db.log_activity("upgraded", item["title"],
-                            f"{item.get('quality')} → {better.quality}", True)
+            db.log_activity("upgraded", item["title"], f"{item.get('quality')} → {better.quality}", True, imdb_id=item["imdb_id"])
             try:
                 import arr_sync
                 arr_sync.mirror_add(item["imdb_id"], "movie", item.get("tmdb_id"), item["title"])
@@ -145,8 +144,7 @@ def run_auto_upgrade() -> int:
             strm_generator.create_strm_for_torrent(item["id"], row["title"], "movie")
             db.update_request(row["id"], "success", quality=better.quality,
                               source=better.name.split()[0], info_hash=better.info_hash)
-            db.log_activity("upgraded", row["title"],
-                            f"{row.get('quality')} → {better.quality}", True)
+            db.log_activity("upgraded", row["title"], f"{row.get('quality')} → {better.quality}", True, imdb_id=row["imdb_id"])
             strm_generator._cache_cdn_url(better.info_hash, item, row["title"])
             try:
                 import arr_sync
@@ -225,8 +223,7 @@ def run_pack_consolidation() -> int:
                     jellyfin.note_change(s, "Deleted")
                 except Exception:
                     pass
-            db.log_activity("consolidated", f"{title} S{season:02d}",
-                            f"{len(strms)} episodes → 1 pack ({pack.quality})", True)
+            db.log_activity("consolidated", f"{title} S{season:02d}", f"{len(strms)} episodes → 1 pack ({pack.quality})", True, imdb_id=imdb_id)
             try:
                 import arr_sync
                 arr_sync.mirror_add(imdb_id, "series", None, title)
@@ -281,8 +278,7 @@ def recheck_wanted() -> int:
             except Exception as exc:
                 log.debug("seerr_report skipped: %s", exc)
             processor._WANTED.pop(w["imdb_id"], None)
-            db.log_activity("found", w["title"],
-                            f"acceptable release found ({winner.quality if winner else '?'})", True)
+            db.log_activity("found", w["title"], f"acceptable release found ({winner.quality if winner else '?'})", True, imdb_id=w["imdb_id"])
             log.info("Wanted: %s is now available  -  added", w["title"])
             added += 1
         else:

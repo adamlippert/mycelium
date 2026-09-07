@@ -2153,7 +2153,7 @@ def ui_api_purge_request(row_id: int):
     result = cleanup.purge_title(imdb_id, row_id=row_id)
     invalidate_series_episodes_cache()
     db.log_activity("purged", rows[0]["title"],
-                    f"{result['strms']} strm(s) removed ({imdb_id})", True)
+                    f"{result['strms']} strm(s) removed ({imdb_id})", True, imdb_id=imdb_id)
     return jsonify(ok=True, **result)
 
 

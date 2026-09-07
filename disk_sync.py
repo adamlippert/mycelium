@@ -64,8 +64,7 @@ def purge_rows(victims: dict[str, tuple[dict, str]]) -> int:
             cleanup.purge_title(imdb_id, row_id=r.get("id"))
             purged += 1
             try:
-                db.log_activity("purged", r.get("title") or imdb_id,
-                                f"{imdb_id}: {why}; removed by the reconcile")
+                db.log_activity("purged", r.get("title") or imdb_id, f"{imdb_id}: {why}; removed by the reconcile", imdb_id=imdb_id)
             except Exception:
                 pass
         except Exception as exc:

@@ -405,6 +405,14 @@ def _migrate() -> None:
             conn.execute("ALTER TABLE requests ADD COLUMN arr_mirrored_at TEXT")
             log.info("Migration: added requests.arr_mirrored_at")
 
+        act_cols = {r["name"] for r in conn.execute("PRAGMA table_info(activity_log)")}
+        if "imdb_id" not in act_cols:
+            conn.execute("ALTER TABLE activity_log ADD COLUMN imdb_id TEXT")
+            log.info("Migration: added activity_log.imdb_id")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_imdb ON activity_log(imdb_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_user_requests_imdb ON user_requests(imdb_id, created_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_wanted_episodes_imdb_status ON wanted_episodes(imdb_id, status)")
+
         user_cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
         if "region" not in user_cols:
             conn.execute("ALTER TABLE users ADD COLUMN region TEXT NOT NULL DEFAULT 'NL'")
@@ -1092,11 +1100,11 @@ def insert_repair_item(run_id: int, path: str, title: str | None, media_type: st
 # ── activity_log ──────────────────────────────────────────────────────────────
 
 def log_activity(event: str, title: str | None = None, message: str | None = None,
-                  success: bool = True) -> None:
+                 success: bool = True, imdb_id: str | None = None) -> None:
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO activity_log (event, title, message, success) VALUES (?, ?, ?, ?)",
-            (event, title, message, int(success)),
+            "INSERT INTO activity_log (event, title, message, success, imdb_id) VALUES (?, ?, ?, ?, ?)",
+            (event, title, message, int(success), imdb_id),
         )
         conn.commit()
 
@@ -1106,6 +1114,115 @@ def get_activity(limit: int = 100) -> list[dict]:
         rows = conn.execute(
             "SELECT * FROM activity_log ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_activity_for_title(imdb_id: str, title: str | None, limit: int = 20,
+                           before_id: int | None = None) -> list[dict]:
+    """Activity for one title, newest first. Rows written before the
+    imdb_id column existed match on title text."""
+    sql = "SELECT * FROM activity_log WHERE (imdb_id = ? OR (imdb_id IS NULL AND title = ?))"
+    args: list = [imdb_id, title or ""]
+    if before_id is not None:
+        sql += " AND id < ?"
+        args.append(before_id)
+    sql += " ORDER BY id DESC LIMIT ?"
+    args.append(limit)
+    with _connect() as conn:
+        return [dict(r) for r in conn.execute(sql, args).fetchall()]
+
+
+def get_retry_by_imdb(imdb_id: str) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM retry_queue WHERE imdb_id=?", (imdb_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_wanted_movie(imdb_id: str) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM wanted_movies WHERE imdb_id=?", (imdb_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_user_requests_for_title(imdb_id: str) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT ur.*, u.username, rv.username AS reviewer
+               FROM user_requests ur
+               JOIN users u ON u.id = ur.user_id
+               LEFT JOIN users rv ON rv.id = ur.reviewed_by
+               WHERE ur.imdb_id = ? ORDER BY ur.created_at DESC""", (imdb_id,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+BLACKLIST_THRESHOLD = 3
+
+
+def get_hashes_for_title(imdb_id: str) -> list[dict]:
+    """Every hash this title has used (request row and virtual items), with
+    its blacklist state. `current` marks the request row's hash."""
+    with _connect() as conn:
+        req = conn.execute("SELECT info_hash FROM requests WHERE imdb_id=?", (imdb_id,)).fetchone()
+        current = (req["info_hash"] if req else None) or ""
+        rows = conn.execute(
+            """SELECT h.info_hash, f.fail_count, f.last_error, f.last_attempt
+               FROM (SELECT DISTINCT info_hash FROM virtual_items WHERE imdb_id = ? AND info_hash != ''
+                     UNION SELECT info_hash FROM requests WHERE imdb_id = ? AND info_hash IS NOT NULL AND info_hash != '') h
+               LEFT JOIN failed_hashes f ON f.info_hash = h.info_hash
+               ORDER BY h.info_hash""", (imdb_id, imdb_id)).fetchall()
+    return [{"info_hash": r["info_hash"], "fail_count": r["fail_count"] or 0,
+             "blacklisted": (r["fail_count"] or 0) >= BLACKLIST_THRESHOLD,
+             "last_error": r["last_error"], "last_attempt": r["last_attempt"],
+             "current": r["info_hash"] == current} for r in rows]
+
+
+def blacklist_hash(info_hash: str, note: str) -> None:
+    """Put a hash on the blacklist by hand: its fail count jumps to the
+    configured threshold, so get_blacklisted_hashes() reports it from now on.
+
+    Imported locally to avoid a circular import: settings.py imports db."""
+    import settings
+    threshold = settings.get("BLACKLIST_FAIL_THRESHOLD", BLACKLIST_THRESHOLD)
+    with _connect() as conn:
+        conn.execute(
+            """INSERT INTO failed_hashes (info_hash, fail_count, last_error)
+               VALUES (?, ?, ?)
+               ON CONFLICT(info_hash) DO UPDATE SET
+                 fail_count = MAX(fail_count, excluded.fail_count),
+                 last_error = excluded.last_error,
+                 last_attempt = strftime('%Y-%m-%d %H:%M:%S', 'now')""",
+            (info_hash, threshold, note))
+        conn.commit()
+
+
+def get_playability_for_title(imdb_id: str) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM playability_state WHERE content_key = ? OR content_key LIKE ? ORDER BY content_key",
+            (imdb_id, f"{imdb_id}:%")).fetchall()
+        return [dict(r) for r in rows]
+
+
+def reset_playability_for_title(imdb_id: str) -> int:
+    with _connect() as conn:
+        cur = conn.execute(
+            """UPDATE playability_state SET status='unknown', consecutive_failures=0,
+               last_fail_reason=NULL, updated_at=strftime('%Y-%m-%d %H:%M:%S', 'now')
+               WHERE content_key = ? OR content_key LIKE ?""", (imdb_id, f"{imdb_id}:%"))
+        conn.commit()
+        return cur.rowcount
+
+
+def get_monitored_series_by_imdb(imdb_id: str) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM monitored_series WHERE imdb_id=?", (imdb_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_wanted_episodes_for_title(imdb_id: str) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM wanted_episodes WHERE imdb_id=? ORDER BY season, episode", (imdb_id,)).fetchall()
         return [dict(r) for r in rows]
 
 
