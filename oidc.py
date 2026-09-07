@@ -6,9 +6,9 @@ device dance; Mycelium accepts the ID token, extracts a username claim,
 and stores it in the session.
 
 Register a redirect URI of `<public-url>/oidc/callback` at the provider.
-Then set OIDC_ENABLED=true, OIDC_ISSUER_URL, OIDC_CLIENT_ID and
-OIDC_CLIENT_SECRET. Restart the container so the OAuth client picks up
-the issuer metadata.
+Then set OIDC_ENABLED, OIDC_ISSUER_URL, OIDC_CLIENT_ID and
+OIDC_CLIENT_SECRET in Settings > Security or the environment. Restart the
+container so the OAuth client picks up the change.
 """
 from __future__ import annotations
 
@@ -36,15 +36,26 @@ def _safe_next_path(nxt: str | None, default: str = "/ui") -> str:
     return nxt
 
 
+def _s(key: str) -> str:
+    """Read an OIDC setting from the Settings overlay, falling back to config.
+
+    Lets every OIDC field on Settings > Security take effect without
+    touching the environment; only a restart is needed to apply a change.
+    """
+    import settings as _settings
+
+    return _settings.get(key, getattr(cfg, key, ""))
+
+
 def is_enabled() -> bool:
     import settings as _settings
 
-    enabled = _settings.get("OIDC_ENABLED", cfg.OIDC_ENABLED)
-    return bool(enabled and cfg.OIDC_ISSUER_URL and cfg.OIDC_CLIENT_ID)
+    enabled = _settings.get("OIDC_ENABLED", getattr(cfg, "OIDC_ENABLED", False))
+    return bool(enabled and _s("OIDC_ISSUER_URL") and _s("OIDC_CLIENT_ID"))
 
 
 def provider_name() -> str:
-    return cfg.OIDC_PROVIDER_NAME or "SSO"
+    return _s("OIDC_PROVIDER_NAME") or "SSO"
 
 
 def install(app: Flask) -> None:
@@ -60,15 +71,16 @@ def install(app: Flask) -> None:
         return
 
     global _oauth
+    issuer = _s("OIDC_ISSUER_URL")
     _oauth = OAuth(app)
     _oauth.register(
         name="oidc",
-        server_metadata_url=f"{cfg.OIDC_ISSUER_URL.rstrip('/')}/.well-known/openid-configuration",
-        client_id=cfg.OIDC_CLIENT_ID,
-        client_secret=cfg.OIDC_CLIENT_SECRET,
-        client_kwargs={"scope": cfg.OIDC_SCOPES},
+        server_metadata_url=f"{issuer.rstrip('/')}/.well-known/openid-configuration",
+        client_id=_s("OIDC_CLIENT_ID"),
+        client_secret=_s("OIDC_CLIENT_SECRET"),
+        client_kwargs={"scope": _s("OIDC_SCOPES")},
     )
-    log.info("OIDC: registered with issuer %s", cfg.OIDC_ISSUER_URL)
+    log.info("OIDC: registered with issuer %s", issuer)
 
     @app.get("/login/oidc")
     def oidc_login():
@@ -93,7 +105,7 @@ def install(app: Flask) -> None:
                 log.warning("OIDC: userinfo fetch failed: %s", exc)
                 return redirect(url_for("login_view", error="oidc"))
 
-        claim = cfg.OIDC_USER_CLAIM or "preferred_username"
+        claim = _s("OIDC_USER_CLAIM") or "preferred_username"
         username = (
             (user_info or {}).get(claim)
             or (user_info or {}).get("email")

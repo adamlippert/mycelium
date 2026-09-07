@@ -103,6 +103,23 @@ describe('SectionView', () => {
     expect(await screen.findByText('Radarr refused the API key (HTTP 401)')).toHaveClass('text-danger');
   });
 
+  it('does not claim advanced fields are hidden when they are actually hidden by a failed dependency', () => {
+    const gated: SettingsSection = {
+      id: 'gated', title: 'Gated', description: 'Locked behind a toggle.', icon: 'x',
+      fields: [
+        f({ key: 'DEP_FIELD', label: 'Dependent field', kind: 'str', depends_on: 'TOGGLE' }),
+        f({ key: 'ADV_FIELD', label: 'Advanced field', kind: 'str', advanced: true, depends_on: 'TOGGLE' }),
+      ],
+    };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <SectionView section={gated} sections={[gated]} values={{ TOGGLE: false }} onChange={() => {}} advanced={false} query="" custom={{}} />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText(/Everything here is an advanced setting/)).not.toBeInTheDocument();
+  });
+
   it('a picker loads options into a dropdown and keeps a text input on failure', async () => {
     apiMocks.settingsPicker.mockResolvedValue({ ok: true, options: [{ value: '/movies', label: '/movies (5 GB free)' }] });
     render(<Harness />);

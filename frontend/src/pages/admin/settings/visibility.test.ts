@@ -53,12 +53,17 @@ describe('search', () => {
 describe('serialize', () => {
   const sections = [section([
     f({ key: 'A', kind: 'bool' }), f({ key: 'B', kind: 'multiselect' }), f({ key: 'S', kind: 'secret' }),
-    f({ key: 'T', kind: 'secret' }), f({ key: '__X', kind: 'custom', component: 'X' }),
+    f({ key: 'T', kind: 'secret' }), f({ key: 'U', kind: 'str' }), f({ key: 'C', kind: 'str' }),
+    f({ key: '__X', kind: 'custom', component: 'X' }),
   ])];
-  it('posts setting_ fields, joins arrays, skips untouched secrets and custom cards', () => {
-    expect(serialize(sections, { A: false, B: ['en', 'nl'], S: '', T: 'new' })).toEqual({
-      setting_A: 'false', setting_B: 'en,nl', setting_T: 'new',
+  const initial = { A: true, B: [] as string[], S: '', T: '', U: 'same', C: 'previous' };
+  it('posts only changed setting_ fields, joins arrays, skips untouched secrets, unchanged fields and custom cards', () => {
+    expect(serialize(sections, { A: false, B: ['en', 'nl'], S: '', T: 'new', U: 'same', C: '' }, initial)).toEqual({
+      setting_A: 'false', setting_B: 'en,nl', setting_T: 'new', setting_C: '',
     });
+  });
+  it('still posts a blanked field so clearing an override keeps working', () => {
+    expect(serialize(sections, { ...initial, C: '' }, initial)).toEqual({ setting_C: '' });
   });
   it('collects the values of one service and counts changes', () => {
     const s = [section([f({ key: 'RADARR_URL', test: 'radarr' }), f({ key: 'RADARR_API_KEY', kind: 'secret', test: 'radarr' }), f({ key: 'OTHER' })])];

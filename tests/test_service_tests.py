@@ -15,6 +15,7 @@ import pytest
 import requests
 
 import db
+import debridio
 import service_tests
 import settings
 
@@ -184,7 +185,8 @@ def test_zilean_pg_connects_and_reports_the_version(monkeypatch):
     assert seen["host"] == "pg" and seen["port"] == 5433 and seen["connect_timeout"] == 8
     monkeypatch.setattr(service_tests, "_pg_connect", lambda **kw: (_ for _ in ()).throw(RuntimeError("refused")))
     out = service_tests.run("zilean_pg", {"ZILEAN_PG_HOST": "pg"})
-    assert out["ok"] is False and "refused" in out["message"]
+    assert out["ok"] is False
+    assert out["message"] == "could not connect to Postgres; check host, port, database, user and password"
 
 
 def test_debridio_fetches_the_manifest_with_the_typed_key(http, monkeypatch):
@@ -193,6 +195,19 @@ def test_debridio_fetches_the_manifest_with_the_typed_key(http, monkeypatch):
     out = service_tests.run("debridio", {"DEBRIDIO_API_KEY": "dk"})
     assert out["ok"] and "Debridio" in out["message"] and "1.2.3" in out["message"]
     assert "dk" not in out["message"]
+    expected_token = debridio.build_config_token(api_key="dk")
+    assert calls[-1][1] == f"https://addon.debridio.com/{expected_token}/manifest.json"
+
+
+def test_debridio_uses_a_typed_config_token_override_verbatim(http, monkeypatch):
+    routes, calls = http
+    routes["/manifest.json"] = FakeResp(200, {"name": "Debridio", "version": "1.2.3"})
+    monkeypatch.setattr(debridio, "send_torbox_key", lambda: False)
+    out = service_tests.run("debridio", {"DEBRIDIO_API_KEY": "dk", "DEBRIDIO_CONFIG_TOKEN": "not-base64-json!!"})
+    assert out["ok"]
+    expected_token = debridio.build_config_token(api_key="dk", config_token="not-base64-json!!")
+    assert expected_token == "not-base64-json!!"
+    assert calls[-1][1] == f"https://addon.debridio.com/{expected_token}/manifest.json"
 
 
 def test_radarr_reports_version_and_count(http):

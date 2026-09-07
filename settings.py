@@ -4,7 +4,8 @@ Reads DB-stored overrides first, falls back to the static config module
 values loaded from .env at startup. Type-aware: bool keys are normalised,
 list keys split on commas, integer values parsed.
 
-UI keys are grouped via SETTING_GROUPS for the Settings tab.
+UI sections come from SECTIONS, with SETTING_GROUPS derived from it for
+the Filter rules tab.
 """
 from __future__ import annotations
 
@@ -168,7 +169,7 @@ HOT_RELOAD = {
     "ZILEAN_ENABLED",
     "ZILEAN_MODE",
     "ZILEAN_PG_HOST", "ZILEAN_PG_PORT", "ZILEAN_PG_DB", "ZILEAN_PG_USER", "ZILEAN_PG_PASSWORD",
-    "CATBOX_MODE",
+    # CATBOX_MODE is not here: the schedulers gate on it at boot, so a flip needs a restart.
     "CATBOX_LAZY_ADD",
     "CATBOX_IDLE_MINUTES",
     "QUALITY_PREFERENCE",
@@ -200,7 +201,7 @@ HOT_RELOAD = {
     "TELEGRAM_CHAT_ID",
     "AUTO_UPGRADE_ENABLED",
     "SEASON_PACK_CONSOLIDATION_ENABLED",
-    "WEBDAV_ENABLED",
+    # WEBDAV_ENABLED is not here: the WebDAV server is gated on it at boot, so a flip needs a restart.
     "MULTI_DEBRID_ENABLED",
     "REALDEBRID_API_KEY",
     "AUTH_ENABLED",

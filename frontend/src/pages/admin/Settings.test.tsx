@@ -102,9 +102,9 @@ describe('Settings shell', () => {
     expect(screen.getByText('2 unsaved changes')).toBeInTheDocument();
     expect(screen.getByText(/restart the container after saving/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(apiMocks.saveSettings).toHaveBeenCalledWith(expect.objectContaining({
-      setting_JELLYFIN_URL: 'http://new', setting_CATBOX_MODE: 'false', setting_LITE_MODE: 'false',
-    })));
+    await waitFor(() => expect(apiMocks.saveSettings).toHaveBeenCalledWith({
+      setting_JELLYFIN_URL: 'http://new', setting_CATBOX_MODE: 'false',
+    }));
     expect(await screen.findByText('Saved')).toBeInTheDocument();
     expect(screen.queryByText(/unsaved change/)).not.toBeInTheDocument();
   });

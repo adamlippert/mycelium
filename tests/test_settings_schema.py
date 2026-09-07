@@ -179,3 +179,12 @@ def test_help_lines_are_short_sentences():
         assert len(f["help"]) <= 220, f["key"]
         assert f["help"].rstrip().endswith("."), f["key"]
         assert len(f["label"]) <= 40, f["key"]
+
+
+def test_oidc_settings_go_through_the_settings_overlay():
+    """oidc.py must read every OIDC key via the settings overlay (through its
+    _s() helper) so a Settings > Security edit takes effect without a rebuilt
+    .env; the only cfg.OIDC_ reference allowed is the getattr fallback inside
+    _s(), which does not spell out a key name and so never matches this."""
+    src = _src("oidc.py")
+    assert re.findall(r"cfg\.OIDC_\w+", src) == []

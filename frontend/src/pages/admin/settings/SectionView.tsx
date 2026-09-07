@@ -3,7 +3,7 @@ import type { SettingsField, SettingsSection } from '../../../api';
 import { Card } from '../../../components/primitives';
 import { ServiceTest } from './ServiceTest';
 import { SettingField } from './SettingField';
-import { isVisible, matchesQuery } from './visibility';
+import { dependsSatisfied, isVisible, matchesQuery } from './visibility';
 import type { FieldValue, Values } from './visibility';
 
 const SERVICE_LABEL: Record<string, string> = {
@@ -24,7 +24,11 @@ export function SectionView({
   custom: Record<string, ComponentType<{ values: Values; onChange: (key: string, next: FieldValue) => void }>>;
 }) {
   const visible = section.fields.filter((f) => f.kind === 'custom' || isVisible(f, values, advanced));
-  const allAdvancedHidden = visible.every((f) => f.kind === 'custom') && section.fields.some((f) => f.advanced);
+  // Only claim "switch to Advanced to see it" when a field is hidden purely
+  // by the Simple/Advanced mode: a field also gated by a failed depends_on
+  // would stay hidden even after switching, so it must not count.
+  const allAdvancedHidden = visible.every((f) => f.kind === 'custom')
+    && section.fields.some((f) => f.advanced && dependsSatisfied(f, values));
   // A service's Test button sits after the last of its fields.
   const lastOfService: Record<string, string> = {};
   visible.forEach((f) => { if (f.test) lastOfService[f.test] = f.key; });

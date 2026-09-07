@@ -76,21 +76,39 @@ def is_configured() -> bool:
     return True
 
 
-def build_config_token() -> str:
+def build_config_token(api_key: str | None = None, config_token: str | None = None) -> str:
     """Base64 config segment for the addon URL, or '' when unconfigured.
 
     Deliberately permissive: every resolution, no excluded qualities, no size
     limit. Mycelium's own filters are soft (they self-disable rather than
     return nothing) while Debridio's are hard, so pushing ours down would
     remove streams before rank_streams could decide to allow them anyway.
+
+    api_key and config_token are optional overrides for the saved
+    DEBRIDIO_API_KEY / DEBRIDIO_CONFIG_TOKEN settings, used by the Settings >
+    Services Test button to build a token from a typed-but-unsaved value.
+    Passing api_key skips the is_configured() gate on the saved key (the
+    typed key stands in for it); the TorBox-key requirement under
+    send_torbox_key() still applies, same as the saved-settings path.
     """
-    override = (_s("DEBRIDIO_CONFIG_TOKEN") or "").strip()
+    override = config_token if config_token is not None else _s("DEBRIDIO_CONFIG_TOKEN")
+    override = (override or "").strip()
     if override:
         return _sanitize_override(override)
-    if not is_configured():
-        return ""
+
+    key = api_key if api_key is not None else _s("DEBRIDIO_API_KEY")
+    key = (key or "").strip()
+    if api_key is None:
+        if not is_configured():
+            return ""
+    else:
+        if not key:
+            return ""
+        if send_torbox_key() and not (_s("TORBOX_API_KEY") or "").strip():
+            return ""
+
     cfg = {
-        "api_key": (_s("DEBRIDIO_API_KEY") or "").strip(),
+        "api_key": key,
         # Required: the addon 500s ("providerConfig.instance") without it, and
         # it is what makes the cached flag mean "cached on TorBox".
         "provider": "torbox",

@@ -54,12 +54,17 @@ export function asString(v: FieldValue | undefined): string {
   return v;
 }
 
-export function serialize(sections: SettingsSection[], values: Values): Record<string, string> {
+export function serialize(sections: SettingsSection[], values: Values, initial: Values): Record<string, string> {
   const out: Record<string, string> = {};
   sections.forEach((s) => s.fields.forEach((f) => {
     if (f.kind === 'custom' || f.readonly) return;
     const v = values[f.key];
     if (f.kind === 'secret' && (v === '' || v === undefined)) return;
+    // Only post what actually changed: posting every field would write an
+    // override for every untouched key, freezing today's .env value into
+    // the database. A blank still differs from its initial value, so
+    // clearing an override to fall back to .env keeps working.
+    if (asString(v) === asString(initial[f.key])) return;
     out[`setting_${f.key}`] = asString(v);
   }));
   return out;

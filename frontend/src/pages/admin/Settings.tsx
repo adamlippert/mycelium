@@ -55,7 +55,7 @@ export default function Settings() {
   }, [query, shown, active]);
 
   const saveMut = useMutation({
-    mutationFn: async () => { if (values) await api.saveSettings(serialize(sections, values)); },
+    mutationFn: async () => { if (values) await api.saveSettings(serialize(sections, values, initial)); },
     onSuccess: () => {
       if (values) setInitial(values);
       setSavedAt(Date.now());

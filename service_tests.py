@@ -14,6 +14,7 @@ import logging
 import requests
 
 import config
+import debridio
 import settings as _settings
 
 log = logging.getLogger(__name__)
@@ -114,17 +115,15 @@ def test_zilean_pg(v: dict) -> dict:
                 cur.execute("SELECT version()")
                 version = (cur.fetchone() or [""])[0]
         return {"ok": True, "message": str(version).split(" on ")[0] or "connected"}
-    except Exception as exc:
-        return {"ok": False, "message": f"could not connect: {str(exc).strip()[:120]}"}
+    except Exception:
+        return {"ok": False, "message": "could not connect to Postgres; check host, port, database, user and password"}
 
 
 def test_debridio(v: dict) -> dict:
-    import base64
-    import json
     if (m := _need(v, "DEBRIDIO_API_KEY")):
         return {"ok": False, "message": f"{m} is empty"}
     base = (_v(v, "DEBRIDIO_BASE_URL") or config.DEBRIDIO_BASE_URL).rstrip("/")
-    token = base64.urlsafe_b64encode(json.dumps({"api_key": _v(v, "DEBRIDIO_API_KEY"), "provider": "torbox"}).encode()).decode().rstrip("=")
+    token = debridio.build_config_token(api_key=_v(v, "DEBRIDIO_API_KEY"), config_token=_v(v, "DEBRIDIO_CONFIG_TOKEN"))
     r = _http("GET", f"{base}/{token}/manifest.json")
     if r.status_code < 400:
         d = _json(r)

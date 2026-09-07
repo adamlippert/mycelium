@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { FilterRulesLink, LegacyPassword, WebhookSecret } from './customCards';
 
 const apiMocks = vi.hoisted(() => ({
@@ -15,6 +16,11 @@ vi.mock('../../../api', async () => {
 function renderWithClient(children: React.ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={qc}>{children}</QueryClientProvider>);
+}
+
+function HashProbe() {
+  const location = useLocation();
+  return <div data-testid="hash-probe">{location.hash}</div>;
 }
 
 const noop = { values: {}, onChange: () => {} };
@@ -53,8 +59,18 @@ describe('WebhookSecret', () => {
 });
 
 describe('FilterRulesLink', () => {
-  it('links to the Filter rules tab', () => {
-    renderWithClient(<FilterRulesLink {...noop} />);
-    expect(screen.getByRole('link', { name: 'Open the Filter rules tab' })).toHaveAttribute('href', '#filter-rules');
+  it('navigates react-router to the Filter rules tab hash on click', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/admin']}>
+          <FilterRulesLink {...noop} />
+          <HashProbe />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId('hash-probe')).toHaveTextContent('');
+    await userEvent.click(screen.getByRole('link', { name: 'Open the Filter rules tab' }));
+    expect(screen.getByTestId('hash-probe')).toHaveTextContent('#filter-rules');
   });
 });

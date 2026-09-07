@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { api } from '../../../api';
 import type { GenreRule } from '../../../api';
 import { Button, GenreRuleRows } from '../../../components/primitives';
@@ -171,7 +172,7 @@ export function FilterRulesLink(_props: CardProps) {
         <span className="text-sm font-medium">Filter rules</span>
         <div className="mt-1 text-xs text-muted">Which resolutions, sources, encodes, tags and languages are preferred, excluded or required.</div>
       </div>
-      <a href="#filter-rules" className="text-sm text-accent-light hover:underline">Open the Filter rules tab</a>
+      <Link to={{ hash: 'filter-rules' }} className="text-sm text-accent-light hover:underline">Open the Filter rules tab</Link>
     </div>
   );
 }
