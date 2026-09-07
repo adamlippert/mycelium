@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.15.1",
+    "date": "2026-09-07",
+    "notes": [
+      "Health card: warns when a Jellyfin library on Mycelium's media has Trickplay or chapter-image extraction on, and shows TorBox adds used this hour (amber from 45 of 60)",
+      "Health rows now show their reason in the Overview, including why stub files are not being written",
+      "The built-in manual covers Radarr, Sonarr and Maintainerr, the Jellyfin webhook plugin and library settings, Seerr outcome reporting, and the TorBox add budget for auto-requesters such as Suggestarr"
+    ]
+  },
+  {
     "version": "0.15.0",
     "date": "2026-09-07",
     "notes": [
