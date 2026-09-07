@@ -1,574 +1,100 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api';
-import type { ArrConn, ArrRootFolder, GenreRule, SettingItem } from '../../api';
-import { Card } from '../../components/primitives/Card';
-import { GenreRuleRows } from '../../components/primitives/GenreRuleRows';
-import { Toggle } from '../../components/primitives/Toggle';
+import type { SettingsSection } from '../../api';
+import { Button } from '../../components/primitives';
+import { CUSTOM_CARDS } from './settings/customCards';
+import { SectionView } from './settings/SectionView';
+import { asString, countChanges, initialValues, sectionMatches, serialize } from './settings/visibility';
+import type { FieldValue, Values } from './settings/visibility';
 
-type SettingsGroup = { id: string; title: string; items: SettingItem[] };
-type FieldValue = string | boolean;
+const ADVANCED_KEY = 'mycelium.settings.advanced';
 
-// Mirrors ui.html's `refreshSettings()`: fields matching this pattern are
-// never pre-filled, so an empty value at save time means "keep the existing
-// value" rather than "clear it" (the same distinction the Jinja page's
-// submit handler makes by disabling empty password inputs before posting).
-const SECRET_RE = /KEY|TOKEN|SECRET|PASSWORD/;
-
-function isSecretText(item: SettingItem): boolean {
-  return item.kind !== 'bool' && item.kind !== 'list' && item.kind !== 'enum' && SECRET_RE.test(item.key);
-}
-
-// Mirrors ui.html's `_formatVal()`.
-function formatValue(value: unknown, kind: SettingItem['kind']): string {
-  if (value === null || value === undefined) return '';
-  if (kind === 'list') return Array.isArray(value) ? value.join(',') : String(value);
-  if (kind === 'bool') return value ? 'true' : 'false';
-  return String(value);
-}
-
-function initialFieldValue(item: SettingItem): FieldValue {
-  if (item.kind === 'bool') return Boolean(item.value);
-  if (isSecretText(item)) return '';
-  return formatValue(item.value, item.kind);
-}
-
-function fieldAsString(v: FieldValue): string {
-  return typeof v === 'boolean' ? (v ? 'true' : 'false') : v;
-}
-
-/** Hot-reload lightning vs restart-required warning, plus the override-active
- * marker -- the exact three glyphs ui.html's `refreshSettings()` badges row
- * shows next to every setting key. */
-function ItemBadges({ item }: { item: SettingItem }) {
-  return (
-    <span className="inline-flex items-center gap-1 text-xs">
-      {item.hot_reload ? (
-        <span title="hot reload">⚡</span>
-      ) : (
-        <span title="restart required" className="text-warn">⚠</span>
-      )}
-      {item.overridden && (
-        <span title="override active" className="text-accent">✱</span>
-      )}
-    </span>
-  );
-}
-
-function ItemControl({
-  item,
-  value,
-  onChange,
-}: {
-  item: SettingItem;
-  value: FieldValue;
-  onChange: (next: FieldValue) => void;
-}) {
-  const inputClass = 'w-full max-w-xs rounded border border-border bg-bg px-2 py-1 text-xs';
-
-  if (item.kind === 'bool') {
-    return <Toggle checked={Boolean(value)} onChange={onChange} label={item.key} />;
-  }
-  if (item.kind === 'enum') {
-    return (
-      <select
-        aria-label={item.key}
-        value={value as string}
-        onChange={(e) => onChange(e.target.value)}
-        className={inputClass}
-      >
-        {(item.options || []).map((o) => (
-          <option key={o} value={o}>{o}</option>
-        ))}
-      </select>
-    );
-  }
-  if (item.kind === 'list') {
-    return (
-      <input
-        type="text"
-        aria-label={item.key}
-        value={value as string}
-        placeholder="comma,separated"
-        onChange={(e) => onChange(e.target.value)}
-        className={inputClass}
-      />
-    );
-  }
-  const secret = isSecretText(item);
-  const placeholder = secret
-    ? item.value
-      ? '(already set - type to replace)'
-      : '(not set)'
-    : undefined;
-  return (
-    <input
-      type={secret ? 'password' : 'text'}
-      aria-label={item.key}
-      value={value as string}
-      placeholder={placeholder}
-      autoComplete={secret ? 'new-password' : undefined}
-      onChange={(e) => onChange(e.target.value)}
-      className={inputClass}
-    />
-  );
-}
-
-type ArrKind = 'radarr' | 'sonarr';
-const ARR_LABEL: Record<ArrKind, string> = { radarr: 'Radarr', sonarr: 'Sonarr' };
-
-function fieldStr(v: FieldValue | undefined): string {
-  return typeof v === 'string' ? v : '';
-}
-
-/** The URL and key as currently typed. An untouched secret box is '' and the
- * backend then falls back to the saved key, so testing works before saving. */
-function arrConn(kind: ArrKind, values: Record<string, FieldValue>): ArrConn {
-  const p = kind.toUpperCase();
-  return { url: fieldStr(values[`${p}_URL`]), api_key: fieldStr(values[`${p}_API_KEY`]) };
-}
-
-function ArrTestButton({ kind, values }: { kind: ArrKind; values: Record<string, FieldValue> }) {
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const mut = useMutation({
-    mutationFn: () => api.arrTest(kind, arrConn(kind, values)),
-    onSuccess: (r) =>
-      setMsg(
-        r.ok
-          ? { ok: true, text: `✓ ${ARR_LABEL[kind]} ${r.version || ''} reachable`.replace('  ', ' ') }
-          : { ok: false, text: `✗ ${r.error || 'failed'}` },
-      ),
-    onError: (e: Error) => setMsg({ ok: false, text: `✗ ${e.message}` }),
-  });
-  return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={() => mut.mutate()}
-        disabled={mut.isPending}
-        className="rounded border border-border bg-card-raised px-3 py-1 text-xs font-semibold text-accent-light hover:bg-white/[0.06] disabled:opacity-50"
-      >
-        {mut.isPending ? 'Testing...' : `Test ${ARR_LABEL[kind]}`}
-      </button>
-      {msg && <span className={`text-xs ${msg.ok ? 'text-ok' : 'text-danger'}`}>{msg.text}</span>}
-    </div>
-  );
-}
-
-function formatFree(bytes: number | null): string {
-  if (bytes == null) return '';
-  const gb = bytes / 1024 ** 3;
-  return gb >= 1024 ? ` (${(gb / 1024).toFixed(1)} TB free)` : ` (${Math.round(gb)} GB free)`;
-}
-
-/** A dropdown for RADARR_ROOT_FOLDER / SONARR_ROOT_FOLDER filled from the
- * arr itself, instead of a path typed blind. Blank keeps the default (the
- * arr's first root folder), which is what arr_sync uses. */
-function RootFolderPicker({
-  kind,
-  value,
-  values,
-  onChange,
-}: {
-  kind: ArrKind;
-  value: string;
-  values: Record<string, FieldValue>;
-  onChange: (next: string) => void;
-}) {
-  const [folders, setFolders] = useState<ArrRootFolder[] | null>(null);
-  const [err, setErr] = useState('');
-  const mut = useMutation({
-    mutationFn: () => api.arrRootFolders(kind, arrConn(kind, values)),
-    onSuccess: (r) => {
-      if (r.ok && r.folders) {
-        setFolders(r.folders);
-        setErr(r.folders.length ? '' : `${ARR_LABEL[kind]} has no root folders yet`);
-      } else {
-        setErr(r.error || 'failed');
-      }
-    },
-    onError: (e: Error) => setErr(e.message),
-  });
-  const known = folders ?? [];
-  const options = value && !known.some((f) => f.path === value)
-    ? [{ path: value, free_space: null }, ...known]
-    : known;
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <select
-        aria-label={`${kind.toUpperCase()}_ROOT_FOLDER`}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="max-w-xs rounded border border-border bg-bg px-2 py-1 text-xs"
-      >
-        <option value="">(first root folder in {ARR_LABEL[kind]})</option>
-        {options.map((f) => (
-          <option key={f.path} value={f.path}>
-            {f.path}
-            {formatFree(f.free_space)}
-          </option>
-        ))}
-      </select>
-      <button
-        type="button"
-        onClick={() => mut.mutate()}
-        disabled={mut.isPending}
-        className="rounded border border-border bg-card-raised px-3 py-1 text-xs font-semibold text-accent-light hover:bg-white/[0.06] disabled:opacity-50"
-      >
-        {mut.isPending ? 'Loading...' : 'Load folders'}
-      </button>
-      {err && <span className="text-xs text-danger">✗ {err}</span>}
-    </div>
-  );
-}
-
-/** The `mode` group's card in ui.html: two radio tiles (Full / Lite) instead
- * of a normal key/value row, since LITE_MODE is the one setting that changes
- * which schedulers even start. */
-function ModeCard({ isLite, onChange }: { isLite: boolean; onChange: (next: boolean) => void }) {
-  const tile = (active: boolean) =>
-    `flex cursor-pointer flex-col gap-1.5 rounded-lg border-2 p-3 ${
-      active ? 'border-accent bg-accent/10' : 'border-border'
-    }`;
-  return (
-    <Card className="border-2 border-accent">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="text-sm font-semibold">Deployment mode</span>
-        <span className="text-xs text-warn">⚠ restart required</span>
-      </div>
-      <div role="radiogroup" aria-label="Deployment mode" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className={tile(!isLite)}>
-          <span className="flex items-center gap-2">
-            <input type="radio" name="lite-mode-toggle" checked={!isLite} onChange={() => onChange(false)} />
-            <span className="text-sm font-semibold">Full</span>
-          </span>
-          <span className="text-xs text-muted">
-            Full SPA + all schedulers + plugins (webplayer, trakt). For users who browse and
-            request via the Mycelium interface.
-          </span>
-        </label>
-        <label className={tile(isLite)}>
-          <span className="flex items-center gap-2">
-            <input type="radio" name="lite-mode-toggle" checked={isLite} onChange={() => onChange(true)} />
-            <span className="text-sm font-semibold">Lite</span>
-          </span>
-          <span className="text-xs text-muted">
-            Webhook + processor + /admin only. No SPA schedulers, no plugins. For
-            Seerr/Jellyfin-only deployments.
-          </span>
-        </label>
-      </div>
-    </Card>
-  );
-}
-
-function GroupCard({
-  group,
-  values,
-  onChangeItem,
-}: {
-  group: SettingsGroup;
-  values: Record<string, FieldValue>;
-  onChangeItem: (key: string, next: FieldValue) => void;
-}) {
-  return (
-    <Card>
-      <div className="mb-3 text-sm font-semibold">{group.title}</div>
-      <div className="space-y-2.5">
-        {group.items.map((item) => (
-          <div
-            key={item.key}
-            className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2.5 last:border-0 last:pb-0"
-          >
-            <div className="flex items-center gap-1.5">
-              <code className="text-xs">{item.key}</code>
-              <ItemBadges item={item} />
-            </div>
-            {group.id === 'arr_import' && /^(RADARR|SONARR)_ROOT_FOLDER$/.test(item.key) ? (
-              <RootFolderPicker
-                kind={item.key.startsWith('RADARR') ? 'radarr' : 'sonarr'}
-                value={fieldStr(values[item.key] ?? initialFieldValue(item))}
-                values={values}
-                onChange={(next) => onChangeItem(item.key, next)}
-              />
-            ) : (
-              <ItemControl
-                item={item}
-                value={values[item.key] ?? initialFieldValue(item)}
-                onChange={(next) => onChangeItem(item.key, next)}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-      {group.id === 'arr_import' && (
-        <div className="mt-3 flex flex-wrap gap-4 border-t border-border pt-3">
-          <ArrTestButton kind="radarr" values={values} />
-          <ArrTestButton kind="sonarr" values={values} />
-        </div>
-      )}
-    </Card>
-  );
-}
-
-/** Ported from the pre-native-admin `frontend/src/pages/Admin.tsx`
- * `DiscoverGenreTabsPanel`, restyled onto the shared `Card` primitive. */
-function DiscoverGenreTabsPanel() {
-  const qc = useQueryClient();
-  const [msg, setMsg] = useState('');
-  const { data } = useQuery({ queryKey: ['discover-genre-tabs-config'], queryFn: api.genreTabsConfig });
-  const { data: movieGenres } = useQuery({ queryKey: ['genres', 'movie'], queryFn: () => api.genres('movie') });
-  const { data: tvGenres } = useQuery({ queryKey: ['genres', 'tv'], queryFn: () => api.genres('tv') });
-
-  const [tabs, setTabs] = useState<GenreRule[] | null>(null);
-  const effectiveTabs = tabs ?? data?.tabs ?? [];
-
-  const saveMutation = useMutation({
-    mutationFn: (t: GenreRule[]) => api.setGenreTabsConfig(t),
-    onSuccess: () => {
-      setMsg('Saved.');
-      qc.invalidateQueries({ queryKey: ['discover-genre-tabs-config'] });
-      qc.invalidateQueries({ queryKey: ['genre-tabs'] });
-    },
-    onError: (e: Error) => setMsg(`Error: ${e.message}`),
-  });
-
-  const addTab = () => {
-    const genres = movieGenres?.genres || [];
-    const first = genres[0];
-    setTabs([
-      ...effectiveTabs,
-      {
-        media_type: 'movie', genre_id: first?.id || 0, genre_name: first?.name || '',
-        year_from: null, year_to: null, enabled: true,
-      },
-    ]);
-  };
-  const updateTab = (i: number, patch: Partial<GenreRule>) => {
-    setTabs(effectiveTabs.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
-  };
-  const removeTab = (i: number) => {
-    setTabs(effectiveTabs.filter((_, idx) => idx !== i));
-  };
-
-  return (
-    <Card className="space-y-4">
-      <div className="text-sm font-semibold">Discover genre tabs</div>
-      <p className="text-xs text-muted">
-        Extra rows shown on the Discover page for browsing by genre, optionally bounded by a
-        year range. Purely for browsing - use Auto-approve in Requests above to also
-        auto-download.
-      </p>
-
-      <GenreRuleRows
-        rules={effectiveTabs}
-        movieGenres={movieGenres?.genres || []}
-        tvGenres={tvGenres?.genres || []}
-        onUpdate={updateTab}
-        onRemove={removeTab}
-      />
-
-      <div className="flex flex-wrap gap-2">
-        <button onClick={addTab} className="rounded border border-border px-3 py-1.5 text-xs hover:bg-bg">
-          + Add genre tab
-        </button>
-        <button
-          onClick={() => saveMutation.mutate(effectiveTabs)}
-          disabled={saveMutation.isPending}
-          className="rounded bg-accent px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-        >
-          {saveMutation.isPending ? 'Saving...' : 'Save tabs'}
-        </button>
-      </div>
-
-      {msg && <div className="font-mono text-xs text-muted">{msg}</div>}
-    </Card>
-  );
-}
-
-/** `POST /ui/set-password`: the legacy admin-only shared fallback password
- * (`auth.set_password`, no current-password check). Distinct from a user's
- * own password, changed under Settings > Account via `POST
- * /ui/api/me/password` (which does require the current password). */
-function LegacyPasswordCard() {
-  const [password, setPassword] = useState('');
-  const [msg, setMsg] = useState('');
-
-  const mutation = useMutation({
-    mutationFn: (pw: string) => api.setLegacyPassword(pw),
-    onSuccess: () => { setMsg('Updated.'); setPassword(''); },
-    onError: (e: Error) => setMsg(`Error: ${e.message}`),
-  });
-
-  const submit = () => {
-    if (password.length < 6) {
-      setMsg('Password must be at least 6 characters');
-      return;
-    }
-    mutation.mutate(password);
-  };
-
-  return (
-    <Card>
-      <div className="mb-2 text-sm font-semibold">Legacy password</div>
-      <p className="mb-3 text-xs text-muted">
-        Sets the single shared fallback password used for password login. Distinct
-        from each user&apos;s own password under Settings &gt; Account.
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="password"
-          aria-label="Legacy password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="New password (min 6 characters)"
-          autoComplete="new-password"
-          className="w-full max-w-xs rounded border border-border bg-bg px-2 py-1 text-xs"
-        />
-        <button
-          type="button"
-          onClick={submit}
-          disabled={mutation.isPending}
-          className="rounded bg-accent px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-        >
-          {mutation.isPending ? 'Saving...' : 'Update legacy password'}
-        </button>
-      </div>
-      {msg && <p className="mt-2 text-xs text-muted">{msg}</p>}
-    </Card>
-  );
+function readAdvanced(): boolean {
+  try { return localStorage.getItem(ADVANCED_KEY) === 'true'; } catch { return false; }
 }
 
 export default function Settings() {
-  const { data } = useQuery({ queryKey: ['admin-settings'], queryFn: api.settings });
-  const [values, setValues] = useState<Record<string, FieldValue> | null>(null);
-  const [restartInitial, setRestartInitial] = useState<Record<string, string>>({});
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ['admin-settings-schema'], queryFn: api.settingsSchema });
+  const sections: SettingsSection[] = useMemo(() => data?.sections || [], [data]);
+  const [values, setValues] = useState<Values | null>(null);
+  const [initial, setInitial] = useState<Values>({});
+  const [active, setActive] = useState<string>('');
+  const [query, setQuery] = useState('');
+  const [advanced, setAdvanced] = useState(readAdvanced);
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [autoAddMsg, setAutoAddMsg] = useState('');
-
-  const groups: SettingsGroup[] = (data?.groups || []).filter((g) => g.id !== 'filter_rules');
 
   useEffect(() => {
-    if (!data || values) return;
-    const v: Record<string, FieldValue> = {};
-    const restart: Record<string, string> = {};
-    groups.forEach((g) => {
-      g.items.forEach((item) => {
-        const initial = initialFieldValue(item);
-        v[item.key] = initial;
-        if (!item.hot_reload) restart[item.key] = fieldAsString(initial);
-      });
-    });
+    if (!sections.length || values) return;
+    const v = initialValues(sections);
     setValues(v);
-    setRestartInitial(restart);
-    // groups is derived from data on every render; re-running this effect is
-    // gated on `values` above, so keying it off `data` alone is sufficient.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+    setInitial(v);
+    setActive(sections[0].id);
+  }, [sections, values]);
+
+  useEffect(() => {
+    try { localStorage.setItem(ADVANCED_KEY, advanced ? 'true' : 'false'); } catch { /* private mode */ }
+  }, [advanced]);
+
+  const shown = sections.filter((s) => sectionMatches(s, query));
+  useEffect(() => {
+    if (shown.length && !shown.some((s) => s.id === active)) setActive(shown[0].id);
+  }, [query, shown, active]);
 
   const saveMut = useMutation({
-    mutationFn: async () => {
-      if (!values) return;
-      const fields: Record<string, string> = {};
-      groups.forEach((g) => {
-        g.items.forEach((item) => {
-          const v = values[item.key] ?? initialFieldValue(item);
-          if (isSecretText(item) && v === '') return; // untouched secret -- keep existing value
-          fields[`setting_${item.key}`] = fieldAsString(v);
-        });
-      });
-      await api.saveSettings(fields);
+    mutationFn: async () => { if (values) await api.saveSettings(serialize(sections, values)); },
+    onSuccess: () => {
+      if (values) setInitial(values);
+      setSavedAt(Date.now());
+      qc.invalidateQueries({ queryKey: ['admin-settings'] });
     },
-    onSuccess: () => setSavedAt(Date.now()),
   });
 
-  const autoAddMut = useMutation({
-    mutationFn: api.autoAddNow,
-    onSuccess: (r) => setAutoAddMsg(r.message || 'Started.'),
-    onError: (e: Error) => setAutoAddMsg(`Error: ${e.message}`),
-  });
+  if (!values) return <p className="text-sm text-muted">Loading...</p>;
 
-  if (!values) {
-    return <p className="text-sm text-muted">Loading...</p>;
-  }
-
-  const dirty = Object.keys(restartInitial).some(
-    (key) => fieldAsString(values[key] ?? '') !== restartInitial[key],
-  );
-
-  const modeGroup = groups.find((g) => g.id === 'mode');
-  const modeItem = modeGroup?.items.find((i) => i.key === 'LITE_MODE');
-  const restGroups = groups.filter((g) => g.id !== 'mode');
+  const changes = countChanges(sections, values, initial);
+  const restartTouched = sections.some((s) => s.fields.some((f) => !f.hot_reload && f.kind !== 'custom' && asString(values[f.key]) !== asString(initial[f.key])));
+  const current = sections.find((s) => s.id === active) || shown[0];
+  const onChange = (key: string, next: FieldValue) => { setValues((p) => ({ ...(p as Values), [key]: next })); setSavedAt(null); };
 
   return (
-    <div className="space-y-4 pb-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-bold">Runtime settings</h2>
-        <a href="/setup?rerun=1" className="text-xs text-accent hover:underline">
-          🧙 Re-run setup wizard
-        </a>
-      </div>
-
-      {dirty && (
-        <div className="rounded-lg border-l-4 border-warn bg-warn/10 px-4 py-3 text-sm text-warn">
-          ⚠ You changed at least one restart-required setting. Run{' '}
-          <code>docker compose restart mycelium</code> after saving for it to take effect.
+    <div className="grid gap-6 pb-20 md:grid-cols-[13rem_1fr]">
+      <aside className="space-y-3">
+        <input type="search" aria-label="Search settings" placeholder="Search settings" value={query} onChange={(e) => setQuery(e.target.value)}
+          className="w-full rounded border border-border bg-bg px-2 py-1.5 text-xs" />
+        <div role="group" aria-label="Detail level" className="flex rounded border border-border text-xs">
+          {(['Simple', 'Advanced'] as const).map((m) => (
+            <button key={m} type="button" aria-pressed={advanced === (m === 'Advanced')} onClick={() => setAdvanced(m === 'Advanced')}
+              className={`flex-1 py-1 ${advanced === (m === 'Advanced') ? 'bg-accent text-white' : 'text-muted hover:text-body'}`}>{m}</button>
+          ))}
         </div>
-      )}
-
-      {modeItem && (
-        <ModeCard
-          isLite={Boolean(values.LITE_MODE)}
-          onChange={(next) => setValues((prev) => ({ ...(prev as Record<string, FieldValue>), LITE_MODE: next }))}
-        />
-      )}
-
-      {restGroups.map((g) => (
-        <GroupCard
-          key={g.id}
-          group={g}
-          values={values}
-          onChangeItem={(key, next) =>
-            setValues((prev) => ({ ...(prev as Record<string, FieldValue>), [key]: next }))
-          }
-        />
-      ))}
-
-      <Card>
-        <div className="mb-2 text-sm font-semibold">Auto-add now</div>
-        <p className="mb-3 text-xs text-muted">
-          Trigger the auto-add scheduler immediately. Pulls all enabled categories (trending,
-          popular, per-service top lists) and queues new items.
-        </p>
-        <button
-          type="button"
-          onClick={() => autoAddMut.mutate()}
-          disabled={autoAddMut.isPending}
-          className="rounded bg-accent px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-        >
-          {autoAddMut.isPending ? 'Starting...' : '▶ Run auto-add now'}
-        </button>
-        {autoAddMsg && <p className="mt-2 text-xs text-muted">{autoAddMsg}</p>}
-      </Card>
-
-      <DiscoverGenreTabsPanel />
-
-      <LegacyPasswordCard />
-
-      <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-bg/95 px-1 py-3 backdrop-blur">
-        <span className="text-xs text-muted">
-          Empty a field to clear the override and fall back to the .env value.
-        </span>
-        <div className="flex items-center gap-3">
-          {savedAt && !saveMut.isPending && <span className="text-xs text-ok">Saved</span>}
-          <button
-            type="button"
-            onClick={() => saveMut.mutate()}
-            disabled={saveMut.isPending}
-            className="rounded bg-accent px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-          >
-            {saveMut.isPending ? 'Saving...' : '💾 Save all'}
-          </button>
+        <nav aria-label="Settings sections" className="space-y-0.5">
+          {shown.map((s) => (
+            <button key={s.id} type="button" onClick={() => setActive(s.id)} aria-current={s.id === current?.id ? 'page' : undefined}
+              className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm ${s.id === current?.id ? 'bg-white/[0.08] text-white' : 'text-muted hover:text-body'}`}>
+              <span aria-hidden="true">{s.icon}</span>{s.title}
+            </button>
+          ))}
+          {!shown.length && <p className="px-2 text-xs text-muted">Nothing matches.</p>}
+        </nav>
+        <a href="/setup?rerun=1" className="block px-2 text-xs text-accent-light hover:underline">Re-run setup wizard</a>
+      </aside>
+      <main>
+        {current && (
+          <SectionView section={current} sections={sections} values={values} onChange={onChange} advanced={advanced} query={query} custom={CUSTOM_CARDS} />
+        )}
+      </main>
+      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-bg/95 px-4 py-3 backdrop-blur md:left-auto">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
+          <span className="text-xs text-muted">
+            {changes ? `${changes} unsaved change${changes === 1 ? '' : 's'}` : 'Empty a field to clear its override and fall back to the .env value.'}
+            {restartTouched && <span className="ml-2 text-warn">A restart-required setting changed; restart the container after saving.</span>}
+          </span>
+          <div className="flex items-center gap-3">
+            {savedAt && !changes && <span className="text-xs text-ok">Saved</span>}
+            <Button variant="primary" onClick={() => saveMut.mutate()} loading={saveMut.isPending} loadingLabel="Saving..." disabled={!changes}>Save</Button>
+          </div>
         </div>
       </div>
     </div>

@@ -321,11 +321,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(conn),
     }),
-  arrRootFolders: (kind: 'radarr' | 'sonarr', conn: ArrConn = {}) =>
-    http<{ ok: boolean; folders?: ArrRootFolder[]; error?: string }>(
-      `/ui/api/arr-import/root-folders-${kind}`,
-      { method: 'POST', body: JSON.stringify(conn) },
-    ),
   arrRun: (kind: 'radarr' | 'sonarr') =>
     http<{ ok: boolean }>(`/ui/api/arr-import/${kind}`, {
       method: 'POST',
@@ -672,11 +667,6 @@ export interface BlacklistItem {
 export interface ArrConn {
   url?: string;
   api_key?: string;
-}
-
-export interface ArrRootFolder {
-  path: string;
-  free_space: number | null;
 }
 
 export interface SettingItem {

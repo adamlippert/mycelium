@@ -23,6 +23,10 @@ describe('Button', () => {
     render(<Button>Go</Button>);
     expect(screen.getByRole('button')).toHaveAttribute('type', 'button');
   });
+  it('ignores an explicit type="submit" and stays type="button"', () => {
+    render(<Button type={'submit' as any}>Go</Button>);
+    expect(screen.getByRole('button')).toHaveAttribute('type', 'button');
+  });
 });
 
 describe('Select', () => {
