@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.16.0",
+    "date": "2026-09-07",
+    "notes": [
+      "The Radarr/Sonarr reconcile is now the source of truth for deletions: a mirrored title the arr confirms it no longer has, or whose .strm files are gone from disk, is purged instead of re-added. The delete webhooks make it instant; without them cleanup converges within ARR_SYNC_INTERVAL_MINUTES (default 60, was six hours)",
+      "Guards refuse to purge when an arr lists nothing, when more than half the mirrored titles vanish at once, or when the media tree is empty; refused titles are re-added as before. ARR_SYNC_PURGE_ENABLED=false keeps the mirror add-only",
+      "Every reconcile purge is recorded in the activity feed with its reason",
+      "Series folder renames roll back when the path update fails, so folder and database never disagree"
+    ]
+  },
+  {
     "version": "0.15.1",
     "date": "2026-09-07",
     "notes": [
