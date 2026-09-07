@@ -203,13 +203,34 @@ def test_write_title_uses_the_tmdb_runtime(stubs_env, monkeypatch):
 
     def fake_make(title, quality=None, duration_sec=7200.0, **kw):
         seen["duration"] = duration_sec
+        seen["quality"] = quality
         return b"\x1a\x45\xdf\xa3stub"
 
     monkeypatch.setattr(strm_generator, "make_stub_mkv", fake_make)
     values, media, stubs = stubs_env
     _movie(media)
+    # The request row says 1080p (the _movie default); the virtual item's own
+    # quality, which write_title must prefer for both the stub and the file
+    # name, is bumped to 2160p here.
+    with db._connect() as conn:
+        conn.execute("UPDATE virtual_items SET quality='2160p'")
+        conn.commit()
     arr_stubs.write_title("tt0113277", "movie", "/mnt/arr/movies/Heat (1995)")
     assert seen["duration"] == 5400
+    assert seen["quality"] == "2160p"
+    assert (stubs / "movies" / "Heat (1995)" / "Heat (1995) - WEBDL-2160p.mkv").exists()
+
+
+def test_write_title_survives_a_db_failure(stubs_env, monkeypatch):
+    import arr_stubs
+    values, media, stubs = stubs_env
+    _movie(media)
+
+    def _boom(*a, **kw):
+        raise RuntimeError("db is down")
+
+    monkeypatch.setattr(db, "get_virtual_items_by_imdb", _boom)
+    assert arr_stubs.write_title("tt0113277", "movie", "/mnt/arr/movies/Heat (1995)") == 0
 
 
 def test_write_title_does_nothing_when_disabled_or_unmounted(stubs_env):
@@ -231,6 +252,10 @@ def test_root_status_reports_a_missing_mount(stubs_env):
     values["ARR_STUB_PATH"] = str(stubs / "gone")
     ok, note = arr_stubs.root_status()
     assert ok is False and "not mounted" in note
+    values["ARR_STUB_PATH"] = str(stubs)
+    values["RADARR_ROOT_FOLDER"] = ""
+    ok, note = arr_stubs.root_status()
+    assert ok is False and "RADARR_ROOT_FOLDER" in note
 
 
 # -- removing ----------------------------------------------------------------
@@ -264,6 +289,16 @@ def test_remove_title_never_deletes_a_folder_without_our_marker(stubs_env):
     (foreign / "Heat (1995).mkv").write_bytes(b"real file")
     assert arr_stubs.remove_title("movie", "tt0113277", "/mnt/arr/movies/Heat (1995)") == 0
     assert (foreign / "Heat (1995).mkv").exists()
+
+
+def test_remove_title_treats_a_corrupt_marker_as_not_ours(stubs_env):
+    import arr_stubs
+    values, media, stubs = stubs_env
+    folder = stubs / "movies" / "Heat (1995)"
+    folder.mkdir(parents=True)
+    (folder / arr_stubs.MARKER).write_bytes(b"\xff\xfe")
+    assert arr_stubs.remove_title("movie", "tt0113277", "/mnt/arr/movies/Heat (1995)") == 0
+    assert folder.exists()
 
 
 def test_settings_are_registered():

@@ -54,7 +54,9 @@ def _root() -> Path:
 def root_status() -> tuple[bool, str]:
     """(ok, note). The mount point is never created by Mycelium: a missing
     directory means the bind mount is absent, and creating it would hide
-    that behind an empty tree the arrs cannot see."""
+    that behind an empty tree the arrs cannot see. Both arr root folders
+    are required too: with one left blank, that arr was never pointed at
+    the stub tree, so its titles would keep showing Missing."""
     root = _root()
     if not root.is_dir():
         return False, f"{root} not mounted"
@@ -62,6 +64,10 @@ def root_status() -> tuple[bool, str]:
         (root / _IGNORE).touch(exist_ok=True)
     except OSError as exc:
         return False, f"{root} not writable: {exc}"
+    if not (_settings.get("RADARR_ROOT_FOLDER", "") or "").strip():
+        return False, "RADARR_ROOT_FOLDER not set"
+    if not (_settings.get("SONARR_ROOT_FOLDER", "") or "").strip():
+        return False, "SONARR_ROOT_FOLDER not set"
     return True, str(root)
 
 
@@ -145,19 +151,28 @@ def write_title(imdb_id: str, media_type: str, arr_path: str) -> int:
     if folder is None:
         log.warning("Arr stubs: %s is outside the %s root folder; skipping %s", arr_path, kind, imdb_id)
         return 0
-    items = [i for i in db.get_virtual_items_by_imdb(imdb_id) if i.get("strm_path")]
+    try:
+        items = [i for i in db.get_virtual_items_by_imdb(imdb_id) if i.get("strm_path")]
+    except Exception as exc:
+        log.warning("Arr stubs: could not read virtual items for %s: %s", imdb_id, exc)
+        return 0
     if not items:
         return 0
-    req = db.get_request_by_imdb(imdb_id) or {}
+    try:
+        req = db.get_request_by_imdb(imdb_id) or {}
+    except Exception as exc:
+        log.warning("Arr stubs: could not read request for %s: %s", imdb_id, exc)
+        return 0
     title = req.get("title") or items[0].get("title") or imdb_id
     written = 0
     wanted: dict[Path, set[str]] = {}
     for item in items:
         strm = Path(item["strm_path"])
         # Per-item quality first (episodes of one show can differ), the
-        # request row's as the fallback.
-        tag = quality_tag(item.get("quality") or req.get("quality"),
-                          _release_name(item.get("magnet") or ""))
+        # request row's as the fallback. Used for both the file name and
+        # the stub's own embedded quality so they never disagree.
+        quality = item.get("quality") or req.get("quality")
+        tag = quality_tag(quality, _release_name(item.get("magnet") or ""))
         target_dir = folder
         if kind == "series" and strm.parent.name.lower().startswith("season"):
             target_dir = folder / strm.parent.name
@@ -169,7 +184,7 @@ def write_title(imdb_id: str, media_type: str, arr_path: str) -> int:
             target_dir.mkdir(parents=True, exist_ok=True)
             import strm_generator
             target.write_bytes(strm_generator.make_stub_mkv(
-                title, req.get("quality"), duration_sec=_duration(imdb_id, item)))
+                title, quality, duration_sec=_duration(imdb_id, item)))
             written += 1
         except Exception as exc:
             log.warning("Arr stubs: could not write %s: %s", target, exc)
@@ -192,7 +207,7 @@ def write_title(imdb_id: str, media_type: str, arr_path: str) -> int:
 def _is_ours(folder: Path, imdb_id: str) -> bool:
     try:
         return (folder / MARKER).read_text(encoding="utf-8").strip() == imdb_id
-    except OSError:
+    except Exception:
         return False
 
 
