@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.14.1",
+    "date": "2026-09-07",
+    "notes": [
+      "Remove from library now tells Seerr the title is gone, so it can be requested again right away instead of after Seerr's next sync",
+      "Delete and Remove from library clear the per-user request rows that kept showing a stale badge and a greyed-out request button",
+      "The Delete confirmation explains that the title stays in Jellyfin and points at Remove from library",
+      "The first Jellyfin refresh after a host reboot is no longer skipped",
+      "Docs: Jellyfin takes about a minute to show a reported change; that is its library monitor delay, not a missing scan"
+    ]
+  },
+  {
     "version": "0.14.0",
     "date": "2026-09-06",
     "notes": [
