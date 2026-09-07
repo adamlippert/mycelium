@@ -262,7 +262,7 @@ def recheck_wanted() -> int:
                 log.debug("arr_sync skipped: %s", exc)
             try:
                 import seerr_report
-                seerr_report.on_success(w["imdb_id"])
+                seerr_report.on_success(w["imdb_id"], w.get("tmdb_id"), "movie")
             except Exception as exc:
                 log.debug("seerr_report skipped: %s", exc)
             processor._WANTED.pop(w["imdb_id"], None)

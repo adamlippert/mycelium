@@ -68,10 +68,20 @@ def seerr_env(monkeypatch):
 
     def fake_get(url, headers=None, timeout=None):
         calls.append(("GET", url, None))
-        return FakeResp(200, {"id": 42, "status": 2, "media": {"id": 7, "tmdbId": 949}})
+        if "/request/" in url:
+            return FakeResp(200, {"id": 42, "status": 2, "media": {"id": 7, "tmdbId": 949}})
+        if url.endswith("/movie/949") or url.endswith("/tv/95396"):
+            return FakeResp(200, {"mediaInfo": {"id": 7, "status": 5, "requests": [
+                {"id": 42, "status": 2}, {"id": 43, "status": 1}, {"id": 40, "status": 3}]}})
+        return FakeResp(200, {"mediaInfo": None})
+
+    def fake_delete(url, headers=None, timeout=None):
+        calls.append(("DELETE", url, None))
+        return FakeResp(204)
 
     monkeypatch.setattr(seerr.requests, "post", fake_post)
     monkeypatch.setattr(seerr.requests, "get", fake_get)
+    monkeypatch.setattr(seerr.requests, "delete", fake_delete)
     return values, calls
 
 
@@ -112,6 +122,34 @@ def test_set_media_status_resolves_the_media_id_first(seerr_env):
     ]
 
 
+def test_find_media_uses_the_tmdb_endpoints(seerr_env):
+    """Seerr 3.4.1: /movie/{tmdb} and /tv/{tmdb} carry mediaInfo.id and the
+    requests, so no request id is needed to address the media."""
+    import seerr
+    found = seerr.find_media(949, "movie")
+    assert found == {"media_id": 7, "status": 5, "request_ids": [42, 43]}, "only pending/approved requests"
+    assert seerr_env[1][-1][1] == "http://seerr.test/api/v1/movie/949"
+    assert seerr.find_media(95396, "series")["media_id"] == 7
+    assert seerr_env[1][-1][1] == "http://seerr.test/api/v1/tv/95396"
+    assert seerr.find_media(1, "movie") is None
+
+
+def test_delete_media_is_the_removal_call(seerr_env):
+    """Measured against Seerr 3.4.1: POST /media/{id}/deleted answers 200 and
+    changes nothing; DELETE /media/{id} removes the record and the title is
+    requestable again at once."""
+    import seerr
+    assert "deleted" not in seerr._MEDIA_STATES
+    assert seerr.delete_media(7) is True
+    assert seerr_env[1] == [("DELETE", "http://seerr.test/api/v1/media/7", None)]
+
+
+def test_delete_media_treats_already_gone_as_done(seerr_env, monkeypatch):
+    import seerr
+    monkeypatch.setattr(seerr.requests, "delete", lambda url, headers=None, timeout=None: FakeResp(404))
+    assert seerr.delete_media(7) is True
+
+
 def test_set_media_status_rejects_unknown_states(seerr_env):
     import seerr
     with pytest.raises(ValueError):
@@ -125,6 +163,43 @@ def test_success_marks_available(seerr_env):
     db.upsert_media_item("tt0113277", "Heat", "movie", seerr_request_id=42)
     assert seerr_report.on_success("tt0113277") is True
     assert seerr_env[1][-1][1] == "http://seerr.test/api/v1/media/7/available"
+
+
+def test_success_resolves_by_tmdb_before_request_id(seerr_env):
+    """Titles requested before 0.14.0, and every series, have no Seerr
+    request id on file; the TMDB id reaches the media directly."""
+    import seerr_report
+    assert seerr_report.on_success("tt0113277", 949, "movie") is True
+    assert seerr_env[1] == [
+        ("GET", "http://seerr.test/api/v1/movie/949", None),
+        ("POST", "http://seerr.test/api/v1/media/7/available", {"is4k": False}),
+    ]
+
+
+def test_success_reads_the_tmdb_id_from_the_request_row_when_not_passed(seerr_env):
+    import seerr_report
+    db.insert_request("Heat", "tt0113277", "movie", tmdb_id=949)
+    assert seerr_report.on_success("tt0113277") is True
+    assert seerr_env[1][0] == ("GET", "http://seerr.test/api/v1/movie/949", None)
+
+
+def test_success_falls_back_to_the_request_id_when_seerr_does_not_know_the_tmdb(seerr_env):
+    import seerr_report
+    db.upsert_media_item("tt0000001", "Nope", "movie", seerr_request_id=42)
+    assert seerr_report.on_success("tt0000001", 1, "movie") is True
+    assert [c[1] for c in seerr_env[1]] == [
+        "http://seerr.test/api/v1/movie/1",
+        "http://seerr.test/api/v1/request/42",
+        "http://seerr.test/api/v1/media/7/available",
+    ]
+
+
+def test_failed_declines_every_open_request_found_by_tmdb(seerr_env):
+    import seerr_report
+    assert seerr_report.on_failed("tt0113277", "no stream", 949, "movie") is True
+    posts = [c[1] for c in seerr_env[1] if c[0] == "POST"]
+    assert posts == ["http://seerr.test/api/v1/request/42/decline",
+                     "http://seerr.test/api/v1/request/43/decline"], "declined request 40 is left alone"
 
 
 def test_failed_declines(seerr_env):
@@ -171,7 +246,9 @@ def test_stale_wanted_is_declined_once(seerr_env):
         conn.commit()
     assert seerr_report.report_stale_wanted() == 1
     assert seerr_report.report_stale_wanted() == 0
-    assert seerr_env[1] == [("POST", "http://seerr.test/api/v1/request/42/decline", None)]
+    posts = [c[1] for c in seerr_env[1] if c[0] == "POST"]
+    assert posts == ["http://seerr.test/api/v1/request/42/decline",
+                     "http://seerr.test/api/v1/request/43/decline"], "every open request, once"
     assert db.get_wanted_movies()[0]["imdb_id"] == "tt0113277", "Mycelium keeps searching"
 
 
@@ -198,9 +275,11 @@ def test_a_seerr_outage_leaves_the_stale_decline_for_the_next_sweep(seerr_env, m
     assert seerr_report.report_stale_wanted() == 1
 
 
-def test_stale_wanted_without_a_seerr_id_is_marked_and_not_rescanned(seerr_env):
+def test_stale_wanted_unknown_to_seerr_is_marked_and_not_rescanned(seerr_env):
+    """No Seerr request id on file and a TMDB id Seerr has never seen:
+    nothing to report, so the row is marked and never re-scanned."""
     import seerr_report
-    db.upsert_wanted_movie("tt0113277", 949, "Heat", "nothing acceptable")
+    db.upsert_wanted_movie("tt0000001", 1, "Nope", "nothing acceptable")
     with db._connect() as conn:
         conn.execute("UPDATE wanted_movies SET added_at = datetime('now', '-40 days')")
         conn.commit()
@@ -253,7 +332,7 @@ def test_failed_is_reported_only_when_no_retry_remains():
     assert "will_retry = retry_queue.schedule(req, _retry_attempt)" in failed
     assert "if not will_retry:" in failed
     assert failed.index("retry_queue.schedule(req, _retry_attempt)") < \
-        failed.index("seerr_report.on_failed(req.imdb_id, reason)")
+        failed.index("seerr_report.on_failed(req.imdb_id, reason, req.tmdb_id, req.media_type)")
 
 
 def test_processor_persists_the_id_and_reports_both_outcomes():
@@ -261,15 +340,15 @@ def test_processor_persists_the_id_and_reports_both_outcomes():
     locked = src.split("def _process_locked(", 1)[1]
     assert "seerr_request_id=req.seerr_request_id" in locked.split("db.insert_request(", 1)[1][:600]
     success = locked.split("jellyfin.refresh_library()", 1)[1][:1500]
-    assert "seerr_report.on_success(req.imdb_id)" in success
+    assert "seerr_report.on_success(req.imdb_id, req.tmdb_id, req.media_type)" in success
     failed = locked.split('db.update_request(row_id, "failed", error=reason)', 1)[1][:1100]
-    assert "seerr_report.on_failed(req.imdb_id, reason)" in failed
+    assert "seerr_report.on_failed(req.imdb_id, reason, req.tmdb_id, req.media_type)" in failed
 
 
 def test_wanted_job_reports_success_and_sweeps_stale():
     src = _src("upgrader.py")
     block = src.split("db.remove_wanted_movie(w[\"imdb_id\"])", 1)[1][:800]
-    assert "seerr_report.on_success(w[\"imdb_id\"])" in block
+    assert "seerr_report.on_success(w[\"imdb_id\"], w.get(\"tmdb_id\"), \"movie\")" in block
     assert "seerr_report.report_stale_wanted()" in src
 
 

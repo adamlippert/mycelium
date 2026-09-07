@@ -106,7 +106,13 @@ for every request that came in through the Seerr webhook:
 | No suitable stream (terminal) | request **Declined**; the person can re-request |
 | Released but nothing acceptable yet | left as **Processing**, Mycelium keeps searching |
 | Still nothing after `SEERR_DECLINE_WANTED_AFTER_DAYS` (default 30) | request **Declined** once; Mycelium keeps searching anyway |
-| Removed from library | media marked **Deleted** at once, so it can be requested again straight away; the request history is kept |
+| Removed from library | Seerr's media record is removed at once (what its own "clear media data" button does), so the title can be requested again straight away. Seerr's request history for that title goes with it |
+
+Mycelium finds the title in Seerr by its TMDB id, so this works for titles
+requested before Mycelium stored Seerr request ids, for series, and for
+titles added from Mycelium's own Discover page that also exist in Seerr.
+(Seerr 3.4.1 accepts a "deleted" media status and then ignores it, which is
+why removal deletes the record instead.)
 
 "Removed from library" means the Remove from library button, the arr and
 Jellyfin delete webhooks, and anything else that runs the purge. The Delete

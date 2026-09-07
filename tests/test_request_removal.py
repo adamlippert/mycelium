@@ -71,10 +71,19 @@ def seerr_env(monkeypatch):
 
     def fake_get(url, headers=None, timeout=None):
         calls.append(("GET", url, None))
-        return FakeResp(200, {"id": 42, "status": 2, "media": {"id": 7, "tmdbId": 949}})
+        if "/request/" in url:
+            return FakeResp(200, {"id": 42, "status": 2, "media": {"id": 7, "tmdbId": 949}})
+        if url.endswith("/movie/949"):
+            return FakeResp(200, {"mediaInfo": {"id": 7, "status": 5, "requests": [{"id": 42, "status": 2}]}})
+        return FakeResp(200, {"mediaInfo": None})
+
+    def fake_delete(url, headers=None, timeout=None):
+        calls.append(("DELETE", url, None))
+        return FakeResp(204)
 
     monkeypatch.setattr(seerr.requests, "post", fake_post)
     monkeypatch.setattr(seerr.requests, "get", fake_get)
+    monkeypatch.setattr(seerr.requests, "delete", fake_delete)
     return values, calls
 
 
@@ -115,15 +124,25 @@ def test_purge_clears_the_per_user_rows_even_without_a_request_row():
 
 # -- telling Seerr about a purge -------------------------------------------------
 
-def test_purge_marks_the_seerr_media_deleted(seerr_env):
-    """Seerr's 'deleted' media status keeps the request history and accepts a
-    new request at once (verified against Seerr 3.4.1)."""
+def test_purge_deletes_the_seerr_media_record(seerr_env):
+    """Measured against Seerr 3.4.1: the 'deleted' media status is accepted
+    and ignored, so a purge removes the record the way Seerr's own "clear
+    media data" does; the title is requestable again at once."""
+    import seerr_report
+    assert seerr_report.on_purged("tt0113277", 949, "movie") is True
+    assert seerr_env[1] == [
+        ("GET", "http://seerr.test/api/v1/movie/949", None),
+        ("DELETE", "http://seerr.test/api/v1/media/7", None),
+    ]
+
+
+def test_purge_falls_back_to_the_request_id_without_a_tmdb(seerr_env):
     import seerr_report
     db.upsert_media_item("tt0113277", "Heat", "movie", seerr_request_id=42)
     assert seerr_report.on_purged("tt0113277") is True
     assert seerr_env[1] == [
         ("GET", "http://seerr.test/api/v1/request/42", None),
-        ("POST", "http://seerr.test/api/v1/media/7/deleted", {"is4k": False}),
+        ("DELETE", "http://seerr.test/api/v1/media/7", None),
     ]
 
 
@@ -155,7 +174,7 @@ def test_a_seerr_outage_during_purge_never_raises(seerr_env, monkeypatch):
 
 def test_purge_title_reports_to_seerr_but_delete_does_not():
     cleanup_src = _src("cleanup.py")
-    assert "seerr_report.on_purged(imdb_id)" in cleanup_src.split("def purge_title(", 1)[1]
+    assert "seerr_report.on_purged(imdb_id, tmdb_id, media_type)" in cleanup_src.split("def purge_title(", 1)[1]
     app_src = _src("app.py")
     delete_route = app_src.split("def ui_api_delete_request(", 1)[1].split("\n@app.", 1)[0]
     assert "seerr_report" not in delete_route, "Delete keeps the files, so Seerr must not be told"

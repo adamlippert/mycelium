@@ -1022,7 +1022,7 @@ def purge_title(imdb_id: str, row_id: int | None = None) -> dict:
         log.debug("Purge %s: user_requests cleanup skipped: %s", imdb_id, exc)
     try:
         import seerr_report
-        result["seerr_deleted"] = seerr_report.on_purged(imdb_id)
+        result["seerr_deleted"] = seerr_report.on_purged(imdb_id, tmdb_id, media_type)
     except Exception as exc:
         log.debug("Purge %s: seerr_report skipped: %s", imdb_id, exc)
 

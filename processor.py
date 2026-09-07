@@ -724,7 +724,7 @@ def _process_locked(req: MediaRequest, _retry_attempt: int) -> bool:
             log.debug("arr_sync skipped: %s", exc)
         try:
             import seerr_report
-            seerr_report.on_success(req.imdb_id)
+            seerr_report.on_success(req.imdb_id, req.tmdb_id, req.media_type)
         except Exception as exc:
             log.debug("seerr_report skipped: %s", exc)
         quality = winner.quality if winner else "?"
@@ -779,7 +779,7 @@ def _process_locked(req: MediaRequest, _retry_attempt: int) -> bool:
         if not will_retry:
             try:
                 import seerr_report
-                seerr_report.on_failed(req.imdb_id, reason)
+                seerr_report.on_failed(req.imdb_id, reason, req.tmdb_id, req.media_type)
             except Exception as exc:
                 log.debug("seerr_report skipped: %s", exc)
 

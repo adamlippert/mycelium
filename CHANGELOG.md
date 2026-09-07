@@ -2,6 +2,20 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- Remove from library really tells Seerr now. 0.14.1 sent Seerr's "deleted"
+  media status, which Seerr 3.4.1 accepts and ignores, so the title stayed
+  Available until Seerr's next availability sync. The purge now removes
+  Seerr's media record (what its "clear media data" button does) and the
+  title is requestable again at once.
+- Seerr reporting finds the title by TMDB id, so it also works for titles
+  requested before 0.14.0, for series, and for Discover-originated titles
+  that exist in Seerr; the stored Seerr request id is the fallback. A
+  failure declines every open Seerr request for the title, not just one.
+
 ## [0.14.1] - 2026-09-07
 
 ### Fixed
