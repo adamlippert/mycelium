@@ -690,7 +690,16 @@ def arr_webhook_route():
         return jsonify(status="error", error=str(exc)), 400
     if ev is None:
         return jsonify(status="ignored", reason="not a title deletion")
-    imdb_id = arr_webhook.resolve_imdb(ev)
+    # Ownership first, locally. Jellyfin fires ItemDeleted for every title in
+    # every library, so a tmdb id that matches nothing of ours is answered
+    # without a TMDB round trip. Only a payload with neither an imdb nor a
+    # tmdb id (Sonarr with tvdb only) still resolves remotely.
+    imdb_id = ev.imdb_id or db.imdb_for_tmdb(ev.tmdb_id)
+    if not imdb_id and ev.tmdb_id:
+        log.info("Arr webhook: %s %s for tmdb %s ignored: unknown title", ev.source, ev.event, ev.tmdb_id)
+        return jsonify(status="ignored", reason="unknown title", tmdb_id=ev.tmdb_id)
+    if not imdb_id:
+        imdb_id = arr_webhook.resolve_imdb(ev)
     if not imdb_id:
         log.warning("Arr webhook: could not resolve %s %s to an imdb id", ev.source, ev.event)
         return jsonify(status="error", error="unresolvable id"), 400

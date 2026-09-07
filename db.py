@@ -584,6 +584,23 @@ def update_request(row_id: int, status: str, quality: str | None = None,
         conn.commit()
 
 
+def imdb_for_tmdb(tmdb_id: int | None) -> str | None:
+    """The imdb id Mycelium knows for a TMDB id, from any table it fills;
+    None when the title is not ours. Lets the delete webhook decide
+    ownership without a TMDB round trip."""
+    if not tmdb_id:
+        return None
+    with _connect() as conn:
+        for table in ("requests", "monitored_series", "watchlist", "wanted_movies", "user_requests"):
+            row = conn.execute(
+                f"SELECT imdb_id FROM {table} WHERE tmdb_id=? AND imdb_id IS NOT NULL LIMIT 1",
+                (int(tmdb_id),),
+            ).fetchone()
+            if row and row["imdb_id"]:
+                return row["imdb_id"]
+    return None
+
+
 def get_request_by_imdb(imdb_id: str) -> dict | None:
     with _connect() as conn:
         row = conn.execute(

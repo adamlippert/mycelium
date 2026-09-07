@@ -202,3 +202,28 @@ def test_files_still_present_false_when_missing_or_absent(tmp_path):
     ]
     assert arr_webhook.files_still_present(items) is False
     assert arr_webhook.files_still_present([]) is False
+
+
+# -- ownership is checked before any TMDB round trip ---------------------------
+
+def test_imdb_for_tmdb_looks_in_every_table_mycelium_fills():
+    db.insert_request("Heat", "tt0113277", "movie", tmdb_id=949)
+    db.upsert_monitored_series("tt11280740", 95396, "Severance", [1])
+    assert db.imdb_for_tmdb(949) == "tt0113277"
+    assert db.imdb_for_tmdb(95396) == "tt11280740"
+    assert db.imdb_for_tmdb(1) is None
+    assert db.imdb_for_tmdb(None) is None
+
+
+def test_route_checks_ownership_locally_before_calling_tmdb():
+    """Jellyfin fires ItemDeleted for every Movie and Series in any library.
+    A foreign title with a tmdb id used to cost a TMDB round trip before
+    Mycelium decided it was not ours; now a tmdb id that matches nothing
+    local is ignored without leaving the box. Only a payload with neither
+    an imdb nor a tmdb id (Sonarr with tvdb only) still resolves remotely."""
+    body = _route_body()
+    assert "db.imdb_for_tmdb(ev.tmdb_id)" in body
+    assert body.index("db.imdb_for_tmdb(ev.tmdb_id)") < body.index("arr_webhook.resolve_imdb(ev)")
+    # A tmdb id that matches nothing local is answered without resolving.
+    assert 'reason="unknown title", tmdb_id=ev.tmdb_id' in body
+    assert body.index('reason="unknown title", tmdb_id=ev.tmdb_id') < body.index("arr_webhook.resolve_imdb(ev)")

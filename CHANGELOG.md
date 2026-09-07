@@ -2,6 +2,22 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- A root folder picked in Settings > Radarr / Sonarr took effect only after
+  a restart; the mirror cached the arr's defaults per process. The cache is
+  now keyed on the URL and the root-folder setting.
+- The delete webhook checks ownership locally before any TMDB call, so
+  Jellyfin's ItemDeleted for titles in other libraries costs nothing.
+- The reconcile job no longer counts a title the arr already had as added.
+
+### Changed
+
+- Arr API calls time out after 8 seconds instead of 15; a request can make
+  several while its title lock is held.
+
 ## [0.14.3] - 2026-09-07
 
 ### Added

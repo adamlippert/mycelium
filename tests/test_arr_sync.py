@@ -232,18 +232,18 @@ def test_reconcile_adds_only_what_the_arr_lacks(enabled, monkeypatch):
     monkeypatch.setattr(radarr, "list_movies", lambda u, k: [{"imdb_id": "tt0078748", "tmdb_id": 348}])
     monkeypatch.setattr(sonarr, "list_series", lambda u, k: [])
     added = []
-    monkeypatch.setattr(arr_sync, "mirror_add",
-                        lambda imdb, mt, tmdb_id=None, title="": added.append(imdb) or True)
+    monkeypatch.setattr(arr_sync, "_ensure",
+                        lambda imdb, mt, tmdb_id, title: added.append(imdb) or "added")
     out = arr_sync.reconcile()
     assert added == ["tt0113277"]
-    assert out == {"checked": 2, "added": 1, "failed": 0, "skipped": 1}
+    assert out == {"checked": 2, "added": 1, "present": 0, "failed": 0, "skipped": 1}
 
 
 def test_reconcile_is_a_noop_when_disabled(monkeypatch):
     import arr_sync
     import settings
     monkeypatch.setattr(settings, "get", lambda k, d=None: {"ARR_SYNC_ENABLED": False}.get(k, d))
-    assert arr_sync.reconcile() == {"checked": 0, "added": 0, "failed": 0, "skipped": 0}
+    assert arr_sync.reconcile() == {"checked": 0, "added": 0, "present": 0, "failed": 0, "skipped": 0}
 
 
 # -- wiring ------------------------------------------------------------------
@@ -280,3 +280,51 @@ def test_settings_are_registered():
     env = _src(".env.example")
     for key in ("ARR_SYNC_ENABLED", "RADARR_ROOT_FOLDER", "SONARR_ROOT_FOLDER"):
         assert f"\n{key}=" in env
+
+
+# -- hygiene batch after the whole-branch review ------------------------------
+
+def test_a_changed_root_folder_setting_is_picked_up_without_a_restart(enabled, monkeypatch):
+    """Settings > Radarr / Sonarr has a root-folder dropdown now; a pick that
+    only takes effect after a restart is a bug, not a cache."""
+    import arr_sync
+    fake = FakeArr({
+        ("GET", "/movie/lookup"): (200, RADARR_LOOKUP),
+        ("GET", "/movie"): (200, []),
+        ("GET", "/qualityprofile"): (200, [{"id": 4}]),
+        ("GET", "/rootfolder"): (200, [{"path": "/movies"}]),
+        ("POST", "/movie"): (201, {"id": 10}),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    assert arr_sync.mirror_add("tt0113277", "movie", 949, "Heat") is True
+    enabled["RADARR_ROOT_FOLDER"] = "/mnt/new"
+    assert arr_sync.mirror_add("tt0113277", "movie", 949, "Heat") is True
+    roots = [c[3]["rootFolderPath"] for c in fake.calls if c[0] == "POST"]
+    assert roots == ["/movies", "/mnt/new"]
+
+
+def test_arr_calls_do_not_hold_the_title_lock_for_long():
+    """A success can make up to six arr calls while the per-title lock is
+    held; 15 s each was too generous for a bookkeeping mirror."""
+    import arr_sync
+    assert arr_sync._TIMEOUT <= 8
+
+
+def test_reconcile_does_not_count_already_present_as_added(enabled, monkeypatch):
+    """Sonarr reports a series with no imdb or tmdb id, so it is missing
+    from the have-set, the lookup then finds it already added, and that
+    used to be counted as an add."""
+    import arr_sync
+    import radarr
+    import sonarr
+    db.insert_request("Severance", "tt11280740", "series", tmdb_id=95396)
+    db.update_request(db.get_request_by_imdb("tt11280740")["id"], "success")
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [])
+    monkeypatch.setattr(sonarr, "list_series", lambda u, k: [{"imdb_id": "", "tmdb_id": None, "tvdb_id": 371980}])
+    fake = FakeArr({
+        ("GET", "/series/lookup"): (200, [{**SONARR_LOOKUP[0], "id": 7}]),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    out = arr_sync.reconcile()
+    assert out == {"checked": 1, "added": 0, "present": 1, "failed": 0, "skipped": 0}
+    assert not [c for c in fake.calls if c[0] == "POST"]

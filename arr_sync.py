@@ -24,11 +24,15 @@ import settings as _settings
 
 log = logging.getLogger(__name__)
 
-_TIMEOUT = 15
+# A success can make up to six calls while the per-title lock is held; this
+# is bookkeeping, so an arr that does not answer in 8 s is treated as down.
+_TIMEOUT = 8
 _lock = threading.Lock()
-# kind -> (quality_profile_id, root_folder). The arr's answer does not change
-# between calls; asking once per process keeps reconcile cheap.
-_defaults_cache: dict[str, tuple[int, str]] = {}
+# (quality_profile_id, root_folder) per arr, fetched once so reconcile stays
+# cheap. Keyed on (kind, base url, root-folder setting) so a changed URL or a new
+# root-folder pick in Settings takes effect on the next call, not after a
+# restart.
+_defaults_cache: dict[tuple[str, str, str], tuple[int, str]] = {}
 
 
 class ArrError(RuntimeError):
@@ -64,13 +68,15 @@ def _request(method: str, url: str, api_key: str, *, params=None, json=None) -> 
 
 def _defaults(kind: str, base: str, key: str) -> tuple[int, str]:
     """First quality profile, plus the root folder (setting, else the first)."""
+    root_setting = (_settings.get(f"{kind.upper()}_ROOT_FOLDER", "") or "").strip()
+    cache_key = (kind, base, root_setting)
     with _lock:
-        if kind in _defaults_cache:
-            return _defaults_cache[kind]
+        if cache_key in _defaults_cache:
+            return _defaults_cache[cache_key]
     status, profiles = _request("GET", f"{base}/api/v3/qualityprofile", key)
     if status != 200 or not profiles:
         raise ArrError(f"{kind}: no quality profiles ({status})")
-    root = (_settings.get(f"{kind.upper()}_ROOT_FOLDER", "") or "").strip()
+    root = root_setting
     if not root:
         status, roots = _request("GET", f"{base}/api/v3/rootfolder", key)
         if status != 200 or not roots:
@@ -78,7 +84,7 @@ def _defaults(kind: str, base: str, key: str) -> tuple[int, str]:
         root = roots[0]["path"]
     out = (int(profiles[0]["id"]), root)
     with _lock:
-        _defaults_cache[kind] = out
+        _defaults_cache[cache_key] = out
     return out
 
 
@@ -103,18 +109,18 @@ def _existing(base: str, key: str, resource: str, id_field: str, value) -> dict 
 
 # -- Radarr --------------------------------------------------------------------
 
-def _add_movie(imdb_id: str, tmdb_id: int | None, title: str) -> bool:
+def _add_movie(imdb_id: str, tmdb_id: int | None, title: str) -> str:
     base, key = _conn("radarr")
     if not base or not key:
         log.debug("Arr sync: Radarr not configured; skipping %s", imdb_id)
-        return False
+        return "skipped"
     terms = [f"imdb:{imdb_id}"] + ([f"tmdb:{tmdb_id}"] if tmdb_id else [])
     found = _lookup(base, key, "movie", terms, "tmdbId")
     if not found:
         log.info("Arr sync: Radarr has no match for %s (%s)", title or imdb_id, imdb_id)
-        return False
+        return "unmatched"
     if found.get("id") or _existing(base, key, "movie", "tmdbId", found["tmdbId"]):
-        return True
+        return "present"
     profile_id, root = _defaults("radarr", base, key)
     body = dict(found)
     body.update({
@@ -127,11 +133,11 @@ def _add_movie(imdb_id: str, tmdb_id: int | None, title: str) -> bool:
     status, resp = _request("POST", f"{base}/api/v3/movie", key, json=body)
     if status in (200, 201):
         log.info("Arr sync: mirrored %s (%s) into Radarr", title or imdb_id, imdb_id)
-        return True
+        return "added"
     if status == 400 and "exist" in str(resp).lower():
-        return True
+        return "present"
     log.warning("Arr sync: Radarr refused %s: %s %s", imdb_id, status, str(resp)[:200])
-    return False
+    return "failed"
 
 
 def _remove_movie(imdb_id: str, tmdb_id: int | None) -> bool:
@@ -169,17 +175,17 @@ def _sonarr_find(base: str, key: str, imdb_id: str, tmdb_id: int | None) -> dict
     return _lookup(base, key, "series", [f"tvdb:{tvdb_id}"], "tvdbId")
 
 
-def _add_series(imdb_id: str, tmdb_id: int | None, title: str) -> bool:
+def _add_series(imdb_id: str, tmdb_id: int | None, title: str) -> str:
     base, key = _conn("sonarr")
     if not base or not key:
         log.debug("Arr sync: Sonarr not configured; skipping %s", imdb_id)
-        return False
+        return "skipped"
     found = _sonarr_find(base, key, imdb_id, tmdb_id)
     if not found:
         log.info("Arr sync: Sonarr has no match for %s (%s)", title or imdb_id, imdb_id)
-        return False
+        return "unmatched"
     if found.get("id") or _existing(base, key, "series", "tvdbId", found["tvdbId"]):
-        return True
+        return "present"
     profile_id, root = _defaults("sonarr", base, key)
     body = dict(found)
     body.update({
@@ -196,11 +202,11 @@ def _add_series(imdb_id: str, tmdb_id: int | None, title: str) -> bool:
     status, resp = _request("POST", f"{base}/api/v3/series", key, json=body)
     if status in (200, 201):
         log.info("Arr sync: mirrored %s (%s) into Sonarr", title or imdb_id, imdb_id)
-        return True
+        return "added"
     if status == 400 and "exist" in str(resp).lower():
-        return True
+        return "present"
     log.warning("Arr sync: Sonarr refused %s: %s %s", imdb_id, status, str(resp)[:200])
-    return False
+    return "failed"
 
 
 def _remove_series(imdb_id: str, tmdb_id: int | None) -> bool:
@@ -225,17 +231,22 @@ def _remove_series(imdb_id: str, tmdb_id: int | None) -> bool:
 
 # -- public --------------------------------------------------------------------
 
-def mirror_add(imdb_id: str, media_type: str, tmdb_id: int | None = None, title: str = "") -> bool:
-    """Ensure the title exists in the matching arr. Never raises."""
+def _ensure(imdb_id: str, media_type: str, tmdb_id: int | None, title: str) -> str:
+    """One of "added", "present", "unmatched", "failed", "skipped". Never raises."""
     if not is_enabled() or not imdb_id:
-        return False
+        return "skipped"
     try:
         if media_type == "movie":
             return _add_movie(imdb_id, tmdb_id, title)
         return _add_series(imdb_id, tmdb_id, title)
     except Exception as exc:
         log.warning("Arr sync: add of %s failed: %s", imdb_id, exc)
-        return False
+        return "failed"
+
+
+def mirror_add(imdb_id: str, media_type: str, tmdb_id: int | None = None, title: str = "") -> bool:
+    """Ensure the title exists in the matching arr. Never raises."""
+    return _ensure(imdb_id, media_type, tmdb_id, title) in ("added", "present")
 
 
 def mirror_remove(imdb_id: str, media_type: str, tmdb_id: int | None = None) -> bool:
@@ -256,7 +267,7 @@ def mirror_remove(imdb_id: str, media_type: str, tmdb_id: int | None = None) -> 
 def reconcile() -> dict:
     """Add every successful Mycelium title the arrs lack. Never removes from
     the arrs: they may hold titles Mycelium does not own. Scheduled."""
-    out = {"checked": 0, "added": 0, "failed": 0, "skipped": 0}
+    out = {"checked": 0, "added": 0, "present": 0, "failed": 0, "skipped": 0}
     if not is_enabled():
         return out
     import radarr
@@ -282,7 +293,12 @@ def reconcile() -> dict:
         kind = "movie" if row["media_type"] == "movie" else "series"
         if row["imdb_id"] in have[kind] or (row.get("tmdb_id") and row["tmdb_id"] in have[kind]):
             continue
-        if mirror_add(row["imdb_id"], row["media_type"], row.get("tmdb_id"), row.get("title") or ""):
+        state = _ensure(row["imdb_id"], row["media_type"], row.get("tmdb_id"), row.get("title") or "")
+        if state == "present":
+            # In the arr under an id the listing did not carry (Sonarr with
+            # no imdb/tmdb for the series); not an add.
+            out["present"] += 1
+        elif state == "added":
             out["added"] += 1
         else:
             out["failed"] += 1
