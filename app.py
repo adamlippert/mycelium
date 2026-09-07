@@ -295,12 +295,17 @@ def _start_scheduler() -> BackgroundScheduler:
         log.info("Scheduled strm cleanup every %dh", CLEANUP_INTERVAL_HOURS)
 
     import arr_sync
-    scheduler.add_job(
-        arr_sync.reconcile,
-        trigger="interval", hours=6,
-        id="arr_sync", next_run_time=None,
-    )
-    log.info("Scheduled Radarr/Sonarr mirror reconcile every 6h (active when ARR_SYNC_ENABLED)")
+    from config import ARR_SYNC_INTERVAL_MINUTES
+    if ARR_SYNC_INTERVAL_MINUTES > 0:
+        scheduler.add_job(
+            arr_sync.reconcile,
+            trigger="interval", minutes=ARR_SYNC_INTERVAL_MINUTES,
+            id="arr_sync", next_run_time=None,
+        )
+        log.info("Scheduled Radarr/Sonarr mirror reconcile every %dm (active when ARR_SYNC_ENABLED)",
+                 ARR_SYNC_INTERVAL_MINUTES)
+    else:
+        log.info("Radarr/Sonarr mirror reconcile not scheduled (ARR_SYNC_INTERVAL_MINUTES=0)")
 
     if CATBOX_MODE:
         scheduler.add_job(

@@ -7,8 +7,34 @@ How Mycelium talks to the rest of a media stack.
 Mycelium can mirror its library into Radarr and Sonarr. Turn it on with
 `ARR_SYNC_ENABLED=true` (Settings > Radarr / Sonarr). Every title Mycelium
 adds is created in the arr as a monitored entry with **search off**, and
-removed again on "Remove from library". A reconcile job runs every six hours
-and adds anything the arrs are missing; it never deletes from the arrs.
+removed again on "Remove from library". A reconcile job runs every
+`ARR_SYNC_INTERVAL_MINUTES` (60) and does two things: it adds anything the
+arrs are missing, and it purges titles that were deleted elsewhere while
+Mycelium was not told. It only ever removes arr entries it put there itself,
+as part of purging that title.
+
+That second part is what makes the delete webhooks (below) optional. A
+title Mycelium once put in the arr that has since vanished from the arr's
+listing, and that the arr confirms it no longer holds when asked directly,
+was deleted there; a title whose `.strm` files are all gone from disk was
+deleted in Jellyfin (Jellyfin removes the file with the item). Both are
+purged on the next reconcile, so a missed webhook, or none configured at
+all, still converges within the hour. The webhooks make it instant. Titles
+touched in the last ten minutes are left alone.
+
+Guards keep a broken arr or a lost mount from wiping the library: the
+reconcile refuses to purge anything when an arr lists nothing while
+mirrored titles exist, when more than half of the mirrored titles vanish at
+once, when more than half the titles with files lose them at once, or when
+the media tree holds no `.strm` at all. Each refusal is a warning in the
+log containing "refusing to purge", and the refused titles are put back in
+the arr instead, the way the reconcile always worked. Set
+`ARR_SYNC_PURGE_ENABLED=false` to keep that add-only behaviour permanently.
+Two Mycelium instances sharing one arr will purge each other's titles
+through this path; give each its own arr.
+
+Every purge made this way is logged and shows in the admin activity feed
+with the reason (deleted in Radarr, deleted in Sonarr, or files gone).
 
 What this gives you:
 
@@ -54,7 +80,7 @@ Setup, once:
 3. In Radarr add `/mycelium/movies` as a root folder, in Sonarr
    `/mycelium/series`, then pick them in Settings > Radarr / Sonarr with the
    Load folders buttons.
-4. Set `ARR_STUBS_ENABLED=true`. The six-hourly reconcile fills the tree for
+4. Set `ARR_STUBS_ENABLED=true`. The hourly reconcile fills the tree for
    every title already in the library; new titles get their stub as they are
    added.
 
@@ -78,6 +104,8 @@ What to expect:
 Mycelium owns the `.strm` library, so a deletion made anywhere else has to
 reach it, or the title's database rows, monitoring and 24-hour duplicate
 guard outlive the files and the next request for it is silently swallowed.
+The reconcile job catches these on its own within the hour (see Radarr and
+Sonarr above); the webhooks below make it immediate.
 
 Point these at `POST https://<mycelium>/webhook/arr`. It uses the same
 secret as the Seerr webhook: send it as the `X-Webhook-Secret` header

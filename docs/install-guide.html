@@ -489,8 +489,8 @@
     <div class="lang-nl"><p>Mycelium tells Jellyfin exactly which files changed after every add, upgrade and removal, so no full library scan is needed. Jellyfin still waits about a minute (its library monitor delay, 60 seconds by default) before it acts, so a new title appears roughly a minute after it was added. If Jellyfin mounts the media at a different path than Mycelium does, set <code>JELLYFIN_MEDIA_PATH</code> to Jellyfin's path in Settings &rarr; Connections.</p></div>
 
     <h3><span class="lang-en">Tell Mycelium about deletions (Webhook plugin)</span><span class="lang-nl">Tell Mycelium about deletions (Webhook plugin)</span></h3>
-    <div class="lang-en"><p>When someone deletes a movie or series in Jellyfin, Mycelium should forget it too, otherwise the title cannot be requested again for 24 hours. Install the <strong>Webhook</strong> plugin (Dashboard &rarr; Plugins &rarr; Catalog), then:</p></div>
-    <div class="lang-nl"><p>When someone deletes a movie or series in Jellyfin, Mycelium should forget it too, otherwise the title cannot be requested again for 24 hours. Install the <strong>Webhook</strong> plugin (Dashboard &rarr; Plugins &rarr; Catalog), then:</p></div>
+    <div class="lang-en"><p>When someone deletes a movie or series in Jellyfin, Mycelium should forget it too, otherwise the title cannot be requested again for 24 hours. The hourly reconcile notices the missing files on its own; the plugin makes it immediate. Install the <strong>Webhook</strong> plugin (Dashboard &rarr; Plugins &rarr; Catalog), then:</p></div>
+    <div class="lang-nl"><p>When someone deletes a movie or series in Jellyfin, Mycelium should forget it too, otherwise the title cannot be requested again for 24 hours. The hourly reconcile notices the missing files on its own; the plugin makes it immediate. Install the <strong>Webhook</strong> plugin (Dashboard &rarr; Plugins &rarr; Catalog), then:</p></div>
     <div class="steps">
       <div class="step">
         <div class="step-body">
@@ -691,8 +691,8 @@
       </div>
       <div class="step">
         <div class="step-body">
-          <span class="lang-en">Switch on <code>ARR_SYNC_ENABLED</code>. Every title Mycelium adds is now created in the arr as a monitored entry with search off, removed again on "Remove from library", and a reconcile job runs every six hours to add anything the arr is missing.</span>
-          <span class="lang-nl">Switch on <code>ARR_SYNC_ENABLED</code>. Every title Mycelium adds is now created in the arr as a monitored entry with search off, removed again on "Remove from library", and a reconcile job runs every six hours to add anything the arr is missing.</span>
+          <span class="lang-en">Switch on <code>ARR_SYNC_ENABLED</code>. Every title Mycelium adds is now created in the arr as a monitored entry with search off, removed again on "Remove from library", and a reconcile job runs every hour (<code>ARR_SYNC_INTERVAL_MINUTES</code>) to add anything the arr is missing and to purge titles that were deleted in the arr or in Jellyfin while Mycelium was not told. It refuses to purge when an arr lists nothing, when more than half the mirrored titles vanish at once, or when the media folder is empty, so a rebuilt arr or a lost mount cannot wipe the library.</span>
+          <span class="lang-nl">Switch on <code>ARR_SYNC_ENABLED</code>. Every title Mycelium adds is now created in the arr as a monitored entry with search off, removed again on "Remove from library", and a reconcile job runs every hour (<code>ARR_SYNC_INTERVAL_MINUTES</code>) to add anything the arr is missing and to purge titles that were deleted in the arr or in Jellyfin while Mycelium was not told. It refuses to purge when an arr lists nothing, when more than half the mirrored titles vanish at once, or when the media folder is empty, so a rebuilt arr or a lost mount cannot wipe the library.</span>
         </div>
       </div>
     </div>
@@ -725,8 +725,8 @@
       </div>
       <div class="step">
         <div class="step-body">
-          <span class="lang-en">Switch on <code>ARR_STUBS_ENABLED</code>. The six-hourly reconcile fills the tree for every title already in the library; new titles get their stub as they are added. The health card shows <em>Arr stubs: ok</em>, or the reason it is not (folder not mounted, a root folder not chosen, Catbox mode off).</span>
-          <span class="lang-nl">Switch on <code>ARR_STUBS_ENABLED</code>. The six-hourly reconcile fills the tree for every title already in the library; new titles get their stub as they are added. The health card shows <em>Arr stubs: ok</em>, or the reason it is not (folder not mounted, a root folder not chosen, Catbox mode off).</span>
+          <span class="lang-en">Switch on <code>ARR_STUBS_ENABLED</code>. The hourly reconcile fills the tree for every title already in the library; new titles get their stub as they are added. The health card shows <em>Arr stubs: ok</em>, or the reason it is not (folder not mounted, a root folder not chosen, Catbox mode off).</span>
+          <span class="lang-nl">Switch on <code>ARR_STUBS_ENABLED</code>. The hourly reconcile fills the tree for every title already in the library; new titles get their stub as they are added. The health card shows <em>Arr stubs: ok</em>, or the reason it is not (folder not mounted, a root folder not chosen, Catbox mode off).</span>
         </div>
       </div>
     </div>
@@ -734,8 +734,8 @@
     <div class="lang-nl"><p>Names are truthful: <code>Heat (1995) - WEBDL-1080p.mkv</code> is what Mycelium found. Titles below your profile cutoff appear under Cutoff Unmet, which is harmless with search off. Mycelium writes into the folder the arr chose and marks it with a <code>.mycelium</code> file; it only ever deletes folders carrying that marker.</p></div>
 
     <h3><span class="lang-en">3. Delete webhooks (Maintainerr and manual deletes)</span><span class="lang-nl">3. Delete webhooks (Maintainerr and manual deletes)</span></h3>
-    <div class="lang-en"><p>A deletion made in Radarr or Sonarr, by you or by Maintainerr, must reach Mycelium so the title's files and records go too. Point both arrs at:</p></div>
-    <div class="lang-nl"><p>A deletion made in Radarr or Sonarr, by you or by Maintainerr, must reach Mycelium so the title's files and records go too. Point both arrs at:</p></div>
+    <div class="lang-en"><p>A deletion made in Radarr or Sonarr, by you or by Maintainerr, reaches Mycelium on the next hourly reconcile on its own. The webhooks below make it immediate. Point both arrs at:</p></div>
+    <div class="lang-nl"><p>A deletion made in Radarr or Sonarr, by you or by Maintainerr, reaches Mycelium on the next hourly reconcile on its own. The webhooks below make it immediate. Point both arrs at:</p></div>
     <div class="cmd">http://mycelium:8088/webhook/arr</div>
     <div class="steps">
       <div class="step">

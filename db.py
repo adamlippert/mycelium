@@ -398,6 +398,12 @@ def _migrate() -> None:
                 ) WHERE tmdb_id IS NULL
             """)
             log.info("Migration: backfilled requests.tmdb_id from related tables")
+        if "arr_mirrored_at" not in req_cols:
+            # Set once the title is known to exist in Radarr/Sonarr. A mirrored
+            # title that later disappears from the arr's listing was deleted
+            # there; an unmirrored one was simply never added.
+            conn.execute("ALTER TABLE requests ADD COLUMN arr_mirrored_at TEXT")
+            log.info("Migration: added requests.arr_mirrored_at")
 
         user_cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
         if "region" not in user_cols:
@@ -580,6 +586,19 @@ def update_request(row_id: int, status: str, quality: str | None = None,
             """UPDATE requests SET status=?, quality=?, source=?, info_hash=?, error=?,
                updated_at=strftime('%Y-%m-%d %H:%M:%S','now') WHERE id=?""",
             (status, quality, source, info_hash, error, row_id),
+        )
+        conn.commit()
+
+
+def mark_arr_mirrored(imdb_id: str) -> None:
+    """Record that Radarr/Sonarr holds this title (added by us, or found
+    present). Read by arr_sync.reconcile to tell "deleted in the arr" from
+    "never added"."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE requests SET arr_mirrored_at = strftime('%Y-%m-%d %H:%M:%S','now') "
+            "WHERE imdb_id=? AND arr_mirrored_at IS NULL",
+            (imdb_id,),
         )
         conn.commit()
 

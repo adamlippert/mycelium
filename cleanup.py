@@ -637,12 +637,25 @@ def rename_messy_series_folders() -> int:
 
         try:
             folder.rename(new_folder)
-            updated = db.rename_virtual_item_paths(str(folder), str(new_folder))
-            log.info("Renamed series folder %r → %r (%d strm_path(s) updated)",
-                     folder.name, canonical_name, updated)
-            renamed += 1
         except Exception as exc:
             log.warning("Could not rename %s → %s: %s", folder.name, canonical_name, exc)
+            continue
+        try:
+            updated = db.rename_virtual_item_paths(str(folder), str(new_folder))
+        except Exception as exc:
+            # Folder and database must agree: rows pointing at a folder that
+            # no longer exists make the title look deleted (arr_sync would
+            # purge it), so undo the rename rather than leave them apart.
+            log.warning("Could not update paths for %s → %s (%s); renaming back",
+                        folder.name, canonical_name, exc)
+            try:
+                new_folder.rename(folder)
+            except Exception as exc2:
+                log.error("Rename rollback of %s failed: %s", canonical_name, exc2)
+            continue
+        log.info("Renamed series folder %r → %r (%d strm_path(s) updated)",
+                 folder.name, canonical_name, updated)
+        renamed += 1
 
     log.info("rename_messy_series_folders: %d folder(s) renamed", renamed)
     return renamed

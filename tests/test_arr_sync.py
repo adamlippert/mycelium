@@ -236,14 +236,14 @@ def test_reconcile_adds_only_what_the_arr_lacks(enabled, monkeypatch):
                         lambda imdb, mt, tmdb_id, title, write_stubs=True: (added.append(imdb) or "added", 0))
     out = arr_sync.reconcile()
     assert added == ["tt0113277"]
-    assert out == {"checked": 2, "added": 1, "present": 0, "failed": 0, "skipped": 1, "stubs": 0}
+    assert out == {"checked": 2, "added": 1, "present": 0, "failed": 0, "skipped": 1, "stubs": 0, "purged": 0}
 
 
 def test_reconcile_is_a_noop_when_disabled(monkeypatch):
     import arr_sync
     import settings
     monkeypatch.setattr(settings, "get", lambda k, d=None: {"ARR_SYNC_ENABLED": False}.get(k, d))
-    assert arr_sync.reconcile() == {"checked": 0, "added": 0, "present": 0, "failed": 0, "skipped": 0, "stubs": 0}
+    assert arr_sync.reconcile() == {"checked": 0, "added": 0, "present": 0, "failed": 0, "skipped": 0, "stubs": 0, "purged": 0}
 
 
 class _FakeListResp:
@@ -361,7 +361,7 @@ def test_reconcile_does_not_count_already_present_as_added(enabled, monkeypatch)
     })
     monkeypatch.setattr(arr_sync, "_request", fake)
     out = arr_sync.reconcile()
-    assert out == {"checked": 1, "added": 0, "present": 1, "failed": 0, "skipped": 0, "stubs": 0}
+    assert out == {"checked": 1, "added": 0, "present": 1, "failed": 0, "skipped": 0, "stubs": 0, "purged": 0}
     assert not [c for c in fake.calls if c[0] == "POST"]
 
 
@@ -493,7 +493,7 @@ def test_reconcile_backfills_stubs_and_reports_them(stubs_on, monkeypatch):
     })
     monkeypatch.setattr(arr_sync, "_request", fake)
     out = arr_sync.reconcile()
-    assert out == {"checked": 1, "added": 0, "present": 1, "failed": 0, "skipped": 0, "stubs": 1}
+    assert out == {"checked": 1, "added": 0, "present": 1, "failed": 0, "skipped": 0, "stubs": 1, "purged": 0}
     assert (stubs_on / "movies" / "Heat (1995)" / "Heat (1995) - WEBDL-1080p.mkv").exists()
 
 
@@ -513,7 +513,7 @@ def test_reconcile_backfills_a_title_the_arr_already_lists(enabled, stubs_on, mo
     })
     monkeypatch.setattr(arr_sync, "_request", fake)
     out = arr_sync.reconcile()
-    assert out == {"checked": 1, "added": 0, "present": 1, "failed": 0, "skipped": 0, "stubs": 1}
+    assert out == {"checked": 1, "added": 0, "present": 1, "failed": 0, "skipped": 0, "stubs": 1, "purged": 0}
     assert (stubs_on / "movies" / "Heat (1995)" / "Heat (1995) - WEBDL-1080p.mkv").exists()
     assert not [c for c in fake.calls if c[1] == "/movie/lookup"], \
         "known title with stubs on: the listing entry is enough, no lookup needed"
@@ -562,3 +562,337 @@ def test_present_via_lookup_id_still_writes_the_stub(stubs_on, monkeypatch):
     assert (stubs_on / "movies" / "Heat (1995)" / "Heat (1995) - WEBDL-1080p.mkv").exists()
     assert not [c for c in fake.calls if c[0] == "GET" and c[1] == "/movie"]
     assert [c for c in fake.calls if c[1] == "/command"]
+
+
+# -- deletions made elsewhere: the reconcile is the source of truth ------------
+
+@pytest.fixture
+def mirrored(enabled, tmp_path, monkeypatch):
+    """Two successful movies, both mirrored earlier, both with a .strm on disk."""
+    import config
+    media = tmp_path / "media"
+    monkeypatch.setattr(config, "MEDIA_PATH", str(media))
+    rows = {}
+    with db._connect() as conn:
+        for imdb, tmdb, title in (("tt0113277", 949, "Heat"), ("tt0078748", 348, "Alien")):
+            folder = media / "movies" / f"{title} (1)"
+            folder.mkdir(parents=True)
+            strm = folder / f"{title} (1).strm"
+            strm.write_text("http://x/stream/t")
+            rid = db.insert_request(title, imdb, "movie", tmdb_id=tmdb)
+            db.update_request(rid, "success")
+            conn.execute(
+                "INSERT INTO virtual_items (token, info_hash, magnet, title, media_type, strm_path, imdb_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (f"tok-{imdb}", "h" * 40, "magnet:?xt=urn:btih:" + "h" * 40, title, "movie", str(strm), imdb))
+            rows[imdb] = {"id": rid, "strm": strm, "tmdb": tmdb}
+        # Mirrored well before now, so the "still being processed" grace does not apply.
+        conn.execute("UPDATE requests SET updated_at = datetime('now', '-1 day')")
+        conn.commit()
+    for imdb in rows:
+        db.mark_arr_mirrored(imdb)
+    with db._connect() as conn:
+        conn.execute("UPDATE requests SET arr_mirrored_at = datetime('now', '-1 day')")
+        conn.commit()
+    purged = []
+    import cleanup
+    monkeypatch.setattr(cleanup, "purge_title", lambda imdb, row_id=None: purged.append(imdb) or {})
+    import radarr
+    import sonarr
+    monkeypatch.setattr(sonarr, "list_series", lambda u, k: [])
+    return rows, purged, radarr
+
+
+def _radarr_confirms_absent(monkeypatch):
+    """Radarr can match the title (lookup) but holds no entry for it (GET /movie
+    by tmdbId is empty): the confirming check answers 'absent'."""
+    import arr_sync
+    fake = FakeArr({
+        ("GET", "/movie/lookup"): (200, RADARR_LOOKUP),
+        ("GET", "/movie"): (200, []),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    return fake
+
+
+def test_a_successful_add_marks_the_title_as_mirrored(enabled, monkeypatch):
+    import arr_sync
+    db.insert_request("Heat", "tt0113277", "movie", tmdb_id=949)
+    fake = FakeArr({
+        ("GET", "/movie/lookup"): (200, RADARR_LOOKUP),
+        ("GET", "/movie"): (200, [{"id": 10, "tmdbId": 949, "path": "/movies/Heat (1995)"}]),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    assert db.get_request_by_imdb("tt0113277")["arr_mirrored_at"] is None
+    arr_sync.mirror_add("tt0113277", "movie", 949, "Heat")
+    assert db.get_request_by_imdb("tt0113277")["arr_mirrored_at"] is not None
+
+
+def test_reconcile_purges_a_mirrored_title_the_arr_no_longer_lists(mirrored, monkeypatch):
+    """A delete made in Radarr while the webhook was missed used to be undone
+    by the reconcile re-adding the title. The marker tells the two cases apart."""
+    import arr_sync
+    rows, purged, radarr = mirrored
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [{"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/movies/Alien (1)"}])
+    fake = _radarr_confirms_absent(monkeypatch)
+    out = arr_sync.reconcile()
+    assert purged == ["tt0113277"], "Heat was mirrored and is gone from Radarr"
+    assert out["purged"] == 1
+    assert not [c for c in fake.calls if c[0] == "POST"], "never re-added"
+    assert ("GET", "/movie", {"tmdbId": 949}, None) in fake.calls, "absence was confirmed with Radarr first"
+
+
+def test_reconcile_still_adds_a_title_that_was_never_mirrored(mirrored, monkeypatch):
+    import arr_sync
+    rows, purged, radarr = mirrored
+    with db._connect() as conn:
+        conn.execute("UPDATE requests SET arr_mirrored_at = NULL WHERE imdb_id = 'tt0113277'")
+        conn.commit()
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [{"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/movies/Alien (1)"}])
+    added = []
+    monkeypatch.setattr(arr_sync, "_ensure_with_stubs",
+                        lambda imdb, mt, tmdb_id, title, write_stubs=True: added.append(imdb) or ("added", 0))
+    out = arr_sync.reconcile()
+    assert added == ["tt0113277"] and purged == [] and out["purged"] == 0
+
+
+def test_reconcile_refuses_to_purge_when_the_arr_listing_is_empty(mirrored, monkeypatch, caplog):
+    """An empty or collapsed listing is a rebuilt or half-broken arr, not a
+    hundred deletions. Mirror of the 'never delete from the arrs' rule."""
+    import arr_sync
+    rows, purged, radarr = mirrored
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [])
+    _radarr_confirms_absent(monkeypatch)
+    readded = []
+    monkeypatch.setattr(arr_sync, "_ensure_with_stubs",
+                        lambda imdb, *a, **k: readded.append(imdb) or ("added", 0))
+    with caplog.at_level("WARNING"):
+        out = arr_sync.reconcile()
+    assert purged == [] and out["purged"] == 0
+    assert any("refusing to purge" in r.message for r in caplog.records)
+    assert sorted(readded) == ["tt0078748", "tt0113277"], "a refused purge falls back to re-adding"
+    assert out["added"] == 2
+
+
+def test_reconcile_refuses_to_purge_when_most_mirrored_titles_vanished(mirrored, monkeypatch):
+    import arr_sync
+    rows, purged, radarr = mirrored
+    # Five mirrored titles, Radarr lists only one: 80 percent gone at once.
+    with db._connect() as conn:
+        for i in range(3):
+            rid = db.insert_request(f"X{i}", f"tt000000{i}", "movie", tmdb_id=100 + i)
+            db.update_request(rid, "success")
+        conn.execute("UPDATE requests SET arr_mirrored_at = datetime('now', '-1 day'), "
+                     "updated_at = datetime('now', '-1 day')")
+        conn.commit()
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [{"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/x"}])
+    _radarr_confirms_absent(monkeypatch)
+    monkeypatch.setattr(arr_sync, "_ensure_with_stubs", lambda *a, **k: ("present", 0))
+    out = arr_sync.reconcile()
+    assert purged == [] and out["purged"] == 0
+
+
+def test_reconcile_purges_a_title_whose_strm_was_deleted_on_disk(mirrored, monkeypatch):
+    """Jellyfin deletes the file when it deletes an item, so a missing .strm
+    is a deletion made in Jellyfin (a person, or Maintainerr through it)
+    whose webhook never arrived."""
+    import arr_sync
+    rows, purged, radarr = mirrored
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [
+        {"imdb_id": "tt0113277", "tmdb_id": 949, "id": 1, "path": "/movies/Heat (1)"},
+        {"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/movies/Alien (1)"}])
+    rows["tt0078748"]["strm"].unlink()
+    out = arr_sync.reconcile()
+    assert purged == ["tt0078748"]
+    assert out["purged"] == 1
+
+
+def test_a_title_still_being_processed_is_not_purged_for_a_missing_file(mirrored, monkeypatch):
+    import arr_sync
+    rows, purged, radarr = mirrored
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [
+        {"imdb_id": "tt0113277", "tmdb_id": 949, "id": 1, "path": "/movies/Heat (1)"},
+        {"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/movies/Alien (1)"}])
+    rows["tt0078748"]["strm"].unlink()
+    with db._connect() as conn:
+        conn.execute("UPDATE requests SET updated_at = datetime('now') WHERE imdb_id = 'tt0078748'")
+        conn.commit()
+    arr_sync.reconcile()
+    assert purged == []
+
+
+def test_reconcile_refuses_to_purge_when_the_media_tree_is_gone(mirrored, monkeypatch, caplog):
+    """The RECOVERY.md incident: a wrong mount makes every file 'missing'."""
+    import arr_sync
+    import shutil
+    rows, purged, radarr = mirrored
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [
+        {"imdb_id": "tt0113277", "tmdb_id": 949, "id": 1, "path": "/x"},
+        {"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/y"}])
+    shutil.rmtree(rows["tt0113277"]["strm"].parents[2])
+    with caplog.at_level("WARNING"):
+        arr_sync.reconcile()
+    assert purged == []
+    assert any("refusing to purge" in r.message for r in caplog.records)
+
+
+def test_a_series_sonarr_lists_without_ids_is_confirmed_present_not_purged(mirrored, monkeypatch):
+    """Sonarr is tvdb-first and often lists a series with no imdb or tmdb id.
+    Absent from the listing is not absent from Sonarr: the reconcile asks
+    before believing it, or a mirrored series would purge itself on the
+    second pass."""
+    import arr_sync
+    import sonarr
+    rows, purged, radarr = mirrored
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [
+        {"imdb_id": "tt0113277", "tmdb_id": 949, "id": 1, "path": "/x"},
+        {"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/y"}])
+    rid = db.insert_request("Severance", "tt11280740", "series", tmdb_id=95396)
+    db.update_request(rid, "success")
+    db.mark_arr_mirrored("tt11280740")
+    with db._connect() as conn:
+        conn.execute("UPDATE requests SET arr_mirrored_at = datetime('now', '-1 day'), "
+                     "updated_at = datetime('now', '-1 day')")
+        conn.commit()
+    monkeypatch.setattr(sonarr, "list_series", lambda u, k: [{"imdb_id": "", "tmdb_id": None, "tvdb_id": 371980, "id": 7, "path": "/s"}])
+    fake = FakeArr({("GET", "/series/lookup"): (200, [{**SONARR_LOOKUP[0], "id": 7}])})
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    out = arr_sync.reconcile()
+    assert purged == []
+    assert out["present"] == 1 and out["purged"] == 0
+    assert not [c for c in fake.calls if c[0] == "POST"]
+
+
+def test_a_title_the_arr_cannot_confirm_is_never_purged(mirrored, monkeypatch):
+    """Lookup failing, or the arr not even matching the title, is 'unknown':
+    the add path handles it and nothing is deleted."""
+    import arr_sync
+    rows, purged, radarr = mirrored
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [{"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/y"}])
+    monkeypatch.setattr(arr_sync, "_request", FakeArr({}))
+    out = arr_sync.reconcile()
+    assert purged == [] and out["purged"] == 0 and out["failed"] == 1
+
+
+def test_a_title_mirrored_moments_ago_is_not_purged_for_missing_from_the_listing(mirrored, monkeypatch):
+    """The listing is a snapshot taken before a loop that can run for minutes;
+    a title mirrored during that window is absent from it and is not gone."""
+    import arr_sync
+    rows, purged, radarr = mirrored
+    with db._connect() as conn:
+        conn.execute("UPDATE requests SET arr_mirrored_at = datetime('now') WHERE imdb_id = 'tt0113277'")
+        conn.commit()
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [{"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/y"}])
+    fake = _radarr_confirms_absent(monkeypatch)
+    out = arr_sync.reconcile()
+    assert purged == [] and out["purged"] == 0
+    assert not [c for c in fake.calls if c[0] == "POST"]
+
+
+def test_reconcile_refuses_to_purge_when_most_titles_lost_their_files(mirrored, monkeypatch, caplog):
+    import arr_sync
+    rows, purged, radarr = mirrored
+    import config
+    from pathlib import Path
+    media = Path(config.MEDIA_PATH)
+    listing = [{"imdb_id": "tt0113277", "tmdb_id": 949, "id": 1, "path": "/x"},
+               {"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/y"}]
+    with db._connect() as conn:
+        for i in range(3):
+            imdb = f"tt000000{i}"
+            rid = db.insert_request(f"X{i}", imdb, "movie", tmdb_id=100 + i)
+            db.update_request(rid, "success")
+            strm = media / "movies" / f"X{i} (1)" / f"X{i} (1).strm"
+            strm.parent.mkdir(parents=True)
+            strm.write_text("x")
+            conn.execute(
+                "INSERT INTO virtual_items (token, info_hash, magnet, title, media_type, strm_path, imdb_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (f"tok-{imdb}", "h" * 40, "magnet:?x", f"X{i}", "movie", str(strm), imdb))
+            listing.append({"imdb_id": imdb, "tmdb_id": 100 + i, "id": 10 + i, "path": "/z"})
+            if i < 2:
+                strm.unlink()
+        conn.execute("UPDATE requests SET updated_at = datetime('now', '-1 day')")
+        conn.commit()
+    rows["tt0113277"]["strm"].unlink()
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: listing)
+    with caplog.at_level("WARNING"):
+        out = arr_sync.reconcile()
+    assert purged == [] and out["purged"] == 0, "3 of 5 titles lost files at once"
+    assert any("refusing to purge" in r.message for r in caplog.records)
+
+
+def test_an_unconfigured_arr_never_purges_its_kind(mirrored, monkeypatch):
+    """No Radarr URL means no Radarr listing to be absent from."""
+    import arr_sync
+    rows, purged, radarr = mirrored
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: (_ for _ in ()).throw(AssertionError("not called")))
+    monkeypatch.setattr(arr_sync, "_conn", lambda kind: ("", "") if kind == "radarr" else ("http://sonarr.test", "sk"))
+    out = arr_sync.reconcile()
+    assert purged == [] and out["purged"] == 0
+
+
+def test_purge_can_be_switched_off_and_falls_back_to_re_adding(mirrored, monkeypatch):
+    import arr_sync
+    import settings
+    rows, purged, radarr = mirrored
+    values = {"ARR_SYNC_PURGE_ENABLED": False, "ARR_SYNC_ENABLED": True,
+              "RADARR_URL": "http://radarr.test", "RADARR_API_KEY": "rk",
+              "SONARR_URL": "http://sonarr.test", "SONARR_API_KEY": "sk"}
+    monkeypatch.setattr(settings, "get", lambda k, d=None: values.get(k, d))
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [{"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/y"}])
+    _radarr_confirms_absent(monkeypatch)
+    readded = []
+    monkeypatch.setattr(arr_sync, "_ensure_with_stubs",
+                        lambda imdb, *a, **k: readded.append(imdb) or ("added", 0))
+    out = arr_sync.reconcile()
+    assert purged == [] and out["purged"] == 0 and readded == ["tt0113277"]
+    assert "ARR_SYNC_PURGE_ENABLED" in _src("settings.py")
+
+
+def test_a_purge_by_the_reconcile_leaves_an_activity_row(mirrored, monkeypatch):
+    import arr_sync
+    rows, purged, radarr = mirrored
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [{"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/y"}])
+    _radarr_confirms_absent(monkeypatch)
+    arr_sync.reconcile()
+    rows_ = [r for r in db.get_activity(20) if r["event"] == "purged"]
+    assert rows_ and "Radarr" in rows_[0]["message"]
+
+
+def test_the_mirror_column_is_added_to_an_existing_database(tmp_path, monkeypatch):
+    """Upgrade path: a pre-0.16 requests table gains arr_mirrored_at, and the
+    tmdb_id backfill stays under its own guard."""
+    import sqlite3
+    _drop_cached_conn()
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.executescript("""
+        CREATE TABLE requests (id INTEGER PRIMARY KEY, title TEXT, imdb_id TEXT UNIQUE, media_type TEXT,
+            status TEXT, created_at TEXT, updated_at TEXT);
+        INSERT INTO requests (title, imdb_id, media_type, status) VALUES ('Heat', 'tt0113277', 'movie', 'success');
+    """)
+    conn.commit(); conn.close()
+    monkeypatch.setattr(db, "DB_PATH", str(path))
+    _drop_cached_conn()
+    db.init()
+    with db._connect() as conn:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(requests)")}
+    assert "arr_mirrored_at" in cols and "tmdb_id" in cols
+    assert db.get_request_by_imdb("tt0113277")["arr_mirrored_at"] is None
+    src = _src("db.py")
+    assert src.index('if "tmdb_id" not in req_cols') < src.index("backfilled requests.tmdb_id") \
+        < src.index('if "arr_mirrored_at" not in req_cols')
+
+
+def test_a_failed_path_update_rolls_the_folder_rename_back():
+    """cleanup.rename_messy_series_folders: folder and DB must agree, or the
+    reconcile sees a title whose files are 'gone'."""
+    src = _src("cleanup.py")
+    assert "renaming back" in src and "new_folder.rename(folder)" in src
+
+
+def test_reconcile_interval_is_a_setting():
+    src = _src("app.py")
+    assert "ARR_SYNC_INTERVAL_MINUTES" in src.split("arr_sync.reconcile", 1)[1][:400]
+    assert "\nARR_SYNC_INTERVAL_MINUTES=" in _src(".env.example")

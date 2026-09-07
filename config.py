@@ -320,6 +320,13 @@ SONARR_ROOT_FOLDER = _env("SONARR_ROOT_FOLDER", "")
 # the arr's mount of <ARR_STUB_PATH>/movies and /series.
 ARR_STUBS_ENABLED = _env("ARR_STUBS_ENABLED", "false").lower() == "true"
 ARR_STUB_PATH = _env("ARR_STUB_PATH", "/arr-stubs")
+# How often the mirror reconciles with the arrs and the media tree: adds
+# what they lack, and purges titles that were deleted in the arr or in
+# Jellyfin while the webhook was missed. Restart to change.
+ARR_SYNC_INTERVAL_MINUTES = _env_int("ARR_SYNC_INTERVAL_MINUTES", 60)
+# Off: the reconcile only adds, and a title deleted in the arr is put back
+# (the pre-0.16 behaviour). On: it is purged from Mycelium instead.
+ARR_SYNC_PURGE_ENABLED = _env("ARR_SYNC_PURGE_ENABLED", "true").lower() == "true"
 
 # ── Health-aware processing ───────────────────────────────────────────────────
 # Cache health status for this many seconds; skip services that recently failed.

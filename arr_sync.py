@@ -5,8 +5,12 @@ availability, Maintainerr deletes through them, and the calendar widgets in
 Jellyfin Enhanced and Homarr read their monitored lists. None of that works
 for titles they have never heard of, and until now Mycelium never told them.
 
-One direction only. Mycelium decides what exists: a title is added here when
-Mycelium adds it and removed here when "Remove from library" runs. Entries
+Mycelium decides what gets added: a title is added here when Mycelium adds
+it and removed here when "Remove from library" runs. The other way round, a
+title Mycelium mirrored that later vanishes from the arr, or whose .strm
+files vanish from disk, is taken as deleted elsewhere and purged from
+Mycelium by reconcile(), behind guards against a rebuilt arr or a lost
+mount (ARR_SYNC_PURGE_ENABLED=false restores the add-only mirror). Entries
 are monitored with search OFF and the arrs are expected to have no download
 client, so nothing is ever grabbed. The arrs never import .strm files, so a
 mirrored title shows as "Missing" there. That is cosmetic and expected.
@@ -319,6 +323,11 @@ def _ensure_with_stubs(imdb_id: str, media_type: str, tmdb_id: int | None,
         log.warning("Arr sync: add of %s failed: %s", imdb_id, exc)
         return "failed", 0
     stubs = _write_stubs(imdb_id, media_type, arr_obj) if write_stubs and state in ("added", "present") else 0
+    if state in ("added", "present"):
+        try:
+            db.mark_arr_mirrored(imdb_id)
+        except Exception as exc:
+            log.debug("Arr sync: could not mark %s mirrored: %s", imdb_id, exc)
     return state, stubs
 
 
@@ -347,9 +356,12 @@ def reconcile() -> dict:
     for it: a title the listing already shows the arr holds gets its stub
     straight from that listing entry (no lookup call needed); a title
     Mycelium finds unknown goes through _ensure_with_stubs, which adds or
-    matches it in the arr first. Never removes from the arrs: they may
-    hold titles Mycelium does not own. Scheduled."""
-    out = {"checked": 0, "added": 0, "present": 0, "failed": 0, "skipped": 0, "stubs": 0}
+    matches it in the arr first. Then purges what was deleted elsewhere:
+    a mirrored title the arr confirms it no longer has, or one whose .strm
+    files are all gone from disk (a Jellyfin delete). Never removes an arr
+    entry it did not put there: the arrs may hold titles Mycelium does not
+    own. Scheduled."""
+    out = {"checked": 0, "added": 0, "present": 0, "failed": 0, "skipped": 0, "stubs": 0, "purged": 0}
     if not is_enabled():
         return out
     import radarr
@@ -380,14 +392,22 @@ def reconcile() -> dict:
     except Exception as exc:
         log.warning("Arr sync: reconcile could not list the arrs: %s", exc)
         return out
+    success: list[dict] = []
+    gone_in_arr: list[dict] = []
+    configured = {k: _arr_configured(k) for k in ("movie", "series")}
     for row in db.get_recent(100000):
         if row.get("status") != "success":
             out["skipped"] += 1
             continue
+        success.append(row)
         out["checked"] += 1
         kind = "movie" if row["media_type"] == "movie" else "series"
         entry = have[kind].get(row["imdb_id"]) or (row.get("tmdb_id") and have[kind].get(row["tmdb_id"]))
         if entry is not None:
+            try:
+                db.mark_arr_mirrored(row["imdb_id"])
+            except Exception as exc:
+                log.debug("Arr sync: could not mark %s mirrored: %s", row["imdb_id"], exc)
             if not stubs_enabled:
                 # Known already and nothing to write: the old short-circuit,
                 # unaffected by whether the listing carried id/path.
@@ -397,6 +417,25 @@ def reconcile() -> dict:
             if entry.get("id") and entry.get("path"):
                 out["stubs"] += _write_stubs(row["imdb_id"], row["media_type"], entry)
             continue
+        if row.get("arr_mirrored_at") and configured[kind]:
+            # The arr held this title once and lists it no more. Absence
+            # from the listing is a hint, not proof: the listing was taken
+            # before this loop started, and Sonarr often lists a series
+            # without any imdb/tmdb id at all. So a fresh mirror is left
+            # alone, and the arr is asked directly before anything is
+            # believed. Only a confirmed "absent" is a deletion.
+            if not _older_than_grace(row):
+                continue
+            verdict, arr_obj = _arr_holds(kind, row["imdb_id"], row.get("tmdb_id"))
+            if verdict == "absent":
+                gone_in_arr.append(row)
+                continue
+            if verdict == "present":
+                out["present"] += 1
+                if stubs_enabled:
+                    out["stubs"] += _write_stubs(row["imdb_id"], row["media_type"], arr_obj)
+                continue
+            # unknown: fall through to the add path, which reports the failure
         state, stubs = _ensure_with_stubs(row["imdb_id"], row["media_type"], row.get("tmdb_id"),
                                           row.get("title") or "", write_stubs=stubs_enabled)
         out["stubs"] += stubs
@@ -408,5 +447,165 @@ def reconcile() -> dict:
             out["added"] += 1
         else:
             out["failed"] += 1
+    try:
+        out["purged"], refused = _purge_deleted_elsewhere(gone_in_arr, success, have)
+    except Exception as exc:
+        log.warning("Arr sync: purge pass failed: %s", exc)
+        refused = gone_in_arr
+    for row in refused:
+        # A refused purge falls back to the old behaviour: put the title back
+        # in the arr. Idempotent, and it keeps a rebuilt arr from leaving the
+        # library unmirrored for good.
+        state, stubs = _ensure_with_stubs(row["imdb_id"], row["media_type"], row.get("tmdb_id"),
+                                          row.get("title") or "", write_stubs=stubs_enabled)
+        out["stubs"] += stubs
+        out["added" if state == "added" else "present" if state == "present" else "failed"] += 1
     log.info("Arr sync: reconcile %s", out)
     return out
+
+
+def _arr_configured(kind: str) -> bool:
+    base, key = _conn("radarr" if kind == "movie" else "sonarr")
+    return bool(base and key)
+
+
+def _purge_enabled() -> bool:
+    return bool(_settings.get("ARR_SYNC_PURGE_ENABLED", True))
+
+
+def _arr_holds(kind: str, imdb_id: str, tmdb_id) -> tuple[str, dict | None]:
+    """Ask the arr directly whether it still holds a title its listing did
+    not show. ("present", arr object), ("absent", None) when the arr matched
+    the title and has no entry for it, or ("unknown", None) when it could
+    not be asked or could not even match the title. Only "absent" may lead
+    to a purge."""
+    base, key = _conn("radarr" if kind == "movie" else "sonarr")
+    try:
+        if kind == "movie":
+            terms = [f"imdb:{imdb_id}"] + ([f"tmdb:{tmdb_id}"] if tmdb_id else [])
+            found = _lookup(base, key, "movie", terms, "tmdbId")
+            resource, id_field = "movie", "tmdbId"
+        else:
+            found = _sonarr_find(base, key, imdb_id, tmdb_id)
+            resource, id_field = "series", "tvdbId"
+        if not found:
+            return "unknown", None
+        if found.get("id"):
+            return "present", found
+        existing = _existing(base, key, resource, id_field, found[id_field])
+        if existing:
+            return "present", existing
+        return "absent", None
+    except Exception as exc:
+        log.warning("Arr sync: could not confirm %s with the arr: %s", imdb_id, exc)
+        return "unknown", None
+
+
+# A deletion elsewhere is only believed when it looks like one. Below this
+# many mirrored titles the fraction guard cannot say anything; above it, more
+# than this share vanishing at once is a rebuilt arr or a lost mount, and the
+# right move is to purge nothing and say so.
+_PURGE_GUARD_MIN_TITLES = 5
+_PURGE_GUARD_MAX_SHARE = 0.5
+_PURGE_GRACE_MINUTES = 10
+
+
+def _older_than_grace(row: dict) -> bool:
+    """True when the row was last touched (updated, or first mirrored) more
+    than the grace ago. A row still being written, or mirrored after this
+    run's listing was taken, must not look deleted. Unparseable dates count
+    as recent: no purge."""
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    stamps = [row.get("updated_at") or row.get("created_at") or "", row.get("arr_mirrored_at") or ""]
+    for raw in stamps:
+        if not raw:
+            continue
+        try:
+            when = datetime.strptime(raw[:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return False
+        if now - when <= timedelta(minutes=_PURGE_GRACE_MINUTES):
+            return False
+    return True
+
+
+def _purge_deleted_elsewhere(gone_in_arr: list[dict], success: list[dict],
+                             have: dict[str, dict]) -> tuple[int, list[dict]]:
+    """Purge titles that were deleted in the arr (mirrored, confirmed absent)
+    or in Jellyfin (every .strm gone from disk), each behind a guard that
+    refuses when the whole listing or the whole media tree looks gone. Makes
+    the delete webhooks an optimisation rather than a need. Returns (purged,
+    arr-side rows that were refused and should be re-added instead)."""
+    import cleanup
+    import config
+    from pathlib import Path
+    from arr_webhook import files_still_present
+    victims: dict[str, dict] = {}
+    refused: list[dict] = []
+    if not _purge_enabled():
+        if gone_in_arr:
+            log.info("Arr sync: ARR_SYNC_PURGE_ENABLED is off; re-adding %d title(s) the arr no longer has",
+                     len(gone_in_arr))
+        return 0, list(gone_in_arr)
+
+    for kind in ("movie", "series"):
+        gone = [r for r in gone_in_arr if ("movie" if r["media_type"] == "movie" else "series") == kind]
+        if not gone:
+            continue
+        mirrored = [r for r in success
+                    if r.get("arr_mirrored_at") and ("movie" if r["media_type"] == "movie" else "series") == kind]
+        name = "Radarr" if kind == "movie" else "Sonarr"
+        if not have[kind]:
+            log.warning("Arr sync: %s listed nothing while %d mirrored title(s) exist; "
+                        "refusing to purge (rebuilt or unreachable arr?)", name, len(mirrored))
+            refused.extend(gone)
+            continue
+        if len(mirrored) >= _PURGE_GUARD_MIN_TITLES and len(gone) > _PURGE_GUARD_MAX_SHARE * len(mirrored):
+            log.warning("Arr sync: %d of %d mirrored titles vanished from %s at once; "
+                        "refusing to purge (rebuilt arr?)", len(gone), len(mirrored), name)
+            refused.extend(gone)
+            continue
+        for r in gone:
+            victims[r["imdb_id"]] = (r, f"deleted in {name}")
+
+    media_root = Path(config.MEDIA_PATH)
+    tree_alive = media_root.is_dir() and next(media_root.rglob("*.strm"), None) is not None
+    with_files: list[dict] = []
+    missing: list[dict] = []
+    for r in success:
+        try:
+            items = [i for i in db.get_virtual_items_by_imdb(r["imdb_id"]) if i.get("strm_path")]
+        except Exception as exc:
+            log.debug("Arr sync: items for %s unavailable: %s", r["imdb_id"], exc)
+            continue
+        if not items:
+            continue
+        with_files.append(r)
+        if not files_still_present(items) and _older_than_grace(r):
+            missing.append(r)
+    if missing:
+        if not tree_alive:
+            log.warning("Arr sync: no .strm under %s; refusing to purge %d title(s) with missing files "
+                        "(media mount gone?)", media_root, len(missing))
+        elif len(with_files) >= _PURGE_GUARD_MIN_TITLES and len(missing) > _PURGE_GUARD_MAX_SHARE * len(with_files):
+            log.warning("Arr sync: %d of %d titles lost their files at once; refusing to purge",
+                        len(missing), len(with_files))
+        else:
+            for r in missing:
+                victims.setdefault(r["imdb_id"], (r, "its .strm files are gone from disk"))
+
+    purged = 0
+    for imdb_id, (r, why) in victims.items():
+        try:
+            log.info("Arr sync: %s (%s) was %s; purging", r.get("title") or imdb_id, imdb_id, why)
+            cleanup.purge_title(imdb_id, row_id=r.get("id"))
+            purged += 1
+            try:
+                db.log_activity("purged", r.get("title") or imdb_id,
+                                f"{imdb_id}: {why}; removed by the arr reconcile")
+            except Exception:
+                pass
+        except Exception as exc:
+            log.warning("Arr sync: purge of %s failed: %s", imdb_id, exc)
+    return purged, refused

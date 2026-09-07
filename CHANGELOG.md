@@ -2,6 +2,25 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- The Radarr/Sonarr reconcile is now the source of truth for deletions:
+  a title Mycelium mirrored that has vanished from the arr, or whose `.strm`
+  files are all gone from disk, is purged on the next run instead of being
+  re-added. The delete webhooks become an optimisation; without them cleanup
+  converges within `ARR_SYNC_INTERVAL_MINUTES` (default 60, was a fixed six
+  hours). An absence from the arr's listing is confirmed with the arr
+  before it is believed (Sonarr often lists a series without an imdb id),
+  titles touched in the last ten minutes are left alone, and guards refuse
+  to purge when an arr lists nothing, when more than half the mirrored
+  titles vanish at once, or when the media tree is empty; refused titles
+  are re-added as before. `ARR_SYNC_PURGE_ENABLED=false` keeps the mirror
+  add-only. Each purge is recorded in the activity feed with its reason.
+- `cleanup.rename_messy_series_folders` rolls the folder rename back when
+  the path update fails, so folder and database never disagree.
+
 ## [0.15.1] - 2026-09-07
 
 ### Added
