@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.14.3",
+    "date": "2026-09-07",
+    "notes": [
+      "Settings > Radarr / Sonarr: Test buttons that report the arr's version, using the URL and key as typed",
+      "Root folders are now dropdowns filled from Radarr and Sonarr by a Load folders button, with free space shown"
+    ]
+  },
+  {
     "version": "0.14.2",
     "date": "2026-09-07",
     "notes": [
