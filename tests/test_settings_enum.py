@@ -40,7 +40,7 @@ def test_zilean_mode_get_falls_back_on_corrupt_stored_value():
 
 def test_all_for_ui_reports_enum_kind_and_options():
     groups = settings.all_for_ui()
-    group = next(g for g in groups if g["id"] == "zilean_native")
+    group = next(g for g in groups if g["id"] == "scrapers")
     item = next(i for i in group["items"] if i["key"] == "ZILEAN_MODE")
     assert item["kind"] == "enum"
     assert item["options"] == ["external", "native"]

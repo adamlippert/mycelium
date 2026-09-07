@@ -2059,6 +2059,15 @@ def ui_api_settings():
     return jsonify(groups=settings.all_for_ui(), hot_reload=list(settings.HOT_RELOAD))
 
 
+@app.get("/ui/api/settings/schema")
+def ui_api_settings_schema():
+    """The schema-driven Settings page: sections, fields, copy, values."""
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import settings
+    return jsonify(sections=settings.schema_for_ui(), hot_reload=list(settings.HOT_RELOAD))
+
+
 _NOTIFICATION_KEYS = {"NOTIFY_ON_SUCCESS", "NOTIFY_ON_FAILURE",
                       "DISCORD_WEBHOOK_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"}
 

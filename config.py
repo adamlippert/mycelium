@@ -334,6 +334,11 @@ ARR_SYNC_PURGE_ENABLED = _env("ARR_SYNC_PURGE_ENABLED", "true").lower() == "true
 DISK_SYNC_ENABLED = _env("DISK_SYNC_ENABLED", "true").lower() == "true"
 DISK_SYNC_INTERVAL_MINUTES = _env_int("DISK_SYNC_INTERVAL_MINUTES", 60)
 
+# Quality profile the mirror uses when adding a title, by name. Blank means
+# the arr's first profile, which is what older releases always used.
+RADARR_QUALITY_PROFILE = _env("RADARR_QUALITY_PROFILE", "")
+SONARR_QUALITY_PROFILE = _env("SONARR_QUALITY_PROFILE", "")
+
 # ── Health-aware processing ───────────────────────────────────────────────────
 # Cache health status for this many seconds; skip services that recently failed.
 HEALTH_CACHE_SECONDS = _env_int("HEALTH_CACHE_SECONDS", 60)
