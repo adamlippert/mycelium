@@ -16,11 +16,13 @@ as part of purging that title.
 That second part is what makes the delete webhooks (below) optional. A
 title Mycelium once put in the arr that has since vanished from the arr's
 listing, and that the arr confirms it no longer holds when asked directly,
-was deleted there; a title whose `.strm` files are all gone from disk was
-deleted in Jellyfin (Jellyfin removes the file with the item). Both are
-purged on the next reconcile, so a missed webhook, or none configured at
-all, still converges within the hour. The webhooks make it instant. Titles
-touched in the last ten minutes are left alone.
+was deleted there and is purged on the next reconcile. A title whose `.strm`
+files are all gone from disk was deleted in Jellyfin (Jellyfin removes the
+file with the item); the separate on-disk check (`DISK_SYNC_ENABLED`, hourly,
+needs only Catbox mode) purges those, with or without any arr. So a missed
+webhook, or none configured at all, still converges within the hour. The
+webhooks make it instant. Titles touched in the last ten minutes are left
+alone.
 
 Guards keep a broken arr or a lost mount from wiping the library: the
 reconcile refuses to purge anything when an arr lists nothing while
@@ -104,8 +106,11 @@ What to expect:
 Mycelium owns the `.strm` library, so a deletion made anywhere else has to
 reach it, or the title's database rows, monitoring and 24-hour duplicate
 guard outlive the files and the next request for it is silently swallowed.
-The reconcile job catches these on its own within the hour (see Radarr and
-Sonarr above); the webhooks below make it immediate.
+Two hourly jobs catch these on their own: the Radarr/Sonarr reconcile (see
+above) notices a title the arr no longer holds, and the on-disk check
+(`DISK_SYNC_ENABLED`, needs only Catbox mode, no arrs) notices a title whose
+`.strm` files are gone, which is what a Jellyfin delete looks like. The
+webhooks below make it immediate.
 
 Point these at `POST https://<mycelium>/webhook/arr`. It uses the same
 secret as the Seerr webhook: send it as the `X-Webhook-Secret` header

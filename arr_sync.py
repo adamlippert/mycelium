@@ -24,6 +24,10 @@ import threading
 import requests
 
 import db
+from disk_sync import PURGE_GUARD_MAX_SHARE as _PURGE_GUARD_MAX_SHARE
+from disk_sync import PURGE_GUARD_MIN_TITLES as _PURGE_GUARD_MIN_TITLES
+from disk_sync import older_than_grace as _older_than_grace
+from disk_sync import purge_rows as _purge_rows
 import settings as _settings
 
 log = logging.getLogger(__name__)
@@ -445,6 +449,9 @@ def reconcile() -> dict:
             out["present"] += 1
         elif state == "added":
             out["added"] += 1
+        elif state == "skipped":
+            # No arr configured for this kind (a single-arr setup).
+            out["skipped"] += 1
         else:
             out["failed"] += 1
     try:
@@ -459,7 +466,7 @@ def reconcile() -> dict:
         state, stubs = _ensure_with_stubs(row["imdb_id"], row["media_type"], row.get("tmdb_id"),
                                           row.get("title") or "", write_stubs=stubs_enabled)
         out["stubs"] += stubs
-        out["added" if state == "added" else "present" if state == "present" else "failed"] += 1
+        out[state if state in ("added", "present", "skipped") else "failed"] += 1
     log.info("Arr sync: reconcile %s", out)
     return out
 
@@ -501,47 +508,14 @@ def _arr_holds(kind: str, imdb_id: str, tmdb_id) -> tuple[str, dict | None]:
         return "unknown", None
 
 
-# A deletion elsewhere is only believed when it looks like one. Below this
-# many mirrored titles the fraction guard cannot say anything; above it, more
-# than this share vanishing at once is a rebuilt arr or a lost mount, and the
-# right move is to purge nothing and say so.
-_PURGE_GUARD_MIN_TITLES = 5
-_PURGE_GUARD_MAX_SHARE = 0.5
-_PURGE_GRACE_MINUTES = 10
-
-
-def _older_than_grace(row: dict) -> bool:
-    """True when the row was last touched (updated, or first mirrored) more
-    than the grace ago. A row still being written, or mirrored after this
-    run's listing was taken, must not look deleted. Unparseable dates count
-    as recent: no purge."""
-    from datetime import datetime, timedelta, timezone
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    stamps = [row.get("updated_at") or row.get("created_at") or "", row.get("arr_mirrored_at") or ""]
-    for raw in stamps:
-        if not raw:
-            continue
-        try:
-            when = datetime.strptime(raw[:19], "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            return False
-        if now - when <= timedelta(minutes=_PURGE_GRACE_MINUTES):
-            return False
-    return True
-
-
 def _purge_deleted_elsewhere(gone_in_arr: list[dict], success: list[dict],
                              have: dict[str, dict]) -> tuple[int, list[dict]]:
-    """Purge titles that were deleted in the arr (mirrored, confirmed absent)
-    or in Jellyfin (every .strm gone from disk), each behind a guard that
-    refuses when the whole listing or the whole media tree looks gone. Makes
-    the delete webhooks an optimisation rather than a need. Returns (purged,
-    arr-side rows that were refused and should be re-added instead)."""
-    import cleanup
-    import config
-    from pathlib import Path
-    from arr_webhook import files_still_present
-    victims: dict[str, dict] = {}
+    """Purge titles that were deleted in the arr (mirrored, confirmed absent),
+    behind a guard that refuses when the whole listing looks gone. Makes the
+    arr delete webhooks an optimisation rather than a need; disk_sync does
+    the same for Jellyfin. Returns (purged, rows that were refused and
+    should be re-added instead)."""
+    victims: dict[str, tuple[dict, str]] = {}
     refused: list[dict] = []
     if not _purge_enabled():
         if gone_in_arr:
@@ -569,43 +543,4 @@ def _purge_deleted_elsewhere(gone_in_arr: list[dict], success: list[dict],
         for r in gone:
             victims[r["imdb_id"]] = (r, f"deleted in {name}")
 
-    media_root = Path(config.MEDIA_PATH)
-    tree_alive = media_root.is_dir() and next(media_root.rglob("*.strm"), None) is not None
-    with_files: list[dict] = []
-    missing: list[dict] = []
-    for r in success:
-        try:
-            items = [i for i in db.get_virtual_items_by_imdb(r["imdb_id"]) if i.get("strm_path")]
-        except Exception as exc:
-            log.debug("Arr sync: items for %s unavailable: %s", r["imdb_id"], exc)
-            continue
-        if not items:
-            continue
-        with_files.append(r)
-        if not files_still_present(items) and _older_than_grace(r):
-            missing.append(r)
-    if missing:
-        if not tree_alive:
-            log.warning("Arr sync: no .strm under %s; refusing to purge %d title(s) with missing files "
-                        "(media mount gone?)", media_root, len(missing))
-        elif len(with_files) >= _PURGE_GUARD_MIN_TITLES and len(missing) > _PURGE_GUARD_MAX_SHARE * len(with_files):
-            log.warning("Arr sync: %d of %d titles lost their files at once; refusing to purge",
-                        len(missing), len(with_files))
-        else:
-            for r in missing:
-                victims.setdefault(r["imdb_id"], (r, "its .strm files are gone from disk"))
-
-    purged = 0
-    for imdb_id, (r, why) in victims.items():
-        try:
-            log.info("Arr sync: %s (%s) was %s; purging", r.get("title") or imdb_id, imdb_id, why)
-            cleanup.purge_title(imdb_id, row_id=r.get("id"))
-            purged += 1
-            try:
-                db.log_activity("purged", r.get("title") or imdb_id,
-                                f"{imdb_id}: {why}; removed by the arr reconcile")
-            except Exception:
-                pass
-        except Exception as exc:
-            log.warning("Arr sync: purge of %s failed: %s", imdb_id, exc)
-    return purged, refused
+    return _purge_rows(victims), refused

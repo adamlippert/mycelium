@@ -2,6 +2,18 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- The on-disk deletion check (a title whose `.strm` files are gone was
+  deleted in Jellyfin) is its own hourly job, `disk_sync`, gated on
+  `CATBOX_MODE` and `DISK_SYNC_ENABLED` rather than on the Radarr/Sonarr
+  mirror. Jellyfin-only setups without the webhook plugin now converge too.
+  `DISK_SYNC_INTERVAL_MINUTES` (60) sets the cadence.
+- The arr reconcile counts a title whose arr is not configured (a
+  single-arr setup) as skipped instead of failed.
+
 ## [0.16.0] - 2026-09-07
 
 ### Changed

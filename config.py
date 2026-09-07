@@ -328,6 +328,12 @@ ARR_SYNC_INTERVAL_MINUTES = _env_int("ARR_SYNC_INTERVAL_MINUTES", 60)
 # (the pre-0.16 behaviour). On: it is purged from Mycelium instead.
 ARR_SYNC_PURGE_ENABLED = _env("ARR_SYNC_PURGE_ENABLED", "true").lower() == "true"
 
+# Purge titles whose .strm files were deleted on disk (a Jellyfin delete
+# without the webhook plugin). Needs only CATBOX_MODE, no arrs. Interval 0
+# disables the job; restart to change it.
+DISK_SYNC_ENABLED = _env("DISK_SYNC_ENABLED", "true").lower() == "true"
+DISK_SYNC_INTERVAL_MINUTES = _env_int("DISK_SYNC_INTERVAL_MINUTES", 60)
+
 # ── Health-aware processing ───────────────────────────────────────────────────
 # Cache health status for this many seconds; skip services that recently failed.
 HEALTH_CACHE_SECONDS = _env_int("HEALTH_CACHE_SECONDS", 60)

@@ -315,6 +315,16 @@ def _start_scheduler() -> BackgroundScheduler:
         )
         log.info("Scheduled automatic .strm repair every 6h")
 
+    import disk_sync
+    from config import DISK_SYNC_INTERVAL_MINUTES
+    if CATBOX_MODE and DISK_SYNC_INTERVAL_MINUTES > 0:
+        scheduler.add_job(
+            disk_sync.reconcile,
+            trigger="interval", minutes=DISK_SYNC_INTERVAL_MINUTES,
+            id="disk_sync", next_run_time=None,
+        )
+        log.info("Scheduled on-disk deletion check every %dm", DISK_SYNC_INTERVAL_MINUTES)
+
     if CATBOX_MODE and CATBOX_GC_INTERVAL_MINUTES > 0:
         scheduler.add_job(
             catbox.release_idle,

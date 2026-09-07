@@ -692,48 +692,7 @@ def test_reconcile_refuses_to_purge_when_most_mirrored_titles_vanished(mirrored,
     assert purged == [] and out["purged"] == 0
 
 
-def test_reconcile_purges_a_title_whose_strm_was_deleted_on_disk(mirrored, monkeypatch):
-    """Jellyfin deletes the file when it deletes an item, so a missing .strm
-    is a deletion made in Jellyfin (a person, or Maintainerr through it)
-    whose webhook never arrived."""
-    import arr_sync
-    rows, purged, radarr = mirrored
-    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [
-        {"imdb_id": "tt0113277", "tmdb_id": 949, "id": 1, "path": "/movies/Heat (1)"},
-        {"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/movies/Alien (1)"}])
-    rows["tt0078748"]["strm"].unlink()
-    out = arr_sync.reconcile()
-    assert purged == ["tt0078748"]
-    assert out["purged"] == 1
 
-
-def test_a_title_still_being_processed_is_not_purged_for_a_missing_file(mirrored, monkeypatch):
-    import arr_sync
-    rows, purged, radarr = mirrored
-    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [
-        {"imdb_id": "tt0113277", "tmdb_id": 949, "id": 1, "path": "/movies/Heat (1)"},
-        {"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/movies/Alien (1)"}])
-    rows["tt0078748"]["strm"].unlink()
-    with db._connect() as conn:
-        conn.execute("UPDATE requests SET updated_at = datetime('now') WHERE imdb_id = 'tt0078748'")
-        conn.commit()
-    arr_sync.reconcile()
-    assert purged == []
-
-
-def test_reconcile_refuses_to_purge_when_the_media_tree_is_gone(mirrored, monkeypatch, caplog):
-    """The RECOVERY.md incident: a wrong mount makes every file 'missing'."""
-    import arr_sync
-    import shutil
-    rows, purged, radarr = mirrored
-    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [
-        {"imdb_id": "tt0113277", "tmdb_id": 949, "id": 1, "path": "/x"},
-        {"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/y"}])
-    shutil.rmtree(rows["tt0113277"]["strm"].parents[2])
-    with caplog.at_level("WARNING"):
-        arr_sync.reconcile()
-    assert purged == []
-    assert any("refusing to purge" in r.message for r in caplog.records)
 
 
 def test_a_series_sonarr_lists_without_ids_is_confirmed_present_not_purged(mirrored, monkeypatch):
@@ -788,38 +747,6 @@ def test_a_title_mirrored_moments_ago_is_not_purged_for_missing_from_the_listing
     assert purged == [] and out["purged"] == 0
     assert not [c for c in fake.calls if c[0] == "POST"]
 
-
-def test_reconcile_refuses_to_purge_when_most_titles_lost_their_files(mirrored, monkeypatch, caplog):
-    import arr_sync
-    rows, purged, radarr = mirrored
-    import config
-    from pathlib import Path
-    media = Path(config.MEDIA_PATH)
-    listing = [{"imdb_id": "tt0113277", "tmdb_id": 949, "id": 1, "path": "/x"},
-               {"imdb_id": "tt0078748", "tmdb_id": 348, "id": 2, "path": "/y"}]
-    with db._connect() as conn:
-        for i in range(3):
-            imdb = f"tt000000{i}"
-            rid = db.insert_request(f"X{i}", imdb, "movie", tmdb_id=100 + i)
-            db.update_request(rid, "success")
-            strm = media / "movies" / f"X{i} (1)" / f"X{i} (1).strm"
-            strm.parent.mkdir(parents=True)
-            strm.write_text("x")
-            conn.execute(
-                "INSERT INTO virtual_items (token, info_hash, magnet, title, media_type, strm_path, imdb_id) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (f"tok-{imdb}", "h" * 40, "magnet:?x", f"X{i}", "movie", str(strm), imdb))
-            listing.append({"imdb_id": imdb, "tmdb_id": 100 + i, "id": 10 + i, "path": "/z"})
-            if i < 2:
-                strm.unlink()
-        conn.execute("UPDATE requests SET updated_at = datetime('now', '-1 day')")
-        conn.commit()
-    rows["tt0113277"]["strm"].unlink()
-    monkeypatch.setattr(radarr, "list_movies", lambda u, k: listing)
-    with caplog.at_level("WARNING"):
-        out = arr_sync.reconcile()
-    assert purged == [] and out["purged"] == 0, "3 of 5 titles lost files at once"
-    assert any("refusing to purge" in r.message for r in caplog.records)
 
 
 def test_an_unconfigured_arr_never_purges_its_kind(mirrored, monkeypatch):
@@ -890,6 +817,18 @@ def test_a_failed_path_update_rolls_the_folder_rename_back():
     reconcile sees a title whose files are 'gone'."""
     src = _src("cleanup.py")
     assert "renaming back" in src and "new_folder.rename(folder)" in src
+
+
+def test_a_kind_without_an_arr_is_counted_as_skipped_not_failed(enabled, monkeypatch):
+    """Radarr only: series rows are not this arr's business."""
+    import arr_sync
+    import radarr
+    enabled.update({"SONARR_URL": "", "SONARR_API_KEY": ""})
+    rid = db.insert_request("Severance", "tt11280740", "series", tmdb_id=95396)
+    db.update_request(rid, "success")
+    monkeypatch.setattr(radarr, "list_movies", lambda u, k: [])
+    out = arr_sync.reconcile()
+    assert out["failed"] == 0 and out["skipped"] == 1 and out["purged"] == 0
 
 
 def test_reconcile_interval_is_a_setting():
