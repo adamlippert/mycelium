@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.18.0",
+    "date": "2026-09-07",
+    "notes": [
+      "The setup wizard is driven by the settings schema: eleven steps declared next to the schema, every field through the same kit as Settings (labels, help, dropdowns, pickers, Test buttons), pre-filled on a re-run. The quality step edits the real filter rules; the retired QUALITY_PREFERENCE, ALLOW_4K, PREFER_HEVC and AUDIO_LANGUAGE_PREFERENCE names are gone",
+      "New GET /setup/schema and POST /setup/picker/<name>; POST /setup/test/<kind> also accepts JSON. The setup surface is open only while nothing can log in, or to an admin; a logged-in non-admin on a never-completed install can no longer reach it"
+    ]
+  },
+  {
     "version": "0.17.0",
     "date": "2026-09-07",
     "notes": [
