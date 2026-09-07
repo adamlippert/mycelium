@@ -314,10 +314,18 @@ export const api = {
   libraryHealth: () => http<LibraryHealth>('/ui/api/orphans'),
 
   // Arr import
-  arrTest: (kind: 'radarr' | 'sonarr') =>
-    http<{ ok: boolean; error?: string }>(`/ui/api/arr-import/test-${kind}`, {
+  // Both take the URL and key currently typed in Settings, so a person can
+  // test and browse before saving; blank fields fall back to saved values.
+  arrTest: (kind: 'radarr' | 'sonarr', conn: ArrConn = {}) =>
+    http<{ ok: boolean; version?: string | null; error?: string }>(`/ui/api/arr-import/test-${kind}`, {
       method: 'POST',
+      body: JSON.stringify(conn),
     }),
+  arrRootFolders: (kind: 'radarr' | 'sonarr', conn: ArrConn = {}) =>
+    http<{ ok: boolean; folders?: ArrRootFolder[]; error?: string }>(
+      `/ui/api/arr-import/root-folders-${kind}`,
+      { method: 'POST', body: JSON.stringify(conn) },
+    ),
   arrRun: (kind: 'radarr' | 'sonarr') =>
     http<{ ok: boolean }>(`/ui/api/arr-import/${kind}`, {
       method: 'POST',
@@ -647,6 +655,16 @@ export interface BlacklistItem {
   fail_count: number;
   last_error: string | null;
   last_attempt: string | null;
+}
+
+export interface ArrConn {
+  url?: string;
+  api_key?: string;
+}
+
+export interface ArrRootFolder {
+  path: string;
+  free_space: number | null;
 }
 
 export interface SettingItem {

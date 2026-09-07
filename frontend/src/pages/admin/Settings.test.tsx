@@ -22,6 +22,16 @@ function settingsFixture() {
         ],
       },
       {
+        id: 'arr_import',
+        title: 'Radarr / Sonarr',
+        items: [
+          { key: 'RADARR_URL', value: 'http://r.test', kind: 'str', options: null, overridden: false, hot_reload: true },
+          { key: 'RADARR_API_KEY', value: 'saved', kind: 'str', options: null, overridden: false, hot_reload: true },
+          { key: 'RADARR_ROOT_FOLDER', value: '', kind: 'str', options: null, overridden: false, hot_reload: true },
+          { key: 'SONARR_ROOT_FOLDER', value: '/tv', kind: 'str', options: null, overridden: false, hot_reload: true },
+        ],
+      },
+      {
         id: 'filter_rules',
         title: 'Filtering rules',
         items: [
@@ -39,6 +49,8 @@ const apiMocks = vi.hoisted(() => ({
   genres: vi.fn(),
   setGenreTabsConfig: vi.fn(),
   autoAddNow: vi.fn(),
+  arrTest: vi.fn(),
+  arrRootFolders: vi.fn(),
 }));
 
 vi.mock('../../api', async () => {
@@ -71,6 +83,52 @@ describe('Settings tab', () => {
     });
     expect(screen.getByText('Group Two')).toBeInTheDocument();
     expect(screen.queryByText('Filtering rules')).not.toBeInTheDocument();
+  });
+
+  it('the arr group has Test buttons that post the URL and key as typed', async () => {
+    apiMocks.arrTest.mockResolvedValue({ ok: true, version: '5.1.0.9999' });
+    renderIt();
+    await waitFor(() => expect(screen.getByText('Radarr / Sonarr')).toBeInTheDocument());
+    const url = screen.getByRole('textbox', { name: 'RADARR_URL' });
+    await userEvent.clear(url);
+    await userEvent.type(url, 'http://new.test');
+    await userEvent.click(screen.getByRole('button', { name: 'Test Radarr' }));
+    await waitFor(() => expect(apiMocks.arrTest).toHaveBeenCalledWith('radarr', { url: 'http://new.test', api_key: '' }));
+    expect(await screen.findByText('✓ Radarr 5.1.0.9999 reachable')).toBeInTheDocument();
+  });
+
+  it('a failed Test shows the reason', async () => {
+    apiMocks.arrTest.mockResolvedValue({ ok: false, error: 'Sonarr did not answer, or refused the API key' });
+    renderIt();
+    await waitFor(() => expect(screen.getByText('Radarr / Sonarr')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Test Sonarr' }));
+    expect(await screen.findByText('✗ Sonarr did not answer, or refused the API key')).toBeInTheDocument();
+  });
+
+  it('root folders are a dropdown filled from the arr, and the pick is what gets saved', async () => {
+    apiMocks.arrRootFolders.mockResolvedValue({
+      ok: true,
+      folders: [{ path: '/movies', free_space: 5 * 1024 ** 3 }, { path: '/mnt/more', free_space: null }],
+    });
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('', { status: 302 }));
+    renderIt();
+    await waitFor(() => expect(screen.getByText('Radarr / Sonarr')).toBeInTheDocument());
+
+    const radarrPick = screen.getByRole('combobox', { name: 'RADARR_ROOT_FOLDER' });
+    expect(radarrPick).toHaveValue('');
+    // The saved Sonarr value is offered even before its folders are loaded.
+    expect(screen.getByRole('combobox', { name: 'SONARR_ROOT_FOLDER' })).toHaveValue('/tv');
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Load folders' })[0]);
+    await waitFor(() => expect(apiMocks.arrRootFolders).toHaveBeenCalledWith('radarr', { url: 'http://r.test', api_key: '' }));
+    expect(await screen.findByRole('option', { name: '/movies (5 GB free)' })).toBeInTheDocument();
+    await userEvent.selectOptions(radarrPick, '/mnt/more');
+
+    await userEvent.click(screen.getByRole('button', { name: /save all/i }));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    const call = fetchSpy.mock.calls.find(([u]) => String(u).includes('/ui/settings'));
+    expect(String((call![1] as RequestInit).body)).toContain('setting_RADARR_ROOT_FOLDER=%2Fmnt%2Fmore');
+    fetchSpy.mockRestore();
   });
 
   it('renders a checkbox for the bool item and a combobox for the enum item', async () => {

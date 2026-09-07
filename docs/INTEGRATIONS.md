@@ -24,8 +24,10 @@ What to expect:
   the arr a download client.
 - Give the arrs **no download client**. Radarr logs a "no download client is
   available" health warning; ignore it.
-- Root folder: blank means the arr's first root folder. Set
-  `RADARR_ROOT_FOLDER` / `SONARR_ROOT_FOLDER` to pick another. The quality
+- Root folder: blank means the arr's first root folder. Settings > Radarr /
+  Sonarr has a Load folders button that fills a dropdown from the arr, and
+  a Test button per arr; both use the URL and key as typed. In `.env`, set
+  `RADARR_ROOT_FOLDER` / `SONARR_ROOT_FOLDER` to a path. The quality
   profile is the arr's first one; it does not matter, nothing is searched.
 - Mycelium sends `imdb:` lookups; for a movie it also falls back to a `tmdb:`
   lookup when one is known, and for a series Sonarr cannot find that way it

@@ -3397,30 +3397,56 @@ def ui_api_arr_import_sonarr():
     return jsonify(ok=True)
 
 
-@app.post("/ui/api/arr-import/test-radarr")
-def ui_api_arr_import_test_radarr():
+def _arr_conn(kind: str):
+    """(module, url, key) for 'radarr' or 'sonarr'. The request body wins
+    over the saved settings so the Settings page can test and browse with
+    what is typed before it is saved; a blank box means the saved value."""
+    import importlib
+    p = request.get_json(silent=True) or {}
+    prefix = kind.upper()
+    url = p.get("url") or _settings_mod.get(f"{prefix}_URL", getattr(cfg, f"{prefix}_URL"))
+    key = p.get("api_key") or _settings_mod.get(f"{prefix}_API_KEY", getattr(cfg, f"{prefix}_API_KEY"))
+    return importlib.import_module(kind), (url or "").strip(), (key or "").strip()
+
+
+def _arr_test(kind: str):
     if not auth.is_admin():
         return jsonify(error="admin required"), 403
-    p = request.get_json(silent=True) or {}
-    url = p.get("url") or _settings_mod.get("RADARR_URL", cfg.RADARR_URL)
-    key = p.get("api_key") or _settings_mod.get("RADARR_API_KEY", cfg.RADARR_API_KEY)
+    mod, url, key = _arr_conn(kind)
     if not url or not key:
         return jsonify(ok=False, error="url + api_key required"), 400
-    import radarr
-    return jsonify(ok=radarr.ping(url, key))
+    status = mod.system_status(url, key)
+    if status is None:
+        return jsonify(ok=False, error=f"{kind.capitalize()} did not answer, or refused the API key")
+    return jsonify(ok=True, version=status.get("version"))
+
+
+@app.post("/ui/api/arr-import/test-radarr")
+def ui_api_arr_import_test_radarr():
+    return _arr_test("radarr")
 
 
 @app.post("/ui/api/arr-import/test-sonarr")
 def ui_api_arr_import_test_sonarr():
+    return _arr_test("sonarr")
+
+
+@app.post("/ui/api/arr-import/root-folders-<kind>")
+def ui_api_arr_import_root_folders(kind: str):
+    """Root folders the arr offers, for the dropdown in Settings."""
     if not auth.is_admin():
         return jsonify(error="admin required"), 403
-    p = request.get_json(silent=True) or {}
-    url = p.get("url") or _settings_mod.get("SONARR_URL", cfg.SONARR_URL)
-    key = p.get("api_key") or _settings_mod.get("SONARR_API_KEY", cfg.SONARR_API_KEY)
+    if kind not in ("radarr", "sonarr"):
+        return jsonify(error="unknown arr"), 404
+    mod, url, key = _arr_conn(kind)
     if not url or not key:
         return jsonify(ok=False, error="url + api_key required"), 400
-    import sonarr
-    return jsonify(ok=sonarr.ping(url, key))
+    try:
+        folders = mod.root_folders(url, key)
+    except Exception as exc:
+        log.warning("%s root folders failed: %s", kind, exc)
+        return jsonify(ok=False, error=f"{kind.capitalize()} did not answer, or refused the API key")
+    return jsonify(ok=True, folders=folders)
 
 
 # ── Modern SPA (React + Vite) served at /app/* ───────────────────────────────

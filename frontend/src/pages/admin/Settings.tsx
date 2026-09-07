@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api';
-import type { GenreRule, SettingItem } from '../../api';
+import type { ArrConn, ArrRootFolder, GenreRule, SettingItem } from '../../api';
 import { Card } from '../../components/primitives/Card';
 import { GenreRuleRows } from '../../components/primitives/GenreRuleRows';
 import { Toggle } from '../../components/primitives/Toggle';
@@ -114,6 +114,114 @@ function ItemControl({
   );
 }
 
+type ArrKind = 'radarr' | 'sonarr';
+const ARR_LABEL: Record<ArrKind, string> = { radarr: 'Radarr', sonarr: 'Sonarr' };
+
+function fieldStr(v: FieldValue | undefined): string {
+  return typeof v === 'string' ? v : '';
+}
+
+/** The URL and key as currently typed. An untouched secret box is '' and the
+ * backend then falls back to the saved key, so testing works before saving. */
+function arrConn(kind: ArrKind, values: Record<string, FieldValue>): ArrConn {
+  const p = kind.toUpperCase();
+  return { url: fieldStr(values[`${p}_URL`]), api_key: fieldStr(values[`${p}_API_KEY`]) };
+}
+
+function ArrTestButton({ kind, values }: { kind: ArrKind; values: Record<string, FieldValue> }) {
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const mut = useMutation({
+    mutationFn: () => api.arrTest(kind, arrConn(kind, values)),
+    onSuccess: (r) =>
+      setMsg(
+        r.ok
+          ? { ok: true, text: `✓ ${ARR_LABEL[kind]} ${r.version || ''} reachable`.replace('  ', ' ') }
+          : { ok: false, text: `✗ ${r.error || 'failed'}` },
+      ),
+    onError: (e: Error) => setMsg({ ok: false, text: `✗ ${e.message}` }),
+  });
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => mut.mutate()}
+        disabled={mut.isPending}
+        className="rounded border border-border bg-card-raised px-3 py-1 text-xs font-semibold text-accent-light hover:bg-white/[0.06] disabled:opacity-50"
+      >
+        {mut.isPending ? 'Testing...' : `Test ${ARR_LABEL[kind]}`}
+      </button>
+      {msg && <span className={`text-xs ${msg.ok ? 'text-ok' : 'text-danger'}`}>{msg.text}</span>}
+    </div>
+  );
+}
+
+function formatFree(bytes: number | null): string {
+  if (bytes == null) return '';
+  const gb = bytes / 1024 ** 3;
+  return gb >= 1024 ? ` (${(gb / 1024).toFixed(1)} TB free)` : ` (${Math.round(gb)} GB free)`;
+}
+
+/** A dropdown for RADARR_ROOT_FOLDER / SONARR_ROOT_FOLDER filled from the
+ * arr itself, instead of a path typed blind. Blank keeps the default (the
+ * arr's first root folder), which is what arr_sync uses. */
+function RootFolderPicker({
+  kind,
+  value,
+  values,
+  onChange,
+}: {
+  kind: ArrKind;
+  value: string;
+  values: Record<string, FieldValue>;
+  onChange: (next: string) => void;
+}) {
+  const [folders, setFolders] = useState<ArrRootFolder[] | null>(null);
+  const [err, setErr] = useState('');
+  const mut = useMutation({
+    mutationFn: () => api.arrRootFolders(kind, arrConn(kind, values)),
+    onSuccess: (r) => {
+      if (r.ok && r.folders) {
+        setFolders(r.folders);
+        setErr(r.folders.length ? '' : `${ARR_LABEL[kind]} has no root folders yet`);
+      } else {
+        setErr(r.error || 'failed');
+      }
+    },
+    onError: (e: Error) => setErr(e.message),
+  });
+  const known = folders ?? [];
+  const options = value && !known.some((f) => f.path === value)
+    ? [{ path: value, free_space: null }, ...known]
+    : known;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        aria-label={`${kind.toUpperCase()}_ROOT_FOLDER`}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="max-w-xs rounded border border-border bg-bg px-2 py-1 text-xs"
+      >
+        <option value="">(first root folder in {ARR_LABEL[kind]})</option>
+        {options.map((f) => (
+          <option key={f.path} value={f.path}>
+            {f.path}
+            {formatFree(f.free_space)}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={() => mut.mutate()}
+        disabled={mut.isPending}
+        className="rounded border border-border bg-card-raised px-3 py-1 text-xs font-semibold text-accent-light hover:bg-white/[0.06] disabled:opacity-50"
+      >
+        {mut.isPending ? 'Loading...' : 'Load folders'}
+      </button>
+      {err && <span className="text-xs text-danger">✗ {err}</span>}
+    </div>
+  );
+}
+
 /** The `mode` group's card in ui.html: two radio tiles (Full / Lite) instead
  * of a normal key/value row, since LITE_MODE is the one setting that changes
  * which schedulers even start. */
@@ -176,14 +284,29 @@ function GroupCard({
               <code className="text-xs">{item.key}</code>
               <ItemBadges item={item} />
             </div>
-            <ItemControl
-              item={item}
-              value={values[item.key] ?? initialFieldValue(item)}
-              onChange={(next) => onChangeItem(item.key, next)}
-            />
+            {group.id === 'arr_import' && /^(RADARR|SONARR)_ROOT_FOLDER$/.test(item.key) ? (
+              <RootFolderPicker
+                kind={item.key.startsWith('RADARR') ? 'radarr' : 'sonarr'}
+                value={fieldStr(values[item.key] ?? initialFieldValue(item))}
+                values={values}
+                onChange={(next) => onChangeItem(item.key, next)}
+              />
+            ) : (
+              <ItemControl
+                item={item}
+                value={values[item.key] ?? initialFieldValue(item)}
+                onChange={(next) => onChangeItem(item.key, next)}
+              />
+            )}
           </div>
         ))}
       </div>
+      {group.id === 'arr_import' && (
+        <div className="mt-3 flex flex-wrap gap-4 border-t border-border pt-3">
+          <ArrTestButton kind="radarr" values={values} />
+          <ArrTestButton kind="sonarr" values={values} />
+        </div>
+      )}
     </Card>
   );
 }

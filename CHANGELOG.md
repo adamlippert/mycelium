@@ -2,6 +2,14 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Settings > Radarr / Sonarr: a Test button per arr that reports the arr's
+  version, and root-folder dropdowns filled from the arr with a Load folders
+  button. Both use the URL and key as typed, so you can check before saving.
+
 ## [0.14.2] - 2026-09-07
 
 ### Fixed
