@@ -2,7 +2,7 @@
 
 All notable changes to Mycelium are documented in this file.
 
-## [Unreleased]
+## [0.16.1] - 2026-09-07
 
 ### Changed
 

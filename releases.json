@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.16.1",
+    "date": "2026-09-07",
+    "notes": [
+      "The on-disk deletion check (a title whose .strm files are gone was deleted in Jellyfin) is its own hourly job, gated on CATBOX_MODE and DISK_SYNC_ENABLED instead of the Radarr/Sonarr mirror. Jellyfin-only setups without the webhook plugin now converge too; DISK_SYNC_INTERVAL_MINUTES (60) sets the cadence",
+      "The arr reconcile counts a title whose arr is not configured (single-arr setup) as skipped instead of failed"
+    ]
+  },
+  {
     "version": "0.16.0",
     "date": "2026-09-07",
     "notes": [
