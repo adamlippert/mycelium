@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.17.0",
+    "date": "2026-09-07",
+    "notes": [
+      "Settings rebuilt around a field schema: a section sidebar, a label and help line on every setting, real controls (toggles, dropdowns, searchable multi-select, an orderable sort order, number fields with units, password fields with reveal), a Simple/Advanced switch, dependent fields that hide until their toggle is on, and a search box",
+      "Every integration has a Test button that uses the values as typed; Radarr and Sonarr root folders and quality profiles are loaded from the arr with a Load button",
+      "New settings RADARR_QUALITY_PROFILE and SONARR_QUALITY_PROFILE (by name; blank keeps the first profile). ARR_SYNC_INTERVAL_MINUTES and DISK_SYNC_INTERVAL_MINUTES are editable in Settings (restart required)",
+      "OIDC settings are read through the Settings overlay (restart applies them); Save writes only the fields you changed",
+      "The setup wizard's connection tests and the old /ui/api/arr-import routes share the same testers; the arr-import routes remain as aliases for one release"
+    ]
+  },
+  {
     "version": "0.16.1",
     "date": "2026-09-07",
     "notes": [
