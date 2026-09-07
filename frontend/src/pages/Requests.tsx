@@ -76,7 +76,7 @@ export default function Requests() {
                   <td className="py-2 px-3 text-right">
                     <button
                       type="button"
-                      onClick={() => { if (confirm(`Forget the request "${r.title}"?\n\nThe files stay in your library.`)) deleteMut.mutate(r.id); }}
+                      onClick={() => { if (confirm(`Forget the request "${r.title}"?\n\nThe files stay in your library and the title stays in Jellyfin. To delete the title, use Remove from library instead.`)) deleteMut.mutate(r.id); }}
                       disabled={deleteMut.isPending}
                       className="px-2 py-1 rounded text-xs text-danger hover:bg-danger/10 disabled:opacity-50"
                       title="Forget the request. Keeps the files in your library."

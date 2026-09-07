@@ -160,7 +160,7 @@ function AllRequestsPanel() {
             type="button"
             title="Forget the request record. Keeps the files in your library."
             onClick={() => {
-              if (confirm(`Forget the request "${r.title}"?\n\nThe files stay in your library.`)) {
+              if (confirm(`Forget the request "${r.title}"?\n\nThe files stay in your library and the title stays in Jellyfin. To delete the title, use Remove from library instead.`)) {
                 deleteMut.mutate(r.id);
               }
             }}

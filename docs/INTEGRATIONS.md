@@ -72,8 +72,13 @@ the repair job may regenerate the file. Delete the series instead.
 
 After an add, an upgrade or a purge, Mycelium now tells Jellyfin exactly
 which files changed (`POST /Library/Media/Updated`) instead of asking for a
-full library scan. New titles appear within seconds and a large library is
-no longer rescanned on every request. The full scan is still used by the
+full library scan. A large library is no longer rescanned on every request.
+
+Expect about a minute, not seconds: Jellyfin waits for its library monitor
+delay (60 seconds by default) after the last reported change before it
+refreshes, so a title shows up, or disappears, roughly a minute after
+Mycelium reports it. A title that never appears means the path does not
+match, see `JELLYFIN_MEDIA_PATH` below. The full scan is still used by the
 cleanup job, which renames and merges folders, and as a fallback whenever
 the targeted call fails.
 
@@ -101,6 +106,12 @@ for every request that came in through the Seerr webhook:
 | No suitable stream (terminal) | request **Declined**; the person can re-request |
 | Released but nothing acceptable yet | left as **Processing**, Mycelium keeps searching |
 | Still nothing after `SEERR_DECLINE_WANTED_AFTER_DAYS` (default 30) | request **Declined** once; Mycelium keeps searching anyway |
+| Removed from library | media marked **Deleted** at once, so it can be requested again straight away; the request history is kept |
+
+"Removed from library" means the Remove from library button, the arr and
+Jellyfin delete webhooks, and anything else that runs the purge. The Delete
+button only forgets Mycelium's request record and leaves the files, so the
+title really is still in Jellyfin and Seerr is not told.
 
 The Seerr API key must belong to a user with **Manage Requests** (an admin
 key does). Titles added from Mycelium's own Discover, Trakt or MDBList have

@@ -1014,6 +1014,17 @@ def purge_title(imdb_id: str, row_id: int | None = None) -> dict:
         result["arr_removed"] = arr_sync.mirror_remove(imdb_id, media_type, tmdb_id)
     except Exception as exc:
         log.debug("Purge %s: arr_sync skipped: %s", imdb_id, exc)
+    # Not only via delete_request: a purge that found no request row
+    # (an imported title) must not leave a per-user row feeding the badge.
+    try:
+        result["user_requests"] = db.clear_user_requests(imdb_id)
+    except Exception as exc:
+        log.debug("Purge %s: user_requests cleanup skipped: %s", imdb_id, exc)
+    try:
+        import seerr_report
+        result["seerr_deleted"] = seerr_report.on_purged(imdb_id)
+    except Exception as exc:
+        log.debug("Purge %s: seerr_report skipped: %s", imdb_id, exc)
 
     log.info("Purged %s from library: %s", imdb_id, result)
     try:

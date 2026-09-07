@@ -68,6 +68,29 @@ def on_failed(imdb_id: str, reason: str) -> bool:
     return ok
 
 
+def on_purged(imdb_id: str) -> bool:
+    """The title was removed from the library: mark the Seerr media Deleted.
+
+    Seerr would otherwise keep showing it Available until its own
+    availability sync runs, hours later, and nobody could re-request it in
+    the meantime. The Deleted status keeps the request history and accepts
+    a new request at once (checked against Seerr 3.4.1). Not called by the
+    Delete button, which keeps the files: that title really is still there."""
+    if not _enabled():
+        return False
+    rid = _request_id(imdb_id)
+    if not rid:
+        return False
+    try:
+        ok = seerr.set_media_status(rid, "deleted")
+    except Exception as exc:
+        log.warning("seerr_report: could not mark %s deleted: %s", imdb_id, exc)
+        return False
+    if ok:
+        log.info("Seerr: request %s (%s) media marked deleted", rid, imdb_id)
+    return ok
+
+
 def report_stale_wanted() -> int:
     """Decline, once, every wanted movie older than the configured cutoff."""
     if not _enabled():

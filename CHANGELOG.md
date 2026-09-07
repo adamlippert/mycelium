@@ -2,6 +2,25 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- Remove from library now tells Seerr the title is gone (media marked
+  Deleted), so it can be requested again at once instead of after Seerr's
+  next availability sync.
+- Delete and Remove from library now also clear the per-user request rows,
+  which kept showing a stale Processing or Approved badge on the poster and
+  a greyed-out button in the detail view after the title was removed.
+- The Delete confirmation now says the title stays in Jellyfin and points at
+  Remove from library.
+- The first Jellyfin refresh after a host reboot was debounced away.
+
+### Changed
+
+- Documented Jellyfin's library monitor delay: a reported change takes about
+  a minute to show, by design.
+
 ## [0.14.0] - 2026-09-06
 
 ### Added

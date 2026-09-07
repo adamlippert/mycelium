@@ -1451,7 +1451,19 @@ def delete_request(row_id: int) -> bool:
     if imdb_id:
         clear_webhook_events(imdb_id)
         clear_retries(imdb_id)
+        clear_user_requests(imdb_id)
     return True
+
+
+def clear_user_requests(imdb_id: str) -> int:
+    """Drop every per-user request row for a title. Those rows feed the
+    poster badge and the detail-modal button (see _enrich_library_status),
+    so one left behind after a delete or purge shows a stale Processing or
+    Approved state for a title that is gone. Returns the rows removed."""
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM user_requests WHERE imdb_id=?", (imdb_id,))
+        conn.commit()
+        return cur.rowcount
 
 
 def clear_retries(imdb_id: str) -> int:
