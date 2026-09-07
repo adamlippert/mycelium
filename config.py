@@ -314,6 +314,13 @@ ARR_SYNC_ENABLED = _env("ARR_SYNC_ENABLED", "false").lower() == "true"
 RADARR_ROOT_FOLDER = _env("RADARR_ROOT_FOLDER", "")
 SONARR_ROOT_FOLDER = _env("SONARR_ROOT_FOLDER", "")
 
+# Level B: write a small MKV stub per .strm into a folder the arrs mount as
+# their root folder, so mirrored titles stop showing "Missing". Requires
+# ARR_SYNC_ENABLED and RADARR_ROOT_FOLDER / SONARR_ROOT_FOLDER pointing at
+# the arr's mount of <ARR_STUB_PATH>/movies and /series.
+ARR_STUBS_ENABLED = _env("ARR_STUBS_ENABLED", "false").lower() == "true"
+ARR_STUB_PATH = _env("ARR_STUB_PATH", "/arr-stubs")
+
 # ── Health-aware processing ───────────────────────────────────────────────────
 # Cache health status for this many seconds; skip services that recently failed.
 HEALTH_CACHE_SECONDS = _env_int("HEALTH_CACHE_SECONDS", 60)
