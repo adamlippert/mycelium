@@ -2,6 +2,22 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- The setup wizard is driven by the settings schema: its steps are declared
+  next to the schema, every field renders through the same kit as Settings
+  (labels, help, dropdowns, pickers, Test buttons), and a re-run pre-fills
+  the current values. The quality step edits the real filter rules
+  (`RESOLUTION_PREFERRED`, `RESOLUTION_EXCLUDED`, `ENCODE_PREFERRED`,
+  `LANGUAGE_PREFERRED`); the server-side translation of the retired
+  `QUALITY_PREFERENCE`, `ALLOW_4K`, `PREFER_HEVC` and
+  `AUDIO_LANGUAGE_PREFERENCE` names is gone.
+- New `GET /setup/schema` and `POST /setup/picker/<name>`; `POST
+  /setup/test/<kind>` also accepts a JSON body. All three share the setup
+  gate (open until setup completes, admin afterwards).
+
 ## [0.17.0] - 2026-09-07
 
 ### Changed

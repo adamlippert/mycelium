@@ -384,8 +384,8 @@
     <div class="alert success">
       <span class="alert-icon">&#10003;</span>
       <span>
-        <span class="lang-en"><strong style="color:var(--text)">No need to fill in API keys here.</strong> TorBox, TMDB, Jellyfin, quality preferences, Catbox, and all other settings are configured through the Mycelium setup wizard after first launch. The wizard has a Test button for each integration so you can verify everything works before saving.</span>
-        <span class="lang-nl"><strong style="color:var(--text)">No need to fill in API keys here.</strong> TorBox, TMDB, Jellyfin, quality preferences, Catbox, and all other settings are configured through the Mycelium setup wizard after first launch. The wizard has a Test button for each integration so you can verify everything works before saving.</span>
+        <span class="lang-en"><strong style="color:var(--text)">No need to fill in API keys here.</strong> TorBox, TMDB, Jellyfin, quality preferences, Catbox, and all other settings are configured through the Mycelium setup wizard after first launch. The wizard has a Test button for each integration so you can verify everything works before saving, and a re-run from Admin &#8594; Settings pre-fills what is configured today. Quality preferences edit the same rules as the Filter rules tab.</span>
+        <span class="lang-nl"><strong style="color:var(--text)">No need to fill in API keys here.</strong> TorBox, TMDB, Jellyfin, quality preferences, Catbox, and all other settings are configured through the Mycelium setup wizard after first launch. The wizard has a Test button for each integration so you can verify everything works before saving, and a re-run from Admin &#8594; Settings pre-fills what is configured today. Quality preferences edit the same rules as the Filter rules tab.</span>
       </span>
     </div>
     <div class="lang-en"><p>The included <code>.env</code> file has sensible defaults for everything else (ports, paths, intervals). You can adjust them later if needed.</p></div>
@@ -529,8 +529,14 @@
     <div class="steps">
       <div class="step">
         <div class="step-body">
-          <span class="lang-en"><strong>TorBox API key</strong>  -  Get your key from torbox.app &#8594; Settings &#8594; API. The wizard has a Test button to verify the connection.</span>
-          <span class="lang-nl"><strong>TorBox API key</strong>  -  Get your key from torbox.app &#8594; Settings &#8594; API. The wizard has a Test button to verify the connection.</span>
+          <span class="lang-en"><strong>Welcome</strong>  -  Pick Lite or full mode. Lite skips the Trakt, Subtitles, Zilean and Radarr / Sonarr steps below; everything can be changed later in Settings.</span>
+          <span class="lang-nl"><strong>Welcome</strong>  -  Pick Lite or full mode. Lite skips the Trakt, Subtitles, Zilean and Radarr / Sonarr steps below; everything can be changed later in Settings.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en"><strong>TorBox</strong>  -  Get your key from torbox.app &#8594; Settings &#8594; API. The wizard has a Test button to verify the connection.</span>
+          <span class="lang-nl"><strong>TorBox</strong>  -  Get your key from torbox.app &#8594; Settings &#8594; API. The wizard has a Test button to verify the connection.</span>
         </div>
       </div>
       <div class="step">
@@ -541,20 +547,50 @@
       </div>
       <div class="step">
         <div class="step-body">
-          <span class="lang-en"><strong>TMDB</strong>  -  Enter your TMDB Read Access Token (starts with <code>eyJ</code>). Required for Discover, posters, and metadata.</span>
-          <span class="lang-nl"><strong>TMDB</strong>  -  Enter your TMDB Read Access Token (starts with <code>eyJ</code>). Required for Discover, posters, and metadata.</span>
+          <span class="lang-en"><strong>Seerr and metadata</strong>  -  Optional Seerr URL and API key, plus your TMDB Read Access Token (starts with <code>eyJ</code>) for posters, runtimes and Discover.</span>
+          <span class="lang-nl"><strong>Seerr and metadata</strong>  -  Optional Seerr URL and API key, plus your TMDB Read Access Token (starts with <code>eyJ</code>) for posters, runtimes and Discover.</span>
         </div>
       </div>
       <div class="step">
         <div class="step-body">
-          <span class="lang-en"><strong>Quality &amp; language</strong>  -  Resolution preference (1080p, 4K), codec (HEVC, x264), audio language, and filtering rules.</span>
-          <span class="lang-nl"><strong>Quality &amp; language</strong>  -  Resolution preference (1080p, 4K), codec (HEVC, x264), audio language, and filtering rules.</span>
+          <span class="lang-en"><strong>Quality preferences</strong>  -  Preferred resolutions, resolutions to skip, preferred encodes and audio languages, the same rules as the Filter rules tab.</span>
+          <span class="lang-nl"><strong>Quality preferences</strong>  -  Preferred resolutions, resolutions to skip, preferred encodes and audio languages, the same rules as the Filter rules tab.</span>
         </div>
       </div>
       <div class="step">
         <div class="step-body">
-          <span class="lang-en"><strong>Catbox mode</strong>  -  Configures the streaming proxy URL. Torrents are only added to TorBox when you press play, and released after idle time.</span>
-          <span class="lang-nl"><strong>Catbox mode</strong>  -  Configures the streaming proxy URL. Torrents are only added to TorBox when you press play, and released after idle time.</span>
+          <span class="lang-en"><strong>Catbox</strong>  -  Configures the streaming proxy URL. Torrents are only added to TorBox when you press play, and released after idle time.</span>
+          <span class="lang-nl"><strong>Catbox</strong>  -  Configures the streaming proxy URL. Torrents are only added to TorBox when you press play, and released after idle time.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en"><strong>Notifications</strong>  -  Optional Discord webhook or Telegram bot for finished and failed requests.</span>
+          <span class="lang-nl"><strong>Notifications</strong>  -  Optional Discord webhook or Telegram bot for finished and failed requests.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en"><strong>Trakt</strong>  -  Optional; lets users connect their Trakt watchlist. Skipped in Lite mode.</span>
+          <span class="lang-nl"><strong>Trakt</strong>  -  Optional; lets users connect their Trakt watchlist. Skipped in Lite mode.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en"><strong>Subtitles</strong>  -  Optional OpenSubtitles API key and preferred languages. Skipped in Lite mode.</span>
+          <span class="lang-nl"><strong>Subtitles</strong>  -  Optional OpenSubtitles API key and preferred languages. Skipped in Lite mode.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en"><strong>Zilean</strong>  -  Optional DMM hash index searched next to Torrentio. Skipped in Lite mode.</span>
+          <span class="lang-nl"><strong>Zilean</strong>  -  Optional DMM hash index searched next to Torrentio. Skipped in Lite mode.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-body">
+          <span class="lang-en"><strong>Radarr / Sonarr</strong>  -  Optional library mirror so Seerr, Maintainerr and calendars see it; Load buttons fetch root folders and quality profiles from the arr. Skipped in Lite mode.</span>
+          <span class="lang-nl"><strong>Radarr / Sonarr</strong>  -  Optional library mirror so Seerr, Maintainerr and calendars see it; Load buttons fetch root folders and quality profiles from the arr. Skipped in Lite mode.</span>
         </div>
       </div>
     </div>

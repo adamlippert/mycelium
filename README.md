@@ -345,7 +345,7 @@ cd mycelium
 docker compose up -d
 ```
 
-Open **`http://<your-host>:8088`** - the setup wizard walks you through everything. Each step has a **Test** button. The first account you create becomes admin.
+Open **`http://<your-host>:8088`** - the setup wizard walks you through everything. The wizard shows the same fields as Settings, pre-filled on a re-run, with Test buttons for every service and Load buttons for Radarr and Sonarr folders and profiles. Lite mode skips the Trakt, subtitle, Zilean and arr steps. The first account you create becomes admin.
 
 **Optional add-ons** (not needed to get started):
 - [Zilean](https://github.com/iPromKnight/zilean) - self-hosted hash index, faster and private. Two modes: **external**
