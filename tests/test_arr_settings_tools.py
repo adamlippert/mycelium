@@ -85,24 +85,27 @@ def test_root_folder_route_is_admin_only_and_validates_the_kind():
     body = _route(r"/ui/api/arr-import/root-folders-<kind>")
     assert "auth.is_admin()" in body.splitlines()[0:4].__str__()
     assert '("radarr", "sonarr")' in body
-    assert "root_folders(url, key)" in body
+    # The route is now a thin alias over the service_tests registry rather
+    # than calling radarr.root_folders/sonarr.root_folders directly.
+    assert "service_tests" in body
 
 
 def test_root_folder_route_uses_the_form_values_before_the_saved_ones():
     """The Settings page sends what is typed in the URL and key boxes, so a
-    person can pick a folder before saving; blank falls back to saved."""
+    person can pick a folder before saving; blank falls back to saved. The
+    fallback now lives in service_tests._v(), not in this route."""
     body = _route(r"/ui/api/arr-import/root-folders-<kind>")
-    assert "_arr_conn(kind)" in body
-    helper = _src("app.py").split("def _arr_conn(", 1)[1].split("\ndef ", 1)[0]
-    assert 'p.get("url") or _settings_mod.get(' in helper
-    assert 'p.get("api_key") or _settings_mod.get(' in helper
+    assert "_arr_values(kind)" in body
+    assert "service_tests" in body
+    helper = _src("service_tests.py").split("def _v(", 1)[1].split("\ndef ", 1)[0]
+    assert "_settings.get(key" in helper
 
 
 def test_test_routes_report_the_arr_version():
+    """The routes are now thin aliases over service_tests.run(), which
+    already reports the arr's version and item count."""
     for kind in ("radarr", "sonarr"):
         body = _route(rf"/ui/api/arr-import/test-{kind}")
-        assert "_arr_test(" in body
-    src = _src("app.py")
-    helper = src.split("def _arr_test(", 1)[1].split("\n@app.", 1)[0]
-    assert "system_status(url, key)" in helper
-    assert "version=" in helper
+        assert f'service_tests.run("{kind}"' in body
+        assert "version=" in body
+    assert "def _arr_test" not in _src("app.py")

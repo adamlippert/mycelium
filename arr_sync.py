@@ -37,10 +37,10 @@ log = logging.getLogger(__name__)
 _TIMEOUT = 8
 _lock = threading.Lock()
 # (quality_profile_id, root_folder) per arr, fetched once so reconcile stays
-# cheap. Keyed on (kind, base url, root-folder setting) so a changed URL or a new
-# root-folder pick in Settings takes effect on the next call, not after a
-# restart.
-_defaults_cache: dict[tuple[str, str, str], tuple[int, str]] = {}
+# cheap. Keyed on (kind, base url, root-folder setting, quality-profile
+# setting) so a changed URL or a new root-folder/profile pick in Settings
+# takes effect on the next call, not after a restart.
+_defaults_cache: dict[tuple[str, str, str, str], tuple[int, str]] = {}
 
 
 class ArrError(RuntimeError):
@@ -75,22 +75,32 @@ def _request(method: str, url: str, api_key: str, *, params=None, json=None) -> 
 
 
 def _defaults(kind: str, base: str, key: str) -> tuple[int, str]:
-    """First quality profile, plus the root folder (setting, else the first)."""
+    """Quality profile (setting by name, else the first) and root folder
+    (setting, else the first)."""
     root_setting = (_settings.get(f"{kind.upper()}_ROOT_FOLDER", "") or "").strip()
-    cache_key = (kind, base, root_setting)
+    profile_setting = (_settings.get(f"{kind.upper()}_QUALITY_PROFILE", "") or "").strip()
+    cache_key = (kind, base, root_setting, profile_setting)
     with _lock:
         if cache_key in _defaults_cache:
             return _defaults_cache[cache_key]
     status, profiles = _request("GET", f"{base}/api/v3/qualityprofile", key)
     if status != 200 or not profiles:
         raise ArrError(f"{kind}: no quality profiles ({status})")
+    profile_id = int(profiles[0]["id"])
+    if profile_setting:
+        match = next((p for p in profiles if p.get("name") == profile_setting), None)
+        if match:
+            profile_id = int(match["id"])
+        else:
+            log.warning("Arr sync: %s has no quality profile named %r; using %r",
+                        kind, profile_setting, profiles[0].get("name"))
     root = root_setting
     if not root:
         status, roots = _request("GET", f"{base}/api/v3/rootfolder", key)
         if status != 200 or not roots:
             raise ArrError(f"{kind}: no root folders ({status})")
         root = roots[0]["path"]
-    out = (int(profiles[0]["id"]), root)
+    out = (profile_id, root)
     with _lock:
         _defaults_cache[cache_key] = out
     return out

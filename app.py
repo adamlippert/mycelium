@@ -295,7 +295,7 @@ def _start_scheduler() -> BackgroundScheduler:
         log.info("Scheduled strm cleanup every %dh", CLEANUP_INTERVAL_HOURS)
 
     import arr_sync
-    from config import ARR_SYNC_INTERVAL_MINUTES
+    ARR_SYNC_INTERVAL_MINUTES = int(_settings_mod.get("ARR_SYNC_INTERVAL_MINUTES", cfg.ARR_SYNC_INTERVAL_MINUTES) or 0)
     if ARR_SYNC_INTERVAL_MINUTES > 0:
         scheduler.add_job(
             arr_sync.reconcile,
@@ -316,7 +316,7 @@ def _start_scheduler() -> BackgroundScheduler:
         log.info("Scheduled automatic .strm repair every 6h")
 
     import disk_sync
-    from config import DISK_SYNC_INTERVAL_MINUTES
+    DISK_SYNC_INTERVAL_MINUTES = int(_settings_mod.get("DISK_SYNC_INTERVAL_MINUTES", cfg.DISK_SYNC_INTERVAL_MINUTES) or 0)
     if CATBOX_MODE and DISK_SYNC_INTERVAL_MINUTES > 0:
         scheduler.add_job(
             disk_sync.reconcile,
@@ -862,126 +862,13 @@ def setup_test(kind: str):
     import settings as _settings
     if _settings.get("SETUP_COMPLETE", False) and not auth.is_admin():
         return jsonify(error="unauthorized"), 401
-    f = request.form
-    try:
-        if kind == "torbox":
-            api_key = (f.get("TORBOX_API_KEY") or "").strip()
-            base = (f.get("TORBOX_BASE_URL") or cfg.TORBOX_BASE_URL).rstrip("/")
-            if not api_key:
-                return jsonify(ok=False, error="API key empty")
-            r = __import__("requests").get(
-                f"{base}/torrents/mylist",
-                headers={"Authorization": f"Bearer {api_key}"},
-                timeout=8,
-            )
-            return jsonify(ok=r.status_code < 400, detail=f"HTTP {r.status_code}")
-
-        if kind == "jellyfin":
-            url = (f.get("JELLYFIN_URL") or "").rstrip("/")
-            api_key = (f.get("JELLYFIN_API_KEY") or "").strip()
-            if not url:
-                return jsonify(ok=False, error="URL empty")
-            hdr = {"X-Emby-Token": api_key} if api_key else {}
-            r = __import__("requests").get(f"{url}/System/Info/Public", headers=hdr, timeout=6)
-            return jsonify(ok=r.status_code < 400,
-                            detail=(r.json() or {}).get("ServerName", "reachable") if r.headers.get("content-type", "").startswith("application/json") else "reachable")
-
-        if kind == "seerr":
-            url = (f.get("SEERR_URL") or "").rstrip("/")
-            api_key = (f.get("SEERR_API_KEY") or "").strip()
-            if not url:
-                return jsonify(ok=False, error="URL empty")
-            hdr = {"X-Api-Key": api_key} if api_key else {}
-            r = __import__("requests").get(f"{url}/api/v1/status", headers=hdr, timeout=6)
-            return jsonify(ok=r.status_code < 400, detail=f"HTTP {r.status_code}")
-
-        if kind == "discord":
-            url = (f.get("DISCORD_WEBHOOK_URL") or "").strip()
-            if not url:
-                return jsonify(ok=False, error="URL empty")
-            r = __import__("requests").post(
-                url, json={"content": "🧪 Mycelium setup test"}, timeout=6,
-            )
-            return jsonify(ok=r.status_code < 400, detail=f"HTTP {r.status_code}")
-
-        if kind == "telegram":
-            tok = (f.get("TELEGRAM_BOT_TOKEN") or "").strip()
-            chat = (f.get("TELEGRAM_CHAT_ID") or "").strip()
-            if not tok or not chat:
-                return jsonify(ok=False, error="token or chat empty")
-            r = __import__("requests").post(
-                f"https://api.telegram.org/bot{tok}/sendMessage",
-                json={"chat_id": chat, "text": "🧪 Mycelium setup test"},
-                timeout=6,
-            )
-            return jsonify(ok=r.status_code < 400, detail=f"HTTP {r.status_code}")
-
-        if kind == "trakt":
-            client_id = (f.get("TRAKT_CLIENT_ID") or "").strip()
-            if not client_id:
-                return jsonify(ok=False, error="Client ID empty")
-            r = __import__("requests").get(
-                "https://api.trakt.tv/movies/trending",
-                headers={"trakt-api-key": client_id, "trakt-api-version": "2"},
-                timeout=8,
-            )
-            return jsonify(ok=r.status_code < 400, detail=f"HTTP {r.status_code}")
-
-        if kind == "opensubtitles":
-            api_key = (f.get("OPENSUBTITLES_API_KEY") or "").strip()
-            if not api_key:
-                return jsonify(ok=False, error="API key empty")
-            r = __import__("requests").get(
-                "https://api.opensubtitles.com/api/v1/infos/user",
-                headers={"Api-Key": api_key, "Content-Type": "application/json"},
-                timeout=8,
-            )
-            if r.status_code == 200:
-                data = r.json().get("data", {})
-                remaining = data.get("remaining_downloads", "?")
-                return jsonify(ok=True, detail=f"OK  -  {remaining} downloads remaining today")
-            return jsonify(ok=r.status_code < 400, detail=f"HTTP {r.status_code}")
-
-        if kind == "zilean":
-            url = (f.get("ZILEAN_URL") or "").rstrip("/")
-            if not url:
-                return jsonify(ok=False, error="URL empty")
-            r = __import__("requests").get(f"{url}/healthcheck", timeout=6)
-            return jsonify(ok=r.status_code < 400, detail=f"HTTP {r.status_code}")
-
-        if kind == "radarr":
-            url = (f.get("RADARR_URL") or "").rstrip("/")
-            api_key = (f.get("RADARR_API_KEY") or "").strip()
-            if not url:
-                return jsonify(ok=False, error="URL empty")
-            r = __import__("requests").get(
-                f"{url}/api/v3/system/status",
-                headers={"X-Api-Key": api_key} if api_key else {},
-                timeout=6,
-            )
-            if r.status_code < 400:
-                version = r.json().get("version", "")
-                return jsonify(ok=True, detail=f"Radarr {version}")
-            return jsonify(ok=False, detail=f"HTTP {r.status_code}")
-
-        if kind == "sonarr":
-            url = (f.get("SONARR_URL") or "").rstrip("/")
-            api_key = (f.get("SONARR_API_KEY") or "").strip()
-            if not url:
-                return jsonify(ok=False, error="URL empty")
-            r = __import__("requests").get(
-                f"{url}/api/v3/system/status",
-                headers={"X-Api-Key": api_key} if api_key else {},
-                timeout=6,
-            )
-            if r.status_code < 400:
-                version = r.json().get("version", "")
-                return jsonify(ok=True, detail=f"Sonarr {version}")
-            return jsonify(ok=False, detail=f"HTTP {r.status_code}")
-
-        return jsonify(ok=False, error="unknown test"), 400
-    except Exception as exc:
-        return jsonify(ok=False, error=str(exc)[:120])
+    import service_tests
+    if kind not in service_tests.TESTS:
+        return jsonify(ok=False, error="unknown integration"), 404
+    r = service_tests.run(kind, dict(request.form))
+    if r["ok"]:
+        return jsonify(ok=True, detail=r["message"])
+    return jsonify(ok=False, error=r["message"])
 
 
 @app.post("/ui/sync-movies")
@@ -3442,44 +3329,72 @@ def _arr_conn(kind: str):
     return importlib.import_module(kind), (url or "").strip(), (key or "").strip()
 
 
-def _arr_test(kind: str):
-    if not auth.is_admin():
-        return jsonify(error="admin required"), 403
-    mod, url, key = _arr_conn(kind)
-    if not url or not key:
-        return jsonify(ok=False, error="url + api_key required"), 400
-    status = mod.system_status(url, key)
-    if status is None:
-        return jsonify(ok=False, error=f"{kind.capitalize()} did not answer, or refused the API key")
-    return jsonify(ok=True, version=status.get("version"))
+def _arr_values(kind: str) -> dict:
+    """The old arr-import body {url, api_key} as schema values."""
+    p = request.get_json(silent=True) or {}
+    prefix = kind.upper()
+    return {f"{prefix}_URL": p.get("url") or "", f"{prefix}_API_KEY": p.get("api_key") or ""}
 
 
 @app.post("/ui/api/arr-import/test-radarr")
 def ui_api_arr_import_test_radarr():
-    return _arr_test("radarr")
+    """Alias kept for one release; the Settings page uses /ui/api/settings/test/radarr."""
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import service_tests
+    r = service_tests.run("radarr", _arr_values("radarr"))
+    return jsonify(ok=r["ok"], version=r["message"] if r["ok"] else None, error=None if r["ok"] else r["message"])
 
 
 @app.post("/ui/api/arr-import/test-sonarr")
 def ui_api_arr_import_test_sonarr():
-    return _arr_test("sonarr")
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import service_tests
+    r = service_tests.run("sonarr", _arr_values("sonarr"))
+    return jsonify(ok=r["ok"], version=r["message"] if r["ok"] else None, error=None if r["ok"] else r["message"])
 
 
 @app.post("/ui/api/arr-import/root-folders-<kind>")
 def ui_api_arr_import_root_folders(kind: str):
-    """Root folders the arr offers, for the dropdown in Settings."""
+    """Alias kept for one release; the Settings page uses /ui/api/settings/picker/<kind>_root_folders."""
     if not auth.is_admin():
         return jsonify(error="admin required"), 403
     if kind not in ("radarr", "sonarr"):
         return jsonify(error="unknown arr"), 404
-    mod, url, key = _arr_conn(kind)
-    if not url or not key:
-        return jsonify(ok=False, error="url + api_key required"), 400
-    try:
-        folders = mod.root_folders(url, key)
-    except Exception as exc:
-        log.warning("%s root folders failed: %s", kind, exc)
-        return jsonify(ok=False, error=f"{kind.capitalize()} did not answer, or refused the API key")
-    return jsonify(ok=True, folders=folders)
+    import service_tests
+    r = service_tests.pick(f"{kind}_root_folders", _arr_values(kind))
+    if not r["ok"]:
+        return jsonify(ok=False, error=r["error"])
+    return jsonify(ok=True, folders=[{"path": o["value"], "free_space": None} for o in r["options"]])
+
+
+@app.post("/ui/api/settings/test/<service>")
+@limiter.limit("30 per minute")
+def ui_api_settings_test(service: str):
+    """Test one integration with the values as typed on the Settings page.
+    Body: {"values": {KEY: value}}. Blank values fall back to saved ones."""
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import service_tests
+    if service not in service_tests.TESTS:
+        return jsonify(ok=False, message="unknown service"), 404
+    p = request.get_json(silent=True) or {}
+    return jsonify(**service_tests.run(service, p.get("values") or {}))
+
+
+@app.post("/ui/api/settings/picker/<name>")
+@limiter.limit("30 per minute")
+def ui_api_settings_picker(name: str):
+    """Options for a field whose values come from a service, for example
+    Radarr's root folders. Body: {"values": {KEY: value}}."""
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import service_tests
+    if name not in service_tests.PICKERS:
+        return jsonify(ok=False, error="unknown picker"), 404
+    p = request.get_json(silent=True) or {}
+    return jsonify(**service_tests.pick(name, p.get("values") or {}))
 
 
 # ── Modern SPA (React + Vite) served at /app/* ───────────────────────────────

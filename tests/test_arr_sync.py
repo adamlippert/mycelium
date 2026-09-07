@@ -281,6 +281,30 @@ def test_sonarr_list_series_exposes_id_and_path(monkeypatch):
     assert out[0]["path"] == "/tv/Severance"
 
 
+def test_a_quality_profile_setting_is_matched_by_name(enabled, monkeypatch):
+    import arr_sync
+    enabled["RADARR_QUALITY_PROFILE"] = "Ultra-HD"
+    fake = FakeArr({
+        ("GET", "/qualityprofile"): (200, [{"id": 1, "name": "HD-1080p"}, {"id": 6, "name": "Ultra-HD"}]),
+        ("GET", "/rootfolder"): (200, [{"path": "/movies"}]),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    assert arr_sync._defaults("radarr", "http://radarr.test", "k") == (6, "/movies")
+
+
+def test_an_unknown_profile_name_falls_back_to_the_first_with_a_warning(enabled, monkeypatch, caplog):
+    import arr_sync
+    enabled["RADARR_QUALITY_PROFILE"] = "Gone"
+    fake = FakeArr({
+        ("GET", "/qualityprofile"): (200, [{"id": 1, "name": "HD-1080p"}]),
+        ("GET", "/rootfolder"): (200, [{"path": "/movies"}]),
+    })
+    monkeypatch.setattr(arr_sync, "_request", fake)
+    with caplog.at_level("WARNING"):
+        assert arr_sync._defaults("radarr", "http://radarr.test", "k") == (1, "/movies")
+    assert any("Gone" in r.message for r in caplog.records)
+
+
 # -- wiring ------------------------------------------------------------------
 
 def test_processor_mirrors_on_success():
