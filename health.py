@@ -89,4 +89,10 @@ def check_all() -> list[dict]:
             f"{seerr_url.rstrip('/')}/api/v1/status",
             headers={"X-Api-Key": seerr_key} if seerr_key else {},
         ))
+    import arr_stubs
+    if arr_stubs.is_enabled():
+        ok, note = arr_stubs.root_status()
+        services.append({"name": "Arr stubs", "status": "ok" if ok else "down", "note": note})
+    else:
+        services.append({"name": "Arr stubs", "status": "disabled"})
     return services

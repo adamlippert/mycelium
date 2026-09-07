@@ -143,6 +143,11 @@ def run_auto_upgrade() -> int:
             db.log_activity("upgraded", row["title"],
                             f"{row.get('quality')} → {better.quality}", True)
             strm_generator._cache_cdn_url(better.info_hash, item, row["title"])
+            try:
+                import arr_sync
+                arr_sync.mirror_add(row["imdb_id"], "movie", row.get("tmdb_id"), row["title"])
+            except Exception as exc:
+                log.debug("arr_sync skipped: %s", exc)
             upgraded += 1
         except Exception as exc:
             log.warning("Upgrade failed for %s: %s", row["title"], exc)
@@ -217,6 +222,11 @@ def run_pack_consolidation() -> int:
                     pass
             db.log_activity("consolidated", f"{title} S{season:02d}",
                             f"{len(strms)} episodes → 1 pack ({pack.quality})", True)
+            try:
+                import arr_sync
+                arr_sync.mirror_add(imdb_id, "series", None, title)
+            except Exception as exc:
+                log.debug("arr_sync skipped: %s", exc)
             consolidated += 1
         except Exception as exc:
             log.warning("Pack consolidation failed for %s S%02d: %s", title, season, exc)

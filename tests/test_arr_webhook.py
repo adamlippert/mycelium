@@ -79,7 +79,8 @@ def test_jellyfin_item_deleted_parses_movies_and_series():
 
 @pytest.mark.parametrize("payload", [
     {"eventType": "Test", "movie": {"imdbId": "tt0113277"}},
-    {"eventType": "MovieFileDelete", "movie": {"imdbId": "tt0113277"}, "deleteReason": "manual"},
+    {"eventType": "MovieFileDelete", "movie": {"imdbId": "tt0113277"}, "deleteReason": "upgrade"},
+    {"eventType": "MovieFileDelete", "movie": {"imdbId": "tt0113277"}, "deleteReason": "missingFromDisk"},
     {"eventType": "EpisodeFileDelete", "series": {"imdbId": "tt11280740"}},
     {"eventType": "Grab", "movie": {"imdbId": "tt0113277"}},
     {"eventType": "ItemDeleted", "itemType": "Episode", "imdb": "tt11280740"},
@@ -89,6 +90,24 @@ def test_jellyfin_item_deleted_parses_movies_and_series():
 def test_everything_else_is_ignored(payload):
     import arr_webhook
     assert arr_webhook.parse(payload) is None
+
+
+# -- Level B: a manual file delete in the arr is a title delete ----------------
+
+def test_manual_movie_file_delete_purges():
+    """With stubs, Radarr holds a file per title. A person deleting that file
+    (or Maintainerr with "delete files") means the title should go."""
+    import arr_webhook
+    ev = arr_webhook.parse({"eventType": "MovieFileDelete", "deleteReason": "manual",
+                            "movie": {"imdbId": "tt0113277", "tmdbId": 949},
+                            "movieFile": {"relativePath": "Heat (1995) - WEBDL-1080p.mkv"}})
+    assert (ev.event, ev.source, ev.media_type, ev.imdb_id) == ("MovieFileDelete", "radarr", "movie", "tt0113277")
+
+
+def test_episode_file_delete_is_still_ignored():
+    import arr_webhook
+    assert arr_webhook.parse({"eventType": "EpisodeFileDelete", "deleteReason": "manual",
+                              "series": {"imdbId": "tt11280740"}}) is None
 
 
 def test_a_delete_without_any_id_is_an_error():

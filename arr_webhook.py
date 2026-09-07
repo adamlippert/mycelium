@@ -1,9 +1,12 @@
 """Turn delete notifications from Radarr, Sonarr and the Jellyfin webhook
 plugin into one shape the /webhook/arr route can act on.
 
-Level A only acts on whole-title deletions. File-level events
-(MovieFileDelete, EpisodeFileDelete) are accepted and ignored: Mycelium
-titles have no files in the arrs until the Level B stub tree exists.
+Level A only acts on whole-title deletions, plus one file-level event: a
+manual MovieFileDelete, since the Level B stub tree gives Radarr a real file
+per title, so a person (or Maintainerr with "delete files") removing it
+means the title should go. Every other file-level event (EpisodeFileDelete,
+and MovieFileDelete for "upgrade" or "missingFromDisk") is accepted and
+ignored.
 """
 import logging
 import re
@@ -60,6 +63,17 @@ def parse(payload: dict) -> DeleteEvent | None:
         s = payload.get("series") or {}
         return _finish(DeleteEvent(_clean_imdb(s.get("imdbId")), _clean_int(s.get("tmdbId")),
                                    _clean_int(s.get("tvdbId")), "series", "sonarr", event))
+    if event == "MovieFileDelete":
+        # With the stub tree, Radarr holds a file per title. A person (or
+        # Maintainerr with "delete files") removing it means the title goes;
+        # "upgrade" cannot happen (no download client) and "missingFromDisk"
+        # is Radarr noticing our own rewrite.
+        if str(payload.get("deleteReason") or "").lower() != "manual":
+            log.info("Arr webhook: ignoring MovieFileDelete (%s)", payload.get("deleteReason") or "?")
+            return None
+        m = payload.get("movie") or {}
+        return _finish(DeleteEvent(_clean_imdb(m.get("imdbId")), _clean_int(m.get("tmdbId")),
+                                   None, "movie", "radarr", event))
     if event == "ItemDeleted":
         item_type = str(payload.get("itemType") or "")
         if item_type not in ("Movie", "Series"):

@@ -308,3 +308,26 @@ def test_settings_are_registered():
     assert '"ARR_STUBS_ENABLED"' in hot and '"ARR_STUB_PATH"' in hot
     env = _src(".env.example")
     assert "\nARR_STUBS_ENABLED=" in env and "\nARR_STUB_PATH=" in env
+
+
+# -- hooks and health -------------------------------------------------------------
+
+def test_upgrades_refresh_the_stubs():
+    src = _src("upgrader.py")
+    auto = src.split("def run_auto_upgrade(", 1)[1].split("\ndef ", 1)[0]
+    assert 'arr_sync.mirror_add(row["imdb_id"], "movie", row.get("tmdb_id"), row["title"])' in auto
+    pack = src.split("def run_pack_consolidation(", 1)[1].split("\ndef ", 1)[0]
+    assert "arr_sync.mirror_add(" in pack
+
+
+def test_health_reports_the_stub_mount(stubs_env, monkeypatch):
+    import health
+    monkeypatch.setattr(health, "_ping", lambda name, *a, **k: {"name": name, "status": "ok"})
+    row = next(r for r in health.check_all() if r["name"] == "Arr stubs")
+    assert row["status"] == "ok"
+    stubs_env[0]["ARR_STUB_PATH"] = str(stubs_env[2] / "gone")
+    row = next(r for r in health.check_all() if r["name"] == "Arr stubs")
+    assert row["status"] == "down" and "not mounted" in row["note"]
+    stubs_env[0]["ARR_STUBS_ENABLED"] = False
+    row = next(r for r in health.check_all() if r["name"] == "Arr stubs")
+    assert row["status"] == "disabled"
