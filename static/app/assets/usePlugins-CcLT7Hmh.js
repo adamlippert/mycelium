@@ -1,0 +1,1 @@
+import{g as u}from"./vendor-BBVDC9IL.js";function r(){const{data:e}=u({queryKey:["plugins"],queryFn:()=>fetch("/ui/api/plugins").then(n=>{if(!n.ok)throw new Error(`${n.status}`);return n.json()}),staleTime:1/0});return{plugins:(e==null?void 0:e.plugins)??[],isLoaded:n=>(e==null?void 0:e.plugins.some(s=>s.name===n))??!1}}export{r as u};

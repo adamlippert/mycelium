@@ -11,7 +11,7 @@ export default function StepDone() {
         {webhookUrl}
       </div>
       <p className="text-[13px] leading-relaxed text-muted">
-        Anything you skipped can be added anytime under <b>Settings &rarr; Connections</b>.
+        Anything you skipped can be added anytime under <b>the Settings tab</b>.
       </p>
     </div>
   );

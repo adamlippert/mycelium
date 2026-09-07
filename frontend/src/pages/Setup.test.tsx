@@ -1,7 +1,38 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { SettingsField, SetupSchema } from '../api';
 import Setup from './Setup';
+
+const apiMocks = vi.hoisted(() => ({ setupSchema: vi.fn(), setupTest: vi.fn(), setupPicker: vi.fn(), createUser: vi.fn() }));
+vi.mock('../api', async () => {
+  const actual = await vi.importActual<typeof import('../api')>('../api');
+  return { ...actual, api: { ...actual.api, ...apiMocks } };
+});
+
+const f = (over: Partial<SettingsField>): SettingsField => ({
+  key: 'K', label: 'Key', help: 'help', kind: 'str', options: null, placeholder: null, unit: null,
+  min: null, max: null, advanced: false, depends_on: null, test: null, picker: null, component: null,
+  readonly: false, required: false, value: '', overridden: false, hot_reload: true, ...over,
+});
+
+function schema(over: Partial<SetupSchema> = {}): SetupSchema {
+  return {
+    steps: [
+      { id: 'welcome', title: 'Welcome', intro: 'Pick how this runs.', keys: ['LITE_MODE'], lite: true },
+      { id: 'torbox', title: 'TorBox', intro: 'The one required key.', keys: ['TORBOX_API_KEY'], lite: true },
+      { id: 'zilean', title: 'Zilean', intro: 'Optional index.', keys: ['ZILEAN_ENABLED', 'ZILEAN_URL'], lite: false },
+    ],
+    fields: [
+      f({ key: 'LITE_MODE', label: 'Lite mode', kind: 'bool', value: false, hot_reload: false }),
+      f({ key: 'TORBOX_API_KEY', label: 'TorBox API key', kind: 'secret', required: true, value: false, test: 'torbox' }),
+      f({ key: 'ZILEAN_ENABLED', label: 'Use Zilean', kind: 'bool', value: false }),
+      f({ key: 'ZILEAN_URL', label: 'Zilean URL', kind: 'url', depends_on: 'ZILEAN_ENABLED', test: 'zilean', value: '' }),
+    ],
+    needs_first_admin: false,
+    ...over,
+  };
+}
 
 function setCsrfMeta(value: string) {
   document.head.querySelectorAll('meta[name="csrf-token"]').forEach((m) => m.remove());
@@ -11,121 +42,107 @@ function setCsrfMeta(value: string) {
   document.head.appendChild(meta);
 }
 
-beforeEach(() => {
-  setCsrfMeta('test-csrf-token');
-});
+const next = () => userEvent.click(screen.getByRole('button', { name: /continue|finish/i }));
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  setCsrfMeta('test-csrf-token');
+  apiMocks.setupSchema.mockResolvedValue(schema());
+  vi.spyOn(window, 'alert').mockImplementation(() => {});
+});
 afterEach(() => {
   document.head.querySelectorAll('meta[name="csrf-token"]').forEach((m) => m.remove());
   vi.restoreAllMocks();
 });
 
 describe('Setup', () => {
-  it('renders the Welcome step', () => {
+  it('renders the steps from the schema, first step first, with the rail', async () => {
     render(<Setup />);
-    expect(screen.getByRole('heading', { name: /welcome/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Welcome' })).toBeInTheDocument();
+    expect(screen.getByText('Pick how this runs.')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Lite mode' })).toBeInTheDocument();
+    expect(screen.getAllByRole('listitem')).toHaveLength(3);
   });
 
-  it('advances to the TorBox step (setup.html\'s second section) on Continue', async () => {
+  it('Lite mode hides the non-lite steps and the rail shrinks', async () => {
     render(<Setup />);
-    await userEvent.click(screen.getByRole('button', { name: /continue/i }));
-    expect(screen.getByRole('heading', { name: /^torbox$/i })).toBeInTheDocument();
-  });
-
-  it('shows ten steps in the step rail', () => {
-    render(<Setup />);
-    expect(screen.getAllByRole('listitem')).toHaveLength(10);
-  });
-
-  it('a Test button posts FormData to /setup/test/torbox and renders the mocked ok detail', async () => {
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ ok: true, detail: 'HTTP 200' }), { status: 200 }),
-    );
-
-    render(<Setup />);
-    await userEvent.click(screen.getByRole('button', { name: /continue/i }));
-    await userEvent.type(screen.getByLabelText(/torbox api key/i), 'tb-secret');
-    await userEvent.click(screen.getByRole('button', { name: /test connection/i }));
-
-    expect(await screen.findByText(/HTTP 200/)).toBeInTheDocument();
-
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchSpy.mock.calls[0];
-    expect(url).toBe('/setup/test/torbox');
-    expect((init as RequestInit).method).toBe('POST');
-    expect((init as RequestInit).headers).toMatchObject({ 'X-CSRFToken': 'test-csrf-token' });
-    const body = (init as RequestInit).body as FormData;
-    expect(body).toBeInstanceOf(FormData);
-    expect(body.get('TORBOX_API_KEY')).toBe('tb-secret');
-  });
-});
-
-function setMeta(name: string, value: string) {
-  document.head.querySelectorAll(`meta[name="${name}"]`).forEach((m) => m.remove());
-  const meta = document.createElement('meta');
-  meta.setAttribute('name', name);
-  meta.setAttribute('content', value);
-  document.head.appendChild(meta);
-}
-
-/** Walk the wizard from Welcome to its final pane. Step 1 refuses to advance
- * without a TorBox key, so fill that in on the way past. */
-async function advanceToEnd() {
-  const next = () => userEvent.click(screen.getByRole('button', { name: /continue/i }));
-  await next(); // Welcome -> TorBox
-  await userEvent.type(screen.getByLabelText(/torbox api key/i), 'tb-test-key');
-  for (let i = 0; i < 10; i += 1) await next(); // through the content steps
-}
-
-describe('Setup first-admin step', () => {
-  beforeEach(() => {
-    // jsdom has no window.alert, and the wizard uses it for validation.
-    vi.spyOn(window, 'alert').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    document.head.querySelectorAll('meta[name="needs-first-admin"]').forEach((m) => m.remove());
-  });
-
-  it('is absent when the install already has a way in', async () => {
-    setMeta('needs-first-admin', 'false');
-    render(<Setup />);
-
-    await advanceToEnd();
-
-    expect(screen.getByRole('heading', { name: /all set/i })).toBeInTheDocument();
-    expect(screen.queryByLabelText(/^username$/i)).not.toBeInTheDocument();
-  });
-
-  it('collects an admin account before Done when nothing can log in', async () => {
-    setMeta('needs-first-admin', 'true');
-    render(<Setup />);
-
-    await advanceToEnd();
-
-    expect(
-      screen.getByRole('heading', { name: /create your admin account/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText(/^username$/i)).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: /continue/i }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Lite mode' }));
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    await next();
+    await userEvent.type(screen.getByLabelText('TorBox API key'), 'tb');
+    await next();
     expect(screen.getByRole('heading', { name: /all set/i })).toBeInTheDocument();
   });
 
-  it('refuses to finish with mismatched passwords', async () => {
-    setMeta('needs-first-admin', 'true');
-    const alert = window.alert as unknown as ReturnType<typeof vi.fn>;
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  it('Continue is disabled while a required field is blank, unless it is already set', async () => {
     render(<Setup />);
+    await next();
+    expect(await screen.findByRole('heading', { name: 'TorBox' })).toBeInTheDocument();
+    const btn = screen.getByRole('button', { name: /continue/i });
+    expect(btn).toBeDisabled();
+    await userEvent.type(screen.getByLabelText('TorBox API key'), 'tb');
+    expect(btn).toBeEnabled();
+  });
 
-    await advanceToEnd();
+  it('a required secret that is already set does not block', async () => {
+    apiMocks.setupSchema.mockResolvedValue(schema({
+      fields: schema().fields.map((x) => (x.key === 'TORBOX_API_KEY' ? { ...x, value: true } : x)),
+    }));
+    render(<Setup />);
+    await next();
+    expect(await screen.findByRole('heading', { name: 'TorBox' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled();
+  });
+
+  it('a dependent field appears when its toggle flips and Test posts the typed values through the setup API', async () => {
+    apiMocks.setupTest.mockResolvedValue({ ok: true, message: 'Zilean answered HTTP 200' });
+    render(<Setup />);
+    await next();
+    await userEvent.type(await screen.findByLabelText('TorBox API key'), 'tb');
+    await next();
+    expect(await screen.findByRole('heading', { name: 'Zilean' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Zilean URL')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Use Zilean' }));
+    await userEvent.type(screen.getByLabelText('Zilean URL'), 'http://z');
+    await userEvent.click(screen.getByRole('button', { name: 'Test Zilean' }));
+    await waitFor(() => expect(apiMocks.setupTest).toHaveBeenCalledWith('zilean', { ZILEAN_URL: 'http://z' }));
+    expect(await screen.findByText('Zilean answered HTTP 200')).toBeInTheDocument();
+  });
+
+  it('finishing posts only the changed keys, unprefixed, as form fields', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    render(<Setup />);
+    await next();
+    await userEvent.type(await screen.findByLabelText('TorBox API key'), 'tb');
+    await next();
+    await next();
+    expect(await screen.findByRole('heading', { name: /all set/i })).toBeInTheDocument();
+    await next();
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith('/setup/save', expect.anything()));
+    const init = fetchSpy.mock.calls.find((c) => c[0] === '/setup/save')![1] as RequestInit;
+    const body = init.body as FormData;
+    expect(body.get('TORBOX_API_KEY')).toBe('tb');
+    expect(body.has('LITE_MODE')).toBe(false);
+    expect(body.has('ZILEAN_ENABLED')).toBe(false);
+    expect(init.headers).toMatchObject({ 'X-CSRFToken': 'test-csrf-token' });
+  });
+
+  it('collects an admin account before Done when the schema says so, and refuses mismatched passwords', async () => {
+    apiMocks.setupSchema.mockResolvedValue(schema({ needs_first_admin: true }));
+    const fetchSpy = vi.spyOn(global, 'fetch');
+    render(<Setup />);
+    await next();
+    await userEvent.type(await screen.findByLabelText('TorBox API key'), 'tb');
+    await next();
+    await next();
+    expect(await screen.findByRole('heading', { name: /create your admin account/i })).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText(/^username$/i), 'adam');
     await userEvent.type(screen.getByLabelText(/^password$/i), 'hunter2');
     await userEvent.type(screen.getByLabelText(/confirm password/i), 'hunter3');
-    await userEvent.click(screen.getByRole('button', { name: /continue/i }));
-    await userEvent.click(screen.getByRole('button', { name: /finish|go to dashboard|continue/i }));
-
-    expect(alert).toHaveBeenCalledWith(expect.stringMatching(/do not match/i));
+    await next();
+    expect(await screen.findByRole('heading', { name: /all set/i })).toBeInTheDocument();
+    await next();
+    expect(window.alert).toHaveBeenCalledWith(expect.stringMatching(/do not match/i));
     expect(fetchSpy).not.toHaveBeenCalledWith('/setup/save', expect.anything());
   });
 });
