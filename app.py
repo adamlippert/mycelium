@@ -823,7 +823,13 @@ def setup_schema():
 @limiter.limit("30 per minute")
 def setup_picker(name: str):
     """Options for a wizard field filled from a service (arr root folders,
-    quality profiles). Body: {"values": {KEY: value}}. Same gate as save."""
+    quality profiles). Body: {"values": {KEY: value}}. Same gate as save.
+
+    Only reachable without an admin session while the setup wizard itself is
+    still incomplete - once SETUP_COMPLETE is set this is a real admin-only
+    action (it makes the server issue requests to an attacker-chosen host),
+    independent of auth.is_admin()'s "auth disabled = full access" shortcut.
+    A blank posted value falls back to the saved credential."""
     denied = _setup_gate()
     if denied:
         return denied
@@ -841,7 +847,7 @@ def setup_save():
     denied = _setup_gate()
     if denied:
         return denied
-    _allowed_keys = set(_settings.fields_by_key()) | {"SETUP_COMPLETE"}
+    _allowed_keys = {k for k, f in _settings.fields_by_key().items() if f["kind"] != "custom"} | {"SETUP_COMPLETE"}
     saved = 0
     for key, value in request.form.items():
         if key not in _allowed_keys:

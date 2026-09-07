@@ -628,8 +628,8 @@ def fields_by_key() -> dict[str, dict]:
     return out
 
 
-# The pre-schema groups payload. FilterRules.tsx and app.py's wizard save
-# read this shape, so it is derived here rather than removed.
+# The pre-schema groups payload. Only the Filter rules tab (FilterRules.tsx)
+# still reads this shape, so it is derived here rather than removed.
 SETTING_GROUPS = [
     {"id": s["id"], "title": s["title"], "keys": [f["key"] for f in s["fields"] if f["kind"] != "custom"]}
     for s in SECTIONS

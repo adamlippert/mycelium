@@ -49,7 +49,7 @@ def _isolated_db(tmp_path, monkeypatch):
 
 
 def _fields():
-    return [f for s in settings.SECTIONS for f in s["fields"]]
+    return list(settings.fields_by_key().values())
 
 
 def test_every_field_has_exactly_the_declared_keys():

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { api, csrfToken } from '../api';
 import type { SetupSchema, SettingsSection } from '../api';
+import { Button } from '../components/primitives';
 import { initialValues, serialize } from './admin/settings/visibility';
 import type { FieldValue, Values } from './admin/settings/visibility';
 import StepRail from './setup/StepRail';
@@ -14,10 +15,12 @@ import type { Account } from './setup/StepAccount';
  * steps and their fields come from the settings schema, pre-filled with the
  * current values, so a re-run shows what is configured today.
  *
- * This page is mounted outside the app's QueryClientProvider (see App.tsx,
- * and the tests, which render <Setup /> bare), but FieldList's ServiceTest
- * and Picker cards use useMutation. So the wizard body gets its own
- * QueryClient here rather than relying on one from above. */
+ * The wizard carries its own QueryClient (FieldList's ServiceTest and
+ * Picker cards use useMutation) so it renders standalone and stays usable
+ * if it is ever mounted outside the app shell, and the tests render
+ * <Setup /> bare. main.tsx does wrap App, and this route, in its own
+ * QueryClientProvider already; nesting a second provider inside that one
+ * is harmless. */
 export default function Setup() {
   const [queryClient] = useState(() => new QueryClient());
   const [schema, setSchema] = useState<SetupSchema | null>(null);
@@ -28,7 +31,7 @@ export default function Setup() {
   const [saving, setSaving] = useState(false);
   const [account, setAccount] = useState<Account>(EMPTY_ACCOUNT);
 
-  useEffect(() => {
+  function load() {
     api.setupSchema().then((s) => {
       const section: SettingsSection = { id: 'wizard', title: '', description: '', icon: '', fields: s.fields };
       const v = initialValues([section]);
@@ -36,6 +39,10 @@ export default function Setup() {
       setValues(v);
       setInitial(v);
     }).catch((e: Error) => setLoadError(e.message));
+  }
+
+  useEffect(() => {
+    load();
   }, []);
 
   const section: SettingsSection = useMemo(
@@ -103,12 +110,20 @@ export default function Setup() {
     window.location.href = '/ui';
   }
 
-  // Lite can shrink the step list from under the current index.
+  // Lite can shrink the step list from under the current index. Today Lite
+  // only toggles on the Welcome step (step 0), so this never actually fires;
+  // it is a safety net for a future step that could flip Lite later, not
+  // load-bearing right now.
   useEffect(() => {
     if (step > doneStep) setStep(doneStep);
   }, [step, doneStep]);
 
-  if (loadError) return <p className="p-6 text-sm text-danger">Could not load the setup wizard: {loadError}</p>;
+  if (loadError) return (
+    <div className="flex items-center gap-3 p-6 text-sm text-danger">
+      <span>Could not load the setup wizard: {loadError}</span>
+      <Button variant="default" onClick={() => { setLoadError(''); load(); }}>Retry</Button>
+    </div>
+  );
   if (!schema) return <p className="p-6 text-sm text-muted">Loading...</p>;
 
   return (

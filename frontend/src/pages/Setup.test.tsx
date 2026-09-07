@@ -21,11 +21,17 @@ function schema(over: Partial<SetupSchema> = {}): SetupSchema {
     steps: [
       { id: 'welcome', title: 'Welcome', intro: 'Pick how this runs.', keys: ['LITE_MODE'], lite: true },
       { id: 'torbox', title: 'TorBox', intro: 'The one required key.', keys: ['TORBOX_API_KEY'], lite: true },
+      { id: 'quality', title: 'Quality preferences', intro: 'How releases are ranked.', keys: ['RESOLUTION_PREFERRED'], lite: true },
       { id: 'zilean', title: 'Zilean', intro: 'Optional index.', keys: ['ZILEAN_ENABLED', 'ZILEAN_URL'], lite: false },
     ],
     fields: [
       f({ key: 'LITE_MODE', label: 'Lite mode', kind: 'bool', value: false, hot_reload: false }),
       f({ key: 'TORBOX_API_KEY', label: 'TorBox API key', kind: 'secret', required: true, value: false, test: 'torbox' }),
+      f({
+        key: 'RESOLUTION_PREFERRED', label: 'Preferred resolutions', kind: 'ordered',
+        options: [{ value: '2160p', label: '2160p' }, { value: '1080p', label: '1080p' }, { value: '720p', label: '720p' }],
+        value: ['1080p'],
+      }),
       f({ key: 'ZILEAN_ENABLED', label: 'Use Zilean', kind: 'bool', value: false }),
       f({ key: 'ZILEAN_URL', label: 'Zilean URL', kind: 'url', depends_on: 'ZILEAN_ENABLED', test: 'zilean', value: '' }),
     ],
@@ -61,15 +67,16 @@ describe('Setup', () => {
     expect(await screen.findByRole('heading', { name: 'Welcome' })).toBeInTheDocument();
     expect(screen.getByText('Pick how this runs.')).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Lite mode' })).toBeInTheDocument();
-    expect(screen.getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.getAllByRole('listitem')).toHaveLength(4);
   });
 
   it('Lite mode hides the non-lite steps and the rail shrinks', async () => {
     render(<Setup />);
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Lite mode' }));
-    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.getAllByRole('listitem')).toHaveLength(3);
     await next();
     await userEvent.type(screen.getByLabelText('TorBox API key'), 'tb');
+    await next();
     await next();
     expect(screen.getByRole('heading', { name: /all set/i })).toBeInTheDocument();
   });
@@ -103,6 +110,7 @@ describe('Setup', () => {
     await next();
     await userEvent.type(await screen.findByLabelText('TorBox API key'), 'tb');
     await next();
+    await next();
     expect(await screen.findByRole('heading', { name: 'Zilean' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Zilean URL')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('checkbox', { name: 'Use Zilean' }));
@@ -119,6 +127,9 @@ describe('Setup', () => {
     await next();
     await userEvent.type(await screen.findByLabelText('TorBox API key'), 'tb');
     await next();
+    expect(await screen.findByRole('heading', { name: 'Quality preferences' })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Add to Preferred resolutions' }), '2160p');
+    await next();
     await next();
     expect(await screen.findByRole('heading', { name: /all set/i })).toBeInTheDocument();
     await next();
@@ -126,6 +137,7 @@ describe('Setup', () => {
     const init = fetchSpy.mock.calls.find((c) => c[0] === '/setup/save')![1] as RequestInit;
     const body = init.body as FormData;
     expect(body.get('TORBOX_API_KEY')).toBe('tb');
+    expect(body.get('RESOLUTION_PREFERRED')).toBe('1080p,2160p');
     expect(body.has('LITE_MODE')).toBe(false);
     expect(body.has('ZILEAN_ENABLED')).toBe(false);
     expect(init.headers).toMatchObject({ 'X-CSRFToken': 'test-csrf-token' });
@@ -140,6 +152,7 @@ describe('Setup', () => {
     await userEvent.type(await screen.findByLabelText('TorBox API key'), 'tb');
     await next();
     await next();
+    await next();
     expect(await screen.findByRole('heading', { name: /create your admin account/i })).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText(/^username$/i), 'adam');
     await userEvent.type(screen.getByLabelText(/^password$/i), 'hunter2');
@@ -149,5 +162,14 @@ describe('Setup', () => {
     await next();
     expect(window.alert).toHaveBeenCalledWith(expect.stringMatching(/do not match/i));
     expect(fetchSpy).not.toHaveBeenCalledWith('/setup/save', expect.anything());
+  });
+
+  it('shows a Retry button when the schema fails to load, which reloads it', async () => {
+    apiMocks.setupSchema.mockReset();
+    apiMocks.setupSchema.mockRejectedValueOnce(new Error('network down')).mockResolvedValueOnce(schema());
+    render(<Setup />);
+    expect(await screen.findByText(/could not load the setup wizard/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('heading', { name: 'Welcome' })).toBeInTheDocument();
   });
 });

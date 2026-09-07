@@ -108,6 +108,7 @@ def test_the_retired_translator_is_gone_and_save_accepts_rule_keys():
     assert "translate_wizard_keys" not in src and "WIZARD_KEYS" not in src
     body = re.search(r"def setup_save\(\).*?\n(.*?)\n@app\.", src, re.S).group(1)
     assert "fields_by_key()" in body
+    assert '!= "custom"' in body
     # The rule keys are accepted by the allow-list and validated by settings.set.
     assert "RESOLUTION_PREFERRED" in settings.fields_by_key()
     assert "QUALITY_PREFERENCE" not in settings.fields_by_key()
