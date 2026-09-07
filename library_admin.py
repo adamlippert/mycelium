@@ -52,7 +52,7 @@ _VIEW_WHERE = {
     "wanted": "t.status IN ('wanted', 'upcoming')",
     "queue": "(t.status = 'pending' OR t.retry_attempt IS NOT NULL OR t.in_wanted_movies = 1 OR t.missing_episodes > 0)",
     "incomplete": "(t.media_type != 'movie' AND t.missing_episodes > 0)",
-    "unmirrored": "(t.status = 'success' AND t.arr_mirrored_at IS NULL AND t.missing_episodes = 0)",
+    "unmirrored": "(t.status = 'success' AND t.arr_mirrored_at IS NULL)",
 }
 _VIEW_ORDER = {
     "wanted": "t.updated_at ASC",
@@ -65,7 +65,7 @@ _PROBLEM_WHERE = {
     "missing_episodes": "t.missing_episodes > 0",
     "in_retry_queue": "t.retry_attempt IS NOT NULL",
     "no_requester": "t.requester IS NULL",
-    "not_mirrored": "(t.status = 'success' AND t.arr_mirrored_at IS NULL AND t.missing_episodes = 0)",
+    "not_mirrored": "(t.status = 'success' AND t.arr_mirrored_at IS NULL)",
 }
 _ADDED = {"24h": "-1 day", "7d": "-7 days", "30d": "-30 days"}
 

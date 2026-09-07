@@ -89,7 +89,7 @@ def test_default_listing_is_every_title_newest_first_with_the_computed_columns(s
     ("wanted", {"tt3"}),
     ("queue", {"tt4", "tt5", "tt6"}),
     ("incomplete", {"tt4"}),
-    ("unmirrored", {"tt6"}),
+    ("unmirrored", {"tt4", "tt6"}),
     ("all", {"tt1", "tt2", "tt3", "tt4", "tt5", "tt6"}),
 ])
 def test_views_select_exactly_their_titles(seeded, view, expected):
@@ -99,7 +99,20 @@ def test_views_select_exactly_their_titles(seeded, view, expected):
 
 def test_view_counts_match_the_views(seeded):
     counts = la.view_counts()
-    assert counts == {"all": 6, "attention": 2, "wanted": 1, "queue": 3, "incomplete": 1, "unmirrored": 1}
+    assert counts == {"all": 6, "attention": 2, "wanted": 1, "queue": 3, "incomplete": 1, "unmirrored": 2}
+
+
+def test_attention_view_includes_high_retry_attempts_on_their_own():
+    """Two success movies with no playability record: only the one with
+    three retry attempts belongs in attention, isolating that branch of
+    the view's OR from the degraded-playability branch."""
+    _req("Movie A", "tta1")
+    _req("Movie B", "tta2")
+    db.enqueue_retry("tta1", "Movie A", "movie", None, attempt=3, delay_seconds=3600)
+    db.enqueue_retry("tta2", "Movie B", "movie", None, attempt=2, delay_seconds=3600)
+    rows, total = la.list_titles({"view": "attention"})
+    assert _ids(rows) == ["tta1"] and total == 1
+    assert la.view_counts()["attention"] == 1
 
 
 @pytest.mark.parametrize("filters,expected", [
@@ -112,7 +125,7 @@ def test_view_counts_match_the_views(seeded):
     ({"problem": "missing_episodes"}, {"tt4"}),
     ({"problem": "in_retry_queue"}, {"tt6"}),
     ({"problem": "no_requester"}, {"tt2", "tt3", "tt4", "tt5", "tt6"}),
-    ({"problem": "not_mirrored"}, {"tt6"}),
+    ({"problem": "not_mirrored"}, {"tt4", "tt6"}),
     ({"requester": "auto"}, {"tt2", "tt3", "tt4", "tt5", "tt6"}),
     ({"added": "30d"}, {"tt1", "tt3", "tt4", "tt5", "tt6"}),
 ])
