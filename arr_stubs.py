@@ -168,17 +168,28 @@ def _looks_like_our_stub(path: Path) -> bool:
 def _equivalent(target_dir: Path, stem: str, tag: str) -> Path | None:
     """An existing stub in target_dir that already represents this title
     (possibly renamed by the arr's "Rename Files"): one of our stubs whose
-    name carries the wanted quality tag and, for an episode, the same
-    SxxExx token as the strm stem. None when nothing matches, so the
-    caller writes a fresh one."""
-    if not target_dir.is_dir():
+    name carries the wanted quality tag as a whole token, and, for an
+    episode, the same SxxExx token as the strm stem. None when nothing
+    matches, so the caller writes a fresh one.
+
+    An empty tag never shortcuts (quality_tag() returns "" for an unknown
+    resolution, and "" is a substring of everything). A bare resolution
+    tag ("1080p") must not match inside a more specific "Source-Resolution"
+    tag ("WEBDL-1080p"): that would make a stale, more specific stub look
+    equivalent to a newly-unknown one and keep it as current."""
+    if not tag or not target_dir.is_dir():
         return None
     ep_match = _SXXEXX.search(stem)
     ep_token = ep_match.group(0) if ep_match else None
+    tag_re = re.compile(r"(?<![A-Za-z0-9])" + re.escape(tag) + r"(?![A-Za-z0-9])")
+    full_tag = "-" in tag
     for candidate in target_dir.glob("*.mkv"):
         if not _looks_like_our_stub(candidate):
             continue
-        if tag not in candidate.name:
+        m = tag_re.search(candidate.name)
+        if not m:
+            continue
+        if not full_tag and m.start() > 0 and candidate.name[m.start() - 1] == "-":
             continue
         if ep_token and ep_token not in candidate.name:
             continue

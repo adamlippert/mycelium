@@ -203,6 +203,24 @@ def test_a_stub_renamed_by_the_arr_is_kept_not_duplicated(stubs_env):
     assert mkvs[0] == renamed
 
 
+def test_equivalent_does_not_match_a_more_specific_tag(stubs_env):
+    import arr_stubs
+    values, media, stubs = stubs_env
+    folder = stubs / "movies" / "Heat (1995)"
+    folder.mkdir(parents=True)
+    (folder / "Heat (1995) - WEBDL-1080p.mkv").write_bytes(b"\x1a\x45\xdf\xa3stub")
+    assert arr_stubs._equivalent(folder, "Heat (1995)", "1080p") is None
+
+
+def test_equivalent_never_matches_an_empty_tag(stubs_env):
+    import arr_stubs
+    values, media, stubs = stubs_env
+    folder = stubs / "movies" / "Heat (1995)"
+    folder.mkdir(parents=True)
+    (folder / "Heat (1995) - WEBDL-1080p.mkv").write_bytes(b"\x1a\x45\xdf\xa3stub")
+    assert arr_stubs._equivalent(folder, "Heat (1995)", "") is None
+
+
 def test_write_title_skips_items_whose_strm_is_gone(stubs_env):
     import arr_stubs
     values, media, stubs = stubs_env
