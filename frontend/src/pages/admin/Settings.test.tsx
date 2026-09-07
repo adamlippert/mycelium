@@ -108,4 +108,45 @@ describe('Settings shell', () => {
     expect(await screen.findByText('Saved')).toBeInTheDocument();
     expect(screen.queryByText(/unsaved change/)).not.toBeInTheDocument();
   });
+
+  it('refetches the schema after save so overridden/"env" badges go stale-free', async () => {
+    renderIt();
+    await userEvent.click(await screen.findByRole('button', { name: /Jellyfin/ }));
+    expect(screen.getByText('env')).toBeInTheDocument();
+
+    const url = screen.getByRole('textbox', { name: 'Jellyfin URL' });
+    await userEvent.clear(url);
+    await userEvent.type(url, 'http://new');
+
+    const refreshed = schemaFixture();
+    refreshed.sections[1].fields[0] = { ...refreshed.sections[1].fields[0], value: 'http://new', overridden: true };
+    apiMocks.settingsSchema.mockResolvedValueOnce(refreshed);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(apiMocks.settingsSchema).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText('env')).not.toBeInTheDocument());
+  });
+
+  it('Save starts disabled and enables after an edit', async () => {
+    renderIt();
+    await screen.findByRole('navigation', { name: 'Settings sections' });
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Catbox mode' }));
+    expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
+  });
+
+  it('defaults to Simple pressed and Advanced unpressed', async () => {
+    renderIt();
+    await screen.findByRole('navigation', { name: 'Settings sections' });
+    expect(screen.getByRole('button', { name: 'Simple' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Advanced' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('honours a pre-set Advanced preference from localStorage', async () => {
+    localStorage.setItem('mycelium.settings.advanced', 'true');
+    renderIt();
+    await userEvent.click(await screen.findByRole('button', { name: /Jellyfin/ }));
+    expect(screen.getByRole('button', { name: 'Advanced' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Refresh delay')).toBeInTheDocument();
+  });
 });

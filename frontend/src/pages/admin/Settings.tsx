@@ -26,12 +26,24 @@ export default function Settings() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!sections.length || values) return;
-    const v = initialValues(sections);
-    setValues(v);
-    setInitial(v);
-    setActive(sections[0].id);
-  }, [sections, values]);
+    if (!sections.length) return;
+    if (values === null) {
+      const v = initialValues(sections);
+      setValues(v);
+      setInitial(v);
+      setActive(sections[0].id);
+      return;
+    }
+    // A schema refetch (e.g. after save, to pick up fresh overridden/"env"
+    // badges) must not clobber edits in progress: only reset from the new
+    // schema when there is nothing unsaved.
+    if (countChanges(sections, values, initial) === 0) {
+      const v = initialValues(sections);
+      setValues(v);
+      setInitial(v);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sections]);
 
   useEffect(() => {
     try { localStorage.setItem(ADVANCED_KEY, advanced ? 'true' : 'false'); } catch { /* private mode */ }
@@ -48,6 +60,7 @@ export default function Settings() {
       if (values) setInitial(values);
       setSavedAt(Date.now());
       qc.invalidateQueries({ queryKey: ['admin-settings'] });
+      qc.invalidateQueries({ queryKey: ['admin-settings-schema'] });
     },
   });
 
