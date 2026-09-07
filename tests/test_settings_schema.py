@@ -170,3 +170,12 @@ def test_the_schema_route_exists_and_is_admin_only():
     src = _src("app.py")
     m = re.search(r'@app\.get\("/ui/api/settings/schema"\)\s*\ndef (\w+)\(\):(.*?)\n\n', src, re.S)
     assert m and "is_admin()" in m.group(2) and "schema_for_ui()" in m.group(2)
+
+
+def test_help_lines_are_short_sentences():
+    for f in _fields():
+        if f["kind"] == "custom":
+            continue
+        assert len(f["help"]) <= 220, f["key"]
+        assert f["help"].rstrip().endswith("."), f["key"]
+        assert len(f["label"]) <= 40, f["key"]

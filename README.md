@@ -185,7 +185,7 @@ sequenceDiagram
 - **Delete webhooks** (`/webhook/arr`): a delete in Radarr, Sonarr or Jellyfin, by you or by Maintainerr, purges the title from Mycelium
 - **Targeted Jellyfin refresh**: Jellyfin is told which files changed instead of being asked for a full scan; Autopulse is not needed
 - **Seerr outcome reporting**: added titles show Available at once, failed ones are declined, removed ones are cleared, so requests never sit on Processing forever
-- **Test buttons and root-folder dropdowns** in Settings > Radarr / Sonarr
+- Settings is organised in sections with a search box and a Simple/Advanced switch; every integration has a Test button, and Radarr/Sonarr root folders and quality profiles are picked from a list
 - Setup steps: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) and the built-in manual
 
 </details>
@@ -438,7 +438,7 @@ every other rule in every category, so use it deliberately.
 | `TORBOX_API_KEY` | *(wizard)* | From [torbox.app](https://torbox.app) > Settings > API |
 | `CATBOX_MODE` | `false` | Lazy materialization via proxy URLs (recommended) |
 | `CATBOX_HOST` | *(wizard)* | Externally reachable URL for proxy strm URLs |
-| `CATBOX_IDLE_MINUTES` | `43200` | Idle time before torrent is released (30 days) |
+| `CATBOX_IDLE_MINUTES` | `1440` | Idle time before torrent is released (1 day) |
 | `{CATEGORY}_PREFERRED` | *(empty)* | Tie-break only, ranks a matching value ahead of others. Never rescues a value another rule dropped. |
 | `{CATEGORY}_EXCLUDED` | *(empty)* | Drops a matching candidate. Self-relaxes (with a log line) if it would empty the whole candidate pool, unless `{CATEGORY}_STRICT` is set. |
 | `{CATEGORY}_REQUIRED` | *(empty)* | Drops every candidate that does not match. A release the scraper could not tag for this category ("unknown") always survives - it never counts as a mismatch. |
@@ -458,8 +458,11 @@ every other rule in every category, so use it deliberately.
 | `EXCLUDE_UNDERSIZED_RELEASES` / `EXCLUDE_UNDERSIZED_STRICT` | `true` / `false` | Reject releases too small to be real for their claimed quality + runtime; `_STRICT` hard-fails instead of falling back when only undersized candidates remain |
 | `METRICS_TOKEN` | *(empty)* | Bearer token for `/metrics` scraping |
 | `ARR_SYNC_ENABLED` | `false` | Mirror every title into Radarr/Sonarr as a monitored, search-off entry; remove on purge |
+| `ARR_SYNC_INTERVAL_MINUTES` | `60` | Minutes between reconciles with the arrs; adds what they lack and purges what was deleted there. `0` disables it |
+| `DISK_SYNC_INTERVAL_MINUTES` | `60` | Minutes between checks for titles whose `.strm` files were deleted on disk. `0` disables it |
 | `ARR_STUBS_ENABLED` / `ARR_STUB_PATH` | `false` / `/arr-stubs` | Stub `.mkv` per title in a folder the arrs mount as their root, so titles show as owned. Needs `CATBOX_MODE` |
-| `RADARR_ROOT_FOLDER` / `SONARR_ROOT_FOLDER` | *(empty)* | The arr's root folder for mirrored titles; pick with Load folders in Settings |
+| `RADARR_ROOT_FOLDER` / `SONARR_ROOT_FOLDER` | *(empty)* | The arr's root folder for mirrored titles; pick with Load in Settings |
+| `RADARR_QUALITY_PROFILE` / `SONARR_QUALITY_PROFILE` | *(empty)* | Quality profile for mirrored titles, by name; pick with Load in Settings. Blank uses the arr's first profile |
 | `JELLYFIN_MEDIA_PATH` | *(empty)* | Where Jellyfin's container sees `MEDIA_PATH`, for the targeted refresh; blank means the same path |
 | `SEERR_REPORT_STATUS` / `SEERR_DECLINE_WANTED_AFTER_DAYS` | `true` / `30` | Report outcomes to Seerr; decline a title still wanted after this many days |
 

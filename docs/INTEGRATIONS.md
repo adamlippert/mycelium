@@ -53,10 +53,11 @@ What to expect:
 - Give the arrs **no download client**. Radarr logs a "no download client is
   available" health warning; ignore it.
 - Root folder: blank means the arr's first root folder. Settings > Radarr /
-  Sonarr has a Load folders button that fills a dropdown from the arr, and
+  Sonarr has a Load button that fills a dropdown from the arr, and
   a Test button per arr; both use the URL and key as typed. In `.env`, set
-  `RADARR_ROOT_FOLDER` / `SONARR_ROOT_FOLDER` to a path. The quality
-  profile is the arr's first one; it does not matter, nothing is searched.
+  `RADARR_ROOT_FOLDER` / `SONARR_ROOT_FOLDER` to a path. Pick the quality
+  profile the same way (`RADARR_QUALITY_PROFILE`, `SONARR_QUALITY_PROFILE`);
+  blank uses the first profile, which is what older releases always did.
 - Mycelium sends `imdb:` lookups; for a movie it also falls back to a `tmdb:`
   lookup when one is known, and for a series Sonarr cannot find that way it
   resolves the TVDB id through TMDB and retries.
@@ -81,7 +82,7 @@ Setup, once:
    `/arr-stubs`), Radarr and Sonarr anywhere, for example `/mycelium`.
 3. In Radarr add `/mycelium/movies` as a root folder, in Sonarr
    `/mycelium/series`, then pick them in Settings > Radarr / Sonarr with the
-   Load folders buttons.
+   Load buttons.
 4. Set `ARR_STUBS_ENABLED=true`. The hourly reconcile fills the tree for
    every title already in the library; new titles get their stub as they are
    added.

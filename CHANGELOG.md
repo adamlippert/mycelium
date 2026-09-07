@@ -2,6 +2,24 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- The admin Settings tab is rebuilt around a field schema: a section
+  sidebar, a label and help line on every setting, real controls
+  (toggles, dropdowns, searchable multi-select, an orderable sort order,
+  number fields with units, password fields with reveal), a Simple/Advanced
+  switch, dependent fields that hide until their toggle is on, and a search
+  box. Every integration has a Test button that uses the values as typed;
+  Radarr and Sonarr root folders and quality profiles are loaded from the arr.
+- New settings `RADARR_QUALITY_PROFILE` and `SONARR_QUALITY_PROFILE` (by
+  name; blank keeps the first profile). `ARR_SYNC_INTERVAL_MINUTES` and
+  `DISK_SYNC_INTERVAL_MINUTES` are editable in Settings (restart required).
+- The setup wizard's connection tests and the old `/ui/api/arr-import/*`
+  routes go through the same testers; the arr-import routes are kept as
+  aliases for one release.
+
 ## [0.16.1] - 2026-09-07
 
 ### Changed
