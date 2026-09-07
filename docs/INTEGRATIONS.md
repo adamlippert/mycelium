@@ -167,3 +167,27 @@ title really is still in Jellyfin and Seerr is not told.
 The Seerr API key must belong to a user with **Manage Requests** (an admin
 key does). Titles added from Mycelium's own Discover, Trakt or MDBList have
 no Seerr request and are not reported.
+
+## Auto-requesters and the TorBox add budget
+
+TorBox allows 60 uncached adds per hour per API key, and Mycelium spends
+one for every title it adds while `CATBOX_PRELOAD` is on (the default):
+the torrent is added to TorBox at request time so the first play is
+instant. Every tool that files requests draws on that same budget:
+Suggestarr, Trakt and MDBList watchlist sync, the auto-approve genre and
+actor rules, and Seerr's own users.
+
+The Overview health card shows **TorBox adds this hour** and turns amber
+from 45. When it does, or when the log shows `createtorrent` rate limits:
+
+- Keep each auto-requester's per-run cap at or under 10:
+  `TRAKT_AUTO_REQUEST_CAP`, `MDBLIST_AUTO_REQUEST_CAP`,
+  `AUTO_APPROVE_DAILY_LIMIT`, and Suggestarr's own "max results" setting.
+  A Suggestarr run that files 40 recommendations at once uses two thirds of
+  the hour on its own.
+- Or turn `CATBOX_PRELOAD` off and set `CATBOX_LAZY_ADD` on. Titles are then
+  added to TorBox on first play instead of at request time, so requests are
+  free and only actual viewing spends the budget. The first play of a title
+  waits for TorBox instead of starting instantly.
+- Requests that hit the limit are not lost: they wait in the retry queue
+  and are processed when the hour rolls over.

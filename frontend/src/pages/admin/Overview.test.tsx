@@ -22,7 +22,7 @@ vi.mock('../../api', async () => {
         services: [
           { name: 'TorBox', status: 'ok' },
           { name: 'Zilean', status: 'disabled' },
-          { name: 'Torrentio', status: 'down' },
+          { name: 'Torrentio', status: 'down', note: 'Movies: trickplay, chapter images' },
         ],
         stream_front: true,
       }),
@@ -129,6 +129,14 @@ describe('Overview tab', () => {
       expect(row).toHaveTextContent('Streaming front');
       expect(row).toHaveTextContent('Go (active)');
     });
+  });
+
+  it('shows a health row\'s note under its name', async () => {
+    renderIt();
+    await waitFor(() => {
+      expect(screen.getByText('Movies: trickplay, chapter images')).toBeInTheDocument();
+    });
+    expect(screen.getAllByTestId('health-note')).toHaveLength(1);
   });
 
   it('shows one status dot per health service', async () => {

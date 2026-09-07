@@ -170,10 +170,15 @@ export default function Overview() {
           ) : (
             <div className="space-y-2">
               {(healthQ.data?.services ?? []).map((s) => (
-                <div key={s.name} data-testid="health-service" className="flex items-center gap-2 text-xs">
+                <div key={s.name} data-testid="health-service" className="flex flex-wrap items-center gap-2 text-xs">
                   <StatusDot tone={healthTone(s.status)} />
                   <span className="text-body">{s.name}</span>
                   <span className="ml-auto text-muted">{s.status}</span>
+                  {(s.note || s.error) && (
+                    <span className="basis-full pl-5 text-[11px] text-muted" data-testid="health-note">
+                      {s.note || s.error}
+                    </span>
+                  )}
                 </div>
               ))}
               <div

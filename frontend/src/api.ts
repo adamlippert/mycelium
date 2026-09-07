@@ -556,7 +556,7 @@ export type ZileanStatus = {
   importing?: boolean;
 };
 
-export type HealthService = { name: string; status: string };
+export type HealthService = { name: string; status: string; note?: string; error?: string; code?: number };
 export type PlayabilityItem = {
   content_key: string;
   status: string;

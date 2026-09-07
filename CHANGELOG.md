@@ -2,6 +2,19 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Two health rows: "Jellyfin libraries" warns when a library on Mycelium's
+  media has Trickplay or chapter-image extraction on (each pulls every file
+  through the TorBox CDN), and "TorBox adds this hour" shows the add budget
+  and turns amber from 45 of 60. Health rows now show their note in the
+  Overview.
+- The built-in manual documents Radarr, Sonarr, Maintainerr, the Jellyfin
+  webhook plugin and library settings, Seerr outcome reporting, and the
+  TorBox add budget for auto-requesters such as Suggestarr.
+
 ## [0.15.0] - 2026-09-07
 
 ### Added
