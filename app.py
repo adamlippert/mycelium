@@ -1982,6 +1982,34 @@ def ui_api_settings_schema():
     return jsonify(sections=settings.schema_for_ui(), hot_reload=list(settings.HOT_RELOAD))
 
 
+@app.get("/ui/api/library")
+def ui_api_library():
+    """The Library tab's table: filters, views, sort and paging in SQL."""
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import library_admin
+    filters = {
+        "view": request.args.get("view"), "q": request.args.get("q"),
+        "status": request.args.getlist("status"),
+        "type": request.args.get("type"), "problem": request.args.get("problem"),
+        "requester": request.args.get("requester"), "added": request.args.get("added"),
+        "sort": request.args.get("sort"), "order": request.args.get("order"),
+        "page": request.args.get("page"), "per_page": request.args.get("per_page"),
+    }
+    rows, total = library_admin.list_titles(filters)
+    page = library_admin._int(request.args.get("page"), 1, 1, 10_000_000)
+    per_page = library_admin._int(request.args.get("per_page"), library_admin.DEFAULT_PER_PAGE, 1, library_admin.MAX_PER_PAGE)
+    return jsonify(rows=rows, total=total, page=page, per_page=per_page)
+
+
+@app.get("/ui/api/library/views")
+def ui_api_library_views():
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import library_admin
+    return jsonify(library_admin.view_counts())
+
+
 _NOTIFICATION_KEYS = {"NOTIFY_ON_SUCCESS", "NOTIFY_ON_FAILURE",
                       "DISCORD_WEBHOOK_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"}
 
