@@ -2038,6 +2038,65 @@ def ui_api_library_activity(imdb_id: str):
     return jsonify(activity=db.get_activity_for_title(imdb_id, (req or {}).get("title"), limit=20, before_id=before))
 
 
+def _lib_action(fn, *args):
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import library_actions
+    return jsonify(**getattr(library_actions, fn)(*args))
+
+
+@app.post("/ui/api/library/<imdb_id>/mirror")
+def ui_api_library_mirror(imdb_id: str):
+    return _lib_action("mirror", imdb_id)
+
+
+@app.post("/ui/api/library/<imdb_id>/unmirror")
+def ui_api_library_unmirror(imdb_id: str):
+    return _lib_action("unmirror", imdb_id)
+
+
+@app.post("/ui/api/library/<imdb_id>/drop-retry")
+def ui_api_library_drop_retry(imdb_id: str):
+    return _lib_action("drop_retry", imdb_id)
+
+
+@app.post("/ui/api/library/<imdb_id>/retry-now")
+def ui_api_library_retry_now(imdb_id: str):
+    return _lib_action("retry_now", imdb_id)
+
+
+@app.post("/ui/api/library/<imdb_id>/recheck-series")
+def ui_api_library_recheck_series(imdb_id: str):
+    return _lib_action("recheck_series", imdb_id)
+
+
+@app.post("/ui/api/library/<imdb_id>/episodes/<int:season>/<int:episode>/retry")
+def ui_api_library_retry_episode(imdb_id: str, season: int, episode: int):
+    return _lib_action("retry_episode", imdb_id, season, episode)
+
+
+@app.post("/ui/api/library/hash/<info_hash>/blacklist")
+def ui_api_library_blacklist(info_hash: str):
+    return _lib_action("blacklist", info_hash)
+
+
+@app.post("/ui/api/library/hash/<info_hash>/unblacklist")
+def ui_api_library_unblacklist(info_hash: str):
+    return _lib_action("unblacklist", info_hash)
+
+
+@app.post("/ui/api/library/<imdb_id>/playability/reset")
+def ui_api_library_reset_playability(imdb_id: str):
+    return _lib_action("reset_playability", imdb_id)
+
+
+@app.route("/ui/api/library/<imdb_id>/override", methods=["POST", "DELETE"])
+def ui_api_library_override(imdb_id: str):
+    if request.method == "DELETE":
+        return _lib_action("clear_override", imdb_id)
+    return _lib_action("save_override", imdb_id, request.get_json(silent=True) or {})
+
+
 _NOTIFICATION_KEYS = {"NOTIFY_ON_SUCCESS", "NOTIFY_ON_FAILURE",
                       "DISCORD_WEBHOOK_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"}
 
