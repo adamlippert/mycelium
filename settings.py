@@ -253,11 +253,16 @@ _OPTION_RESOLVERS = {
     "zilean_mode": lambda: [{"value": "external", "label": "External service"},
                             {"value": "native", "label": "Native index"}],
 }
+_OPTION_RESOLVERS.update({
+    "rule:resolution": lambda: [{"value": v, "label": v} for v in _rt.values_for("resolution") if v != _rt.UNKNOWN],
+    "rule:encode": lambda: [{"value": v, "label": v} for v in _rt.values_for("encode") if v != _rt.UNKNOWN],
+    "rule:language": lambda: [{"value": v, "label": v} for v in _rt.values_for("language") if v != _rt.UNKNOWN],
+})
 
 
 def _f(key, label, help, kind=None, *, options=None, placeholder=None, unit=None,
        min=None, max=None, advanced=False, depends_on=None, test=None, picker=None,
-       component=None, readonly=False):
+       component=None, readonly=False, required=False):
     """One field declaration. kind defaults from the type buckets; pass it
     only to refine (url, path, secret, select, multiselect, ordered) or for
     a custom card."""
@@ -268,7 +273,7 @@ def _f(key, label, help, kind=None, *, options=None, placeholder=None, unit=None
     return {"key": key, "label": label, "help": help, "kind": kind, "options": options,
             "placeholder": placeholder, "unit": unit, "min": min, "max": max,
             "advanced": advanced, "depends_on": depends_on, "test": test, "picker": picker,
-            "component": component, "readonly": readonly}
+            "component": component, "readonly": readonly, "required": required}
 
 
 def _custom(component, label=""):
@@ -307,7 +312,7 @@ SECTIONS = [
         "id": "debrid", "title": "Debrid", "icon": "☁",
         "description": "TorBox is where torrents are cached and streamed from. RealDebrid can stand in when a release is only cached there.",
         "fields": [
-            _f("TORBOX_API_KEY", "TorBox API key", "From TorBox, Settings, API. Required for everything.", "secret", test="torbox"),
+            _f("TORBOX_API_KEY", "TorBox API key", "From TorBox, Settings, API. Required for everything.", "secret", test="torbox", required=True),
             _f("TORBOX_BASE_URL", "TorBox API URL", "Leave the default unless TorBox publishes a new API address.",
                "url", placeholder="https://api.torbox.app/v1/api", advanced=True, test="torbox"),
             _f("TORBOX_POLL_INTERVAL_SEC", "Poll interval", "Seconds between checks while waiting for TorBox to finish caching a torrent.",
@@ -557,9 +562,70 @@ _UNLISTED_KEYS = {
     "FILTER_RULES_MIGRATED",
 }
 
+# The four filter-rule keys the setup wizard edits. They live in the Filter
+# rules tab, not in a Settings section, so they are declared here and only
+# reachable through fields_by_key() and WIZARD_STEPS.
+RULE_FIELDS = [
+    _f("RESOLUTION_PREFERRED", "Preferred resolutions",
+       "Most wanted first. A release in a higher-ranked resolution wins over a lower one.",
+       "ordered", options="rule:resolution"),
+    _f("RESOLUTION_EXCLUDED", "Resolutions to skip",
+       "Add 2160p here to avoid 4K releases, for example on a player without HDR.",
+       "multiselect", options="rule:resolution"),
+    _f("ENCODE_PREFERRED", "Preferred encodes",
+       "hevc is smaller for the same quality; avc plays on more devices.",
+       "multiselect", options="rule:encode"),
+    _f("LANGUAGE_PREFERRED", "Preferred audio languages",
+       "Releases with these audio languages rank first.",
+       "multiselect", options="rule:language"),
+]
+
+# The setup wizard: each step names the schema keys it shows, in order.
+# lite=False steps are skipped when LITE_MODE is on.
+WIZARD_STEPS = [
+    {"id": "welcome", "title": "Welcome", "lite": True,
+     "intro": "Pick how this Mycelium runs; everything here can be changed later in Settings.",
+     "keys": ["LITE_MODE"]},
+    {"id": "torbox", "title": "TorBox", "lite": True,
+     "intro": "TorBox is where torrents are cached and streamed from, so its key is the one thing setup cannot skip.",
+     "keys": ["TORBOX_API_KEY"]},
+    {"id": "jellyfin", "title": "Jellyfin", "lite": True,
+     "intro": "Where the library is played; leave it blank if Jellyfin is not running yet.",
+     "keys": ["JELLYFIN_URL", "JELLYFIN_API_KEY", "JELLYFIN_MEDIA_PATH"]},
+    {"id": "seerr", "title": "Seerr and metadata", "lite": True,
+     "intro": "Requests arrive from Seerr; TMDB supplies posters, runtimes and Discover.",
+     "keys": ["SEERR_URL", "SEERR_API_KEY", "TMDB_API_KEY"]},
+    {"id": "quality", "title": "Quality preferences", "lite": True,
+     "intro": "How releases are ranked; the Filter rules tab has the full model later.",
+     "keys": ["RESOLUTION_PREFERRED", "RESOLUTION_EXCLUDED", "ENCODE_PREFERRED", "LANGUAGE_PREFERRED"]},
+    {"id": "catbox", "title": "Catbox", "lite": True,
+     "intro": "Fetch titles on demand instead of holding every torrent on TorBox; needs the public address players reach Mycelium on.",
+     "keys": ["CATBOX_MODE", "CATBOX_HOST"]},
+    {"id": "notifications", "title": "Notifications", "lite": True,
+     "intro": "Where to hear about finished and failed requests; optional.",
+     "keys": ["DISCORD_WEBHOOK_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"]},
+    {"id": "trakt", "title": "Trakt", "lite": False,
+     "intro": "Lets users connect their Trakt watchlist; optional.",
+     "keys": ["TRAKT_CLIENT_ID", "TRAKT_CLIENT_SECRET"]},
+    {"id": "subtitles", "title": "Subtitles", "lite": False,
+     "intro": "Subtitle download from OpenSubtitles; optional.",
+     "keys": ["OPENSUBTITLES_API_KEY", "OPENSUBTITLES_LANGUAGES"]},
+    {"id": "zilean", "title": "Zilean", "lite": False,
+     "intro": "A DMM hash index searched next to Torrentio; optional.",
+     "keys": ["ZILEAN_ENABLED", "ZILEAN_MODE", "ZILEAN_URL",
+              "ZILEAN_PG_HOST", "ZILEAN_PG_PORT", "ZILEAN_PG_DB", "ZILEAN_PG_USER", "ZILEAN_PG_PASSWORD"]},
+    {"id": "arrs", "title": "Radarr / Sonarr", "lite": False,
+     "intro": "Mirror the library into the arrs so Seerr, Maintainerr and calendars see it; optional.",
+     "keys": ["ARR_SYNC_ENABLED",
+              "RADARR_URL", "RADARR_API_KEY", "RADARR_ROOT_FOLDER", "RADARR_QUALITY_PROFILE",
+              "SONARR_URL", "SONARR_API_KEY", "SONARR_ROOT_FOLDER", "SONARR_QUALITY_PROFILE"]},
+]
+
 
 def fields_by_key() -> dict[str, dict]:
-    return {f["key"]: f for s in SECTIONS for f in s["fields"]}
+    out = {f["key"]: f for s in SECTIONS for f in s["fields"]}
+    out.update({f["key"]: f for f in RULE_FIELDS})
+    return out
 
 
 # The pre-schema groups payload. FilterRules.tsx and app.py's wizard save
@@ -754,25 +820,33 @@ def _resolve_options(field: dict) -> list[dict] | None:
     return [o if isinstance(o, dict) else {"value": o, "label": o} for o in opts]
 
 
-def schema_for_ui() -> list[dict]:
-    """SECTIONS with each field's current value, whether a DB override
-    exists, whether it hot-reloads, and options resolved. A secret's value is
+def _field_for_ui(f: dict, overrides: dict) -> dict:
+    """One field with its current value, whether a DB override exists,
+    whether it hot-reloads, and options resolved. A secret's value is
     reported as True/False (set or not), never the secret itself."""
+    item = dict(f)
+    item["options"] = _resolve_options(f)
+    if f["kind"] == "custom":
+        item.update({"value": None, "overridden": False, "hot_reload": True})
+        return item
+    current = get(f["key"])
+    item["value"] = bool(current) if f["kind"] == "secret" else current
+    item["overridden"] = overrides.get(f["key"]) is not None
+    item["hot_reload"] = f["key"] in HOT_RELOAD
+    return item
+
+
+def schema_for_ui() -> list[dict]:
+    """SECTIONS with each field filled in by _field_for_ui."""
     overrides = db.get_all_settings()
-    out = []
-    for section in SECTIONS:
-        fields = []
-        for f in section["fields"]:
-            item = dict(f)
-            item["options"] = _resolve_options(f)
-            if f["kind"] == "custom":
-                item.update({"value": None, "overridden": False, "hot_reload": True})
-            else:
-                current = get(f["key"])
-                item["value"] = bool(current) if f["kind"] == "secret" else current
-                item["overridden"] = overrides.get(f["key"]) is not None
-                item["hot_reload"] = f["key"] in HOT_RELOAD
-            fields.append(item)
-        out.append({"id": section["id"], "title": section["title"], "description": section["description"],
-                    "icon": section["icon"], "fields": fields})
-    return out
+    return [{"id": s["id"], "title": s["title"], "description": s["description"], "icon": s["icon"],
+             "fields": [_field_for_ui(f, overrides) for f in s["fields"]]}
+            for s in SECTIONS]
+
+
+def wizard_schema_for_ui() -> dict:
+    """WIZARD_STEPS plus one filled-in field per step key, in step order."""
+    overrides = db.get_all_settings()
+    by_key = fields_by_key()
+    keys = [k for s in WIZARD_STEPS for k in s["keys"]]
+    return {"steps": WIZARD_STEPS, "fields": [_field_for_ui(by_key[k], overrides) for k in keys]}

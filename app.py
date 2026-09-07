@@ -772,6 +772,15 @@ def setup_wizard():
     return _spa_index()
 
 
+def _setup_gate():
+    """None when the caller may use the setup surface: setup not yet
+    complete (first run), or an admin re-running it. Otherwise a 401."""
+    import settings as _settings
+    if _settings.get("SETUP_COMPLETE", False) and not auth.is_admin():
+        return jsonify(error="unauthorized"), 401
+    return None
+
+
 def _needs_first_admin() -> bool:
     """True when finishing setup would lock this install out of itself.
 
@@ -788,44 +797,53 @@ def _needs_first_admin() -> bool:
 @limiter.limit("10 per minute")
 def setup_skip():
     import settings as _settings
-    if _settings.get("SETUP_COMPLETE", False) and not auth.is_admin():
-        return jsonify(error="unauthorized"), 401
+    denied = _setup_gate()
+    if denied:
+        return denied
     if _needs_first_admin():
         return jsonify(ok=True, needs_first_admin=True)
     _settings.set("SETUP_COMPLETE", True)
     return jsonify(ok=True)
 
 
+@app.get("/setup/schema")
+@limiter.limit("30 per minute")
+def setup_schema():
+    """Steps and pre-filled fields for the wizard."""
+    denied = _setup_gate()
+    if denied:
+        return denied
+    import settings as _settings
+    payload = _settings.wizard_schema_for_ui()
+    payload["needs_first_admin"] = _needs_first_admin()
+    return jsonify(**payload)
+
+
+@app.post("/setup/picker/<name>")
+@limiter.limit("30 per minute")
+def setup_picker(name: str):
+    """Options for a wizard field filled from a service (arr root folders,
+    quality profiles). Body: {"values": {KEY: value}}. Same gate as save."""
+    denied = _setup_gate()
+    if denied:
+        return denied
+    import service_tests
+    if name not in service_tests.PICKERS:
+        return jsonify(ok=False, error="unknown picker"), 404
+    p = request.get_json(silent=True) or {}
+    return jsonify(**service_tests.pick(name, p.get("values") or {}))
+
+
 @app.post("/setup/save")
 @limiter.limit("10 per minute")
 def setup_save():
     import settings as _settings
-    if _settings.get("SETUP_COMPLETE", False) and not auth.is_admin():
-        return jsonify(error="unauthorized"), 401
-    import migrate_filters
-    _allowed_keys = {k for g in _settings.SETTING_GROUPS for k in g["keys"]} | {"SETUP_COMPLETE"}
+    denied = _setup_gate()
+    if denied:
+        return denied
+    _allowed_keys = set(_settings.fields_by_key()) | {"SETUP_COMPLETE"}
     saved = 0
-
-    # Both wizard UIs (templates/setup.html, frontend/src/pages/setup/) still
-    # post QUALITY_PREFERENCE/ALLOW_4K/PREFER_HEVC/AUDIO_LANGUAGE_PREFERENCE -
-    # keys the filter-rules model retired. Translate them into the rule-model
-    # keys that replace them here, in one place, rather than storing values
-    # nothing reads; see migrate_filters.translate_wizard_keys for the mapping
-    # and why the wizard UIs were left posting the old names.
-    wizard_form = {k: v for k, v in request.form.items() if k in migrate_filters.WIZARD_KEYS}
-    if wizard_form:
-        for key, value in migrate_filters.translate_wizard_keys(wizard_form).items():
-            try:
-                _settings.set(key, value)
-                saved += 1
-            except ValueError as exc:
-                log.warning("setup_save: rejected translated value for %s: %s", key, exc)
-
     for key, value in request.form.items():
-        if key in migrate_filters.WIZARD_KEYS:
-            # Never store the retired key itself; translate_wizard_keys above
-            # already wrote whatever rule-model key(s) it maps to.
-            continue
         if key not in _allowed_keys:
             log.warning("setup_save: rejected unknown key %r", key)
             continue
@@ -859,12 +877,16 @@ def setup_test(kind: str):
     still incomplete - once SETUP_COMPLETE is set this is a real admin-only
     action (it makes the server issue requests to an attacker-chosen host),
     independent of auth.is_admin()'s "auth disabled = full access" shortcut."""
-    import settings as _settings
-    if _settings.get("SETUP_COMPLETE", False) and not auth.is_admin():
-        return jsonify(error="unauthorized"), 401
+    denied = _setup_gate()
+    if denied:
+        return denied
     import service_tests
     if kind not in service_tests.TESTS:
         return jsonify(ok=False, error="unknown integration"), 404
+    p = request.get_json(silent=True)
+    if isinstance(p, dict):
+        # The schema-driven wizard posts JSON like the Settings page and reads {ok, message}.
+        return jsonify(**service_tests.run(kind, p.get("values") or {}))
     r = service_tests.run(kind, dict(request.form))
     if r["ok"]:
         return jsonify(ok=True, detail=r["message"])

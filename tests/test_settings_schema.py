@@ -18,7 +18,7 @@ import settings
 
 _ROOT = os.path.join(os.path.dirname(__file__), "..")
 FIELD_KEYS = {"key", "label", "help", "kind", "options", "placeholder", "unit", "min", "max",
-              "advanced", "depends_on", "test", "picker", "component", "readonly"}
+              "advanced", "depends_on", "test", "picker", "component", "readonly", "required"}
 KINDS = {"bool", "int", "float", "str", "list", "url", "path", "secret", "select",
          "multiselect", "ordered", "custom"}
 
