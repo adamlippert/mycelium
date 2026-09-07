@@ -3317,18 +3317,6 @@ def ui_api_arr_import_sonarr():
     return jsonify(ok=True)
 
 
-def _arr_conn(kind: str):
-    """(module, url, key) for 'radarr' or 'sonarr'. The request body wins
-    over the saved settings so the Settings page can test and browse with
-    what is typed before it is saved; a blank box means the saved value."""
-    import importlib
-    p = request.get_json(silent=True) or {}
-    prefix = kind.upper()
-    url = p.get("url") or _settings_mod.get(f"{prefix}_URL", getattr(cfg, f"{prefix}_URL"))
-    key = p.get("api_key") or _settings_mod.get(f"{prefix}_API_KEY", getattr(cfg, f"{prefix}_API_KEY"))
-    return importlib.import_module(kind), (url or "").strip(), (key or "").strip()
-
-
 def _arr_values(kind: str) -> dict:
     """The old arr-import body {url, api_key} as schema values."""
     p = request.get_json(silent=True) or {}

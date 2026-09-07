@@ -1,6 +1,7 @@
 """One tester per credentialed service and one picker per remote list,
 shared by the Settings page and the setup wizard.
 """
+import importlib
 import os
 import re
 import sys
@@ -75,6 +76,14 @@ def http(monkeypatch):
         return FakeResp(404)
 
     monkeypatch.setattr(service_tests, "_http", fake)
+    # The root folder / quality profile pickers now call radarr.py's and
+    # sonarr.py's own functions (which call requests.get directly) rather
+    # than service_tests._http, so those need faking too.
+    for mod in ("radarr", "sonarr"):
+        monkeypatch.setattr(
+            importlib.import_module(mod).requests, "get",
+            lambda url, headers=None, timeout=None: fake("GET", url, headers=headers, timeout=timeout),
+        )
     return routes, calls
 
 

@@ -256,17 +256,23 @@ def _free(bytes_: int | None) -> str:
 
 
 def _pick_root_folders(kind: str, v: dict) -> list[dict]:
+    """Reuses radarr.root_folders() / sonarr.root_folders() rather than
+    re-fetching /api/v3/rootfolder here, so there is one implementation of
+    the arr call."""
+    import importlib
     p = kind.upper()
-    r = _http("GET", f"{_v(v, f'{p}_URL').rstrip('/')}/api/v3/rootfolder", headers={"X-Api-Key": _v(v, f"{p}_API_KEY")})
-    r.raise_for_status()
-    return [{"value": f["path"], "label": f"{f['path']}{_free(f.get('freeSpace'))}"} for f in (r.json() or []) if f.get("path")]
+    mod = importlib.import_module(kind)
+    folders = mod.root_folders(_v(v, f"{p}_URL"), _v(v, f"{p}_API_KEY"), timeout=TIMEOUT)
+    return [{"value": f["path"], "label": f"{f['path']}{_free(f.get('free_space'))}"} for f in folders]
 
 
 def _pick_quality_profiles(kind: str, v: dict) -> list[dict]:
+    """Reuses radarr.quality_profiles() / sonarr.quality_profiles()."""
+    import importlib
     p = kind.upper()
-    r = _http("GET", f"{_v(v, f'{p}_URL').rstrip('/')}/api/v3/qualityprofile", headers={"X-Api-Key": _v(v, f"{p}_API_KEY")})
-    r.raise_for_status()
-    return [{"value": q["name"], "label": q["name"]} for q in (r.json() or []) if q.get("name")]
+    mod = importlib.import_module(kind)
+    profiles = mod.quality_profiles(_v(v, f"{p}_URL"), _v(v, f"{p}_API_KEY"), timeout=TIMEOUT)
+    return [{"value": q["name"], "label": q["name"]} for q in profiles]
 
 
 PICKERS = {
