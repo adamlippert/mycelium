@@ -4,19 +4,20 @@ import { api } from '../../../api';
 import type { SettingsField, SettingsSection } from '../../../api';
 import { Button, Select } from '../../../components/primitives';
 import type { Option } from '../../../components/primitives';
+import type { Endpoint } from './FieldList';
 import { serviceValues } from './visibility';
 import type { Values } from './visibility';
 
 /** A text input until Load succeeds, then a dropdown of what the service
  * offers with the current value kept even if the service no longer lists it. */
-export function Picker({ field, value, onChange, values, sections }: {
-  field: SettingsField; value: string; onChange: (next: string) => void; values: Values; sections: SettingsSection[];
+export function Picker({ field, value, onChange, values, sections, endpoint = 'settings' }: {
+  field: SettingsField; value: string; onChange: (next: string) => void; values: Values; sections: SettingsSection[]; endpoint?: Endpoint;
 }) {
   const [options, setOptions] = useState<Option[] | null>(null);
   const [err, setErr] = useState('');
   const service = (field.picker || '').split('_')[0];
   const mut = useMutation({
-    mutationFn: () => api.settingsPicker(field.picker!, serviceValues(sections, service, values)),
+    mutationFn: () => (endpoint === 'setup' ? api.setupPicker : api.settingsPicker)(field.picker!, serviceValues(sections, service, values)),
     onSuccess: (r) => {
       if (r.ok && r.options) { setOptions(r.options); setErr(r.options.length ? '' : 'nothing to choose from yet'); }
       else setErr(r.error || 'failed');

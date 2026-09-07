@@ -8,7 +8,7 @@ import {
 const f = (over: Partial<SettingsField>): SettingsField => ({
   key: 'K', label: 'Key', help: 'help', kind: 'str', options: null, placeholder: null, unit: null,
   min: null, max: null, advanced: false, depends_on: null, test: null, picker: null, component: null,
-  readonly: false, value: '', overridden: false, hot_reload: true, ...over,
+  readonly: false, required: false, value: '', overridden: false, hot_reload: true, ...over,
 });
 const section = (fields: SettingsField[]): SettingsSection => ({ id: 's', title: 'Sec', description: 'd', icon: 'x', fields });
 

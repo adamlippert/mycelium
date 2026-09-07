@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { SettingsField, SettingsSection } from '../../../api';
 import { Button, MultiSelect, OrderedList, Select, Toggle } from '../../../components/primitives';
+import type { Endpoint } from './FieldList';
 import { Picker } from './Picker';
 import type { FieldValue, Values } from './visibility';
 
@@ -43,13 +44,14 @@ function isValidUrl(v: string): boolean {
 }
 
 export function Control({
-  field, value, onChange, values, sections,
+  field, value, onChange, values, sections, endpoint = 'settings',
 }: {
   field: SettingsField;
   value: FieldValue;
   onChange: (next: FieldValue) => void;
   values: Values;
   sections: SettingsSection[];
+  endpoint?: Endpoint;
 }) {
   const [reveal, setReveal] = useState(false);
   const str = typeof value === 'string' ? value : '';
@@ -80,7 +82,7 @@ export function Control({
         </span>
       );
     default: {
-      if (field.picker) return <Picker field={field} value={str} onChange={onChange} values={values} sections={sections} />;
+      if (field.picker) return <Picker field={field} value={str} onChange={onChange} values={values} sections={sections} endpoint={endpoint} />;
       const bad = field.kind === 'url' && !isValidUrl(str);
       return (
         <span className="inline-flex w-full max-w-md flex-col gap-1">
@@ -94,7 +96,7 @@ export function Control({
 }
 
 export function SettingField({
-  field, value, onChange, values, sections, dimmed = false,
+  field, value, onChange, values, sections, dimmed = false, endpoint = 'settings',
 }: {
   field: SettingsField;
   value: FieldValue;
@@ -102,6 +104,7 @@ export function SettingField({
   values: Values;
   sections: SettingsSection[];
   dimmed?: boolean;
+  endpoint?: Endpoint;
 }) {
   return (
     <div data-testid={`field-${field.key}`} className={`grid gap-2 border-b border-border py-3 last:border-0 sm:grid-cols-[minmax(0,14rem)_1fr] ${dimmed ? 'opacity-40' : ''}`}>
@@ -111,7 +114,7 @@ export function SettingField({
         <Help text={field.help} />
       </div>
       <div className="flex items-start">
-        <Control field={field} value={value} onChange={onChange} values={values} sections={sections} />
+        <Control field={field} value={value} onChange={onChange} values={values} sections={sections} endpoint={endpoint} />
       </div>
     </div>
   );

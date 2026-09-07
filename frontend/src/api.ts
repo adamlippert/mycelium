@@ -501,6 +501,17 @@ export const api = {
     ),
   settingsSchema: () =>
     http<{ sections: SettingsSection[]; hot_reload: string[] }>('/ui/api/settings/schema'),
+  setupSchema: () => http<SetupSchema>('/setup/schema'),
+  setupTest: (service: string, values: Record<string, string>) =>
+    http<{ ok: boolean; message: string }>(`/setup/test/${service}`, {
+      method: 'POST',
+      body: JSON.stringify({ values }),
+    }),
+  setupPicker: (name: string, values: Record<string, string>) =>
+    http<{ ok: boolean; options?: { value: string; label: string }[]; error?: string }>(
+      `/setup/picker/${name}`,
+      { method: 'POST', body: JSON.stringify({ values }) },
+    ),
   settingsTest: (service: string, values: Record<string, string>) =>
     http<{ ok: boolean; message: string }>(`/ui/api/settings/test/${service}`, {
       method: 'POST',
@@ -698,6 +709,7 @@ export interface SettingsField {
   picker: string | null;
   component: string | null;
   readonly: boolean;
+  required: boolean;
   value: any;
   overridden: boolean;
   hot_reload: boolean;
@@ -709,6 +721,20 @@ export interface SettingsSection {
   description: string;
   icon: string;
   fields: SettingsField[];
+}
+
+export interface WizardStepDef {
+  id: string;
+  title: string;
+  intro: string;
+  keys: string[];
+  lite: boolean;
+}
+
+export interface SetupSchema {
+  steps: WizardStepDef[];
+  fields: SettingsField[];
+  needs_first_admin: boolean;
 }
 
 export interface RequestRow {
