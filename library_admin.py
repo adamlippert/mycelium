@@ -70,6 +70,15 @@ _PROBLEM_WHERE = {
 _ADDED = {"24h": "-1 day", "7d": "-7 days", "30d": "-30 days"}
 
 
+def _like(q: str) -> str:
+    """Escape a search term for SQLite LIKE: backslash first (it is the
+    escape character itself), then the two LIKE wildcards, so a literal
+    `_` or `%` in a title or hash is matched literally rather than as a
+    wildcard."""
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 def _where(filters: dict) -> tuple[str, list]:
     clauses: list[str] = []
     args: list = []
@@ -77,8 +86,8 @@ def _where(filters: dict) -> tuple[str, list]:
     clauses.append(_VIEW_WHERE.get(view, "0=1"))
     q = (filters.get("q") or "").strip()
     if q:
-        like = f"%{q}%"
-        clauses.append("(t.title LIKE ? OR t.imdb_id LIKE ? OR t.info_hash LIKE ?)")
+        like = _like(q)
+        clauses.append("(t.title LIKE ? ESCAPE '\\' OR t.imdb_id LIKE ? ESCAPE '\\' OR t.info_hash LIKE ? ESCAPE '\\')")
         args += [like, like, like]
     statuses = [s for s in (filters.get("status") or []) if s in STATUSES]
     if filters.get("status"):

@@ -134,6 +134,21 @@ def test_filters(seeded, filters, expected):
     assert set(_ids(rows)) == expected
 
 
+def test_search_escapes_like_wildcards():
+    """A literal `_` or `%` in the search term must not act as a SQL LIKE
+    wildcard: `_` matches any single character and `%` matches any run of
+    characters unless escaped."""
+    _req("Silo_S1", "tts1")
+    _req("SiloXS1", "tts2")
+    rows, _ = la.list_titles({"q": "Silo_"})
+    assert _ids(rows) == ["tts1"]
+
+    _req("Movie 100% Done", "tts3")
+    _req("Movie 1000 Done", "tts4")
+    rows, _ = la.list_titles({"q": "100%"})
+    assert _ids(rows) == ["tts3"]
+
+
 def test_requester_filter_by_user_id(seeded):
     rows, _ = la.list_titles({"requester": str(seeded)})
     assert _ids(rows) == ["tt1"]
