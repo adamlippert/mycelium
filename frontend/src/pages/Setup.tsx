@@ -46,12 +46,7 @@ export default function Setup() {
   const steps = useMemo(() => (schema?.steps || []).filter((s) => !isLite || s.lite), [schema, isLite]);
   const needsAccount = Boolean(schema?.needs_first_admin);
   const accountStep = needsAccount ? steps.length : -1;
-  // While the schema is still loading, steps is empty; treating that as
-  // "already done" would flash the Done pane and let Continue trigger
-  // finish() before there is anything to save. Infinity keeps the wizard on
-  // step 0 (the button still works: goNext() just increments step, and the
-  // schema arrives moments later) until real content exists.
-  const doneStep = schema ? (needsAccount ? steps.length + 1 : steps.length) : Infinity;
+  const doneStep = needsAccount ? steps.length + 1 : steps.length;
   const isDone = step === doneStep;
   const current = steps[step];
   const missing = current && schema ? missingRequired(current, schema.fields, values) : [];
@@ -114,6 +109,7 @@ export default function Setup() {
   }, [step, doneStep]);
 
   if (loadError) return <p className="p-6 text-sm text-danger">Could not load the setup wizard: {loadError}</p>;
+  if (!schema) return <p className="p-6 text-sm text-muted">Loading...</p>;
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -132,9 +128,7 @@ export default function Setup() {
           </div>
 
           <div className="min-h-[280px] px-7 py-6">
-            {current && schema && (
-              <WizardStep step={current} fields={schema.fields} values={values} onChange={onChange} />
-            )}
+            {current && <WizardStep step={current} fields={schema.fields} values={values} onChange={onChange} />}
             {needsAccount && step === accountStep && <StepAccount account={account} setAccount={setAccount} />}
             {isDone && <StepDone />}
           </div>

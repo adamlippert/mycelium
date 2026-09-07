@@ -42,7 +42,7 @@ function setCsrfMeta(value: string) {
   document.head.appendChild(meta);
 }
 
-const next = () => userEvent.click(screen.getByRole('button', { name: /continue|finish/i }));
+const next = async () => userEvent.click(await screen.findByRole('button', { name: /continue|finish/i }));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -76,6 +76,7 @@ describe('Setup', () => {
 
   it('Continue is disabled while a required field is blank, unless it is already set', async () => {
     render(<Setup />);
+    await screen.findByRole('heading', { name: 'Welcome' });
     await next();
     expect(await screen.findByRole('heading', { name: 'TorBox' })).toBeInTheDocument();
     const btn = screen.getByRole('button', { name: /continue/i });
@@ -89,6 +90,7 @@ describe('Setup', () => {
       fields: schema().fields.map((x) => (x.key === 'TORBOX_API_KEY' ? { ...x, value: true } : x)),
     }));
     render(<Setup />);
+    await screen.findByRole('heading', { name: 'Welcome' });
     await next();
     expect(await screen.findByRole('heading', { name: 'TorBox' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled();
@@ -97,6 +99,7 @@ describe('Setup', () => {
   it('a dependent field appears when its toggle flips and Test posts the typed values through the setup API', async () => {
     apiMocks.setupTest.mockResolvedValue({ ok: true, message: 'Zilean answered HTTP 200' });
     render(<Setup />);
+    await screen.findByRole('heading', { name: 'Welcome' });
     await next();
     await userEvent.type(await screen.findByLabelText('TorBox API key'), 'tb');
     await next();
@@ -112,6 +115,7 @@ describe('Setup', () => {
   it('finishing posts only the changed keys, unprefixed, as form fields', async () => {
     const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
     render(<Setup />);
+    await screen.findByRole('heading', { name: 'Welcome' });
     await next();
     await userEvent.type(await screen.findByLabelText('TorBox API key'), 'tb');
     await next();
@@ -131,6 +135,7 @@ describe('Setup', () => {
     apiMocks.setupSchema.mockResolvedValue(schema({ needs_first_admin: true }));
     const fetchSpy = vi.spyOn(global, 'fetch');
     render(<Setup />);
+    await screen.findByRole('heading', { name: 'Welcome' });
     await next();
     await userEvent.type(await screen.findByLabelText('TorBox API key'), 'tb');
     await next();
