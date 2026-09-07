@@ -276,6 +276,12 @@ export const api = {
       counts: { all: number; available: number; wanted: number };
     }>(`/ui/api/library/movies${qs ? `?${qs}` : ''}`);
   },
+  library: (params: Record<string, string | string[]>) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => (Array.isArray(v) ? v : [v]).forEach((x) => x !== '' && qs.append(k, x)));
+    return http<LibraryPage>(`/ui/api/library?${qs.toString()}`);
+  },
+  libraryViews: () => http<Record<string, number>>('/ui/api/library/views'),
   recent: () => http<{ items: any[] }>('/ui/api/activity'),
   myRequests: () => http<{ items: any[] }>('/ui/api/user-requests?mine=1'),
   myQuota: () => http<QuotaInfo>('/ui/api/me/quota'),
@@ -735,6 +741,39 @@ export interface SetupSchema {
   steps: WizardStepDef[];
   fields: SettingsField[];
   needs_first_admin: boolean;
+}
+
+/** GET /ui/api/library row shape (Task 2's read model). */
+export interface LibraryRow {
+  id: number;
+  imdb_id: string;
+  tmdb_id: number | null;
+  title: string;
+  media_type: string;
+  status: string;
+  error: string | null;
+  quality: string | null;
+  source: string | null;
+  info_hash: string | null;
+  seasons: string | null;
+  created_at: string;
+  updated_at: string;
+  requester: string;
+  requester_id: number | null;
+  requested_at: string | null;
+  playability: { status: string; last_fail_reason: string | null } | null;
+  missing_episodes: number;
+  retry: { attempt: number; next_retry_at: string } | null;
+  arr_mirrored: boolean;
+  in_torbox: boolean;
+  in_wanted_movies: boolean;
+}
+
+export interface LibraryPage {
+  rows: LibraryRow[];
+  total: number;
+  page: number;
+  per_page: number;
 }
 
 export interface RequestRow {

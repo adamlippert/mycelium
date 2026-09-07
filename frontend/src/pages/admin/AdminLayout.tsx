@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api';
 import { useToast } from '../../components/primitives';
 import Overview from './Overview';
+import Library from './Library';
 import Users from './Users';
 import Requests from './Requests';
 import Maintenance from './Maintenance';
@@ -17,6 +18,7 @@ import Settings from './Settings';
 
 export const ADMIN_TABS: { id: string; label: string; component: ComponentType }[] = [
   { id: 'overview', label: 'Overview', component: Overview },
+  { id: 'library', label: 'Library', component: Library },
   { id: 'users', label: 'Users', component: Users },
   { id: 'requests', label: 'Requests', component: Requests },
   { id: 'filter-rules', label: 'Filter rules', component: FilterRules },
@@ -69,7 +71,7 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   useActivityToasts();
 
-  const hashId = location.hash.replace(/^#/, '');
+  const hashId = location.hash.replace(/^#/, '').split('?')[0];
   const activeTab = ADMIN_TABS.find((t) => t.id === hashId) ?? ADMIN_TABS[0];
   const ActiveComponent = activeTab.component;
 
