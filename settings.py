@@ -201,7 +201,8 @@ HOT_RELOAD = {
     "TELEGRAM_CHAT_ID",
     "AUTO_UPGRADE_ENABLED",
     "SEASON_PACK_CONSOLIDATION_ENABLED",
-    # WEBDAV_ENABLED is not here: the WebDAV server is gated on it at boot, so a flip needs a restart.
+    # webdav.dispatch re-reads this on every request, so a flip is live.
+    "WEBDAV_ENABLED",
     "MULTI_DEBRID_ENABLED",
     "REALDEBRID_API_KEY",
     "AUTH_ENABLED",
@@ -299,7 +300,7 @@ SECTIONS = [
             _f("DISK_SYNC_ENABLED", "Purge titles deleted on disk",
                "Once an hour, a title whose .strm files are gone (a Jellyfin delete) is removed from Mycelium too. Off keeps the files coming back.",
                depends_on="CATBOX_MODE"),
-            _f("WEBDAV_ENABLED", "WebDAV share", "Serve the library over WebDAV as well. Restart after changing.", advanced=True),
+            _f("WEBDAV_ENABLED", "WebDAV share", "Serve the library over WebDAV as well.", advanced=True),
         ],
     },
     {
