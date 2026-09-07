@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.14.2",
+    "date": "2026-09-07",
+    "notes": [
+      "Remove from library now really tells Seerr: the title is requestable again in Seerr immediately instead of after its next availability sync",
+      "Seerr reporting finds titles by TMDB id, so it also works for titles requested before 0.14.0, for series, and for titles added from Discover that exist in Seerr",
+      "A failed request declines every open Seerr request for that title"
+    ]
+  },
+  {
     "version": "0.14.1",
     "date": "2026-09-07",
     "notes": [
