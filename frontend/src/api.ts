@@ -282,6 +282,12 @@ export const api = {
     return http<LibraryPage>(`/ui/api/library?${qs.toString()}`);
   },
   libraryViews: () => http<{ counts: Record<string, number>; mirror_on: boolean }>('/ui/api/library/views'),
+  adminRequests: (params: Record<string, string>) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => v !== '' && qs.append(k, v));
+    return http<AdminRequestPage>(`/ui/api/admin/requests?${qs.toString()}`);
+  },
+  adminRequestViews: () => http<{ counts: Record<string, number> }>('/ui/api/admin/requests/views'),
   libraryDetail: (imdb: string) => http<LibraryDetail>(`/ui/api/library/${imdb}`),
   librarySeason: (imdb: string, season: number) => http<{ episodes: SeasonEpisode[] }>(`/ui/api/library/${imdb}/season/${season}`),
   libraryActivity: (imdb: string, before: number) => http<{ activity: LibraryDetail['activity'] }>(`/ui/api/library/${imdb}/activity?before=${before}`),
@@ -778,6 +784,15 @@ export interface LibraryPage {
   page: number;
   per_page: number;
 }
+
+/** GET /ui/api/admin/requests row shape (Requests admin tab). */
+export interface AdminRequestRow {
+  id: number; imdb_id: string; tmdb_id: number | null; title: string; media_type: string; seasons: string | null;
+  status: 'pending' | 'approved' | 'denied'; note: string | null; created_at: string; reviewed_at: string | null;
+  user_id: number; username: string; reviewer: string | null; library_status: string | null;
+}
+
+export interface AdminRequestPage { rows: AdminRequestRow[]; total: number; page: number; per_page: number }
 
 export interface RequestRow {
   id: number;
