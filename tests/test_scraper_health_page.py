@@ -75,7 +75,15 @@ def test_every_scraper_appears_exactly_once(monkeypatch):
 
     names = [r["name"] for r in scrapers.health_rows()]
 
-    assert sorted(names) == ["debridio", "torrentio", "zilean"]
+    assert sorted(names) == ["comet", "debridio", "mediafusion", "torrentio", "zilean"]
+
+
+def test_torznab_scrapers_are_listed_and_disabled_by_default(monkeypatch):
+    _settings_returning({}, monkeypatch)
+    rows = {r["name"]: r for r in scrapers.health_rows()}
+    assert rows["comet"]["state"] == "disabled"
+    assert rows["mediafusion"]["state"] == "disabled"
+    assert list(rows) == ["debridio", "zilean", "comet", "mediafusion", "torrentio"]
 
 
 def test_the_endpoint_uses_health_rows_not_active():
@@ -86,3 +94,33 @@ def test_the_endpoint_uses_health_rows_not_active():
     assert m
     assert "health_rows()" in m.group(1)
     assert "_active()" not in m.group(1)
+
+
+def test_a_torznab_caps_probe_that_is_refused_means_down(monkeypatch):
+    import health_cache
+
+    class _Resp:
+        status_code = 403
+
+    calls = []
+
+    def fake_get(url, timeout=None, **kw):
+        calls.append(url)
+        return _Resp()
+
+    monkeypatch.setattr(health_cache.requests, "get", fake_get)
+    monkeypatch.setattr(health_cache._settings, "get",
+                        lambda k, d=None: {"COMET_URL": "https://comet.test", "MEDIAFUSION_URL": "https://mf.test"}.get(k, d))
+    assert health_cache._probe("comet") is False
+    assert calls[-1] == "https://comet.test/torznab/api?t=caps"
+    _Resp.status_code = 200
+    assert health_cache._probe("mediafusion") is True
+    assert calls[-1] == "https://mf.test/torznab?t=caps"
+
+
+def test_a_torznab_probe_without_a_url_is_down(monkeypatch):
+    import health_cache
+    monkeypatch.setattr(health_cache._settings, "get", lambda k, d=None: {}.get(k, d))
+    monkeypatch.setattr(health_cache.requests, "get",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no request expected")))
+    assert health_cache._probe("comet") is False

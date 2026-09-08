@@ -54,6 +54,17 @@ def _probe(name: str) -> bool:
             # permanent for this config, not transient upstream trouble.
             return (r.status_code < 500
                     and r.status_code not in debridio.DOWN_STATUS_CODES)
+        if name in ("comet", "mediafusion"):
+            key = "COMET_URL" if name == "comet" else "MEDIAFUSION_URL"
+            default = "" if name == "comet" else "https://mediafusion.elfhosted.com"
+            base = str(_settings.get(key, default) or "").rstrip("/")
+            if not base:
+                return False
+            path = "/torznab/api" if name == "comet" else "/torznab"
+            r = requests.get(f"{base}{path}?t=caps", timeout=3)
+            # 403 is what Comet's public instance answers on this path: a
+            # misconfigured URL must show as down, not silently empty.
+            return r.status_code < 400
     except Exception as exc:
         import debridio
         log.debug("health probe %s failed: %s", name, debridio.redact(exc))

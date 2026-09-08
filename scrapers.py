@@ -13,6 +13,7 @@ import health_cache
 import scraper_metrics
 import settings as _settings
 import torrentio
+import torznab_scraper
 import zilean
 from streams import Stream, rank_streams
 
@@ -60,10 +61,33 @@ def _fetch_torrentio(media_type, imdb_id, season, episode, timeout=None):
                                    timeout=timeout)
 
 
+_COMET_PATH = "/torznab/api"        # comet/api/endpoints/torznab.py
+_MEDIAFUSION_PATH = "/torznab"      # backend/src/routes/torznab.rs
+
+
+def _fetch_comet(media_type, imdb_id, season, episode, timeout=None):
+    kw = {"api_key": "", "raise_on_error": True}
+    if timeout is not None:
+        kw["timeout"] = timeout
+    return torznab_scraper.fetch("comet", str(_settings.get("COMET_URL", "") or ""), _COMET_PATH,
+                                 media_type, imdb_id, season, episode, **kw)
+
+
+def _fetch_mediafusion(media_type, imdb_id, season, episode, timeout=None):
+    kw = {"api_key": str(_settings.get("MEDIAFUSION_API_KEY", "") or ""), "raise_on_error": True}
+    if timeout is not None:
+        kw["timeout"] = timeout
+    return torznab_scraper.fetch("mediafusion",
+                                 str(_settings.get("MEDIAFUSION_URL", "https://mediafusion.elfhosted.com") or ""),
+                                 _MEDIAFUSION_PATH, media_type, imdb_id, season, episode, **kw)
+
+
 # (name, settings key or None if always on, fetch adapter)
 _SCRAPERS = [
     ("debridio", "DEBRIDIO_ENABLED", _fetch_debridio),
     ("zilean", "ZILEAN_ENABLED", _fetch_zilean),
+    ("comet", "COMET_ENABLED", _fetch_comet),
+    ("mediafusion", "MEDIAFUSION_ENABLED", _fetch_mediafusion),
     ("torrentio", None, _fetch_torrentio),
 ]
 

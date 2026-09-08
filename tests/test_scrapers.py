@@ -25,10 +25,15 @@ def _all_enabled_and_healthy(monkeypatch):
                         lambda s, prefer_season_pack=False, override=None: list(s))
 
 
-def _wire(monkeypatch, deb=(), zil=(), tor=()):
+def _wire(monkeypatch, deb=(), zil=(), tor=(), com=(), mf=()):
     monkeypatch.setattr(scrapers.debridio, "fetch", lambda *a, **k: list(deb))
     monkeypatch.setattr(scrapers.zilean, "fetch_streams", lambda *a, **k: list(zil))
     monkeypatch.setattr(scrapers.torrentio, "fetch_streams", lambda *a, **k: list(tor))
+
+    def fake_torznab(name, base_url, path, media_type, imdb_id, season=None, episode=None, **kw):
+        return list(com) if name == "comet" else list(mf)
+
+    monkeypatch.setattr(scrapers.torznab_scraper, "fetch", fake_torznab)
 
 
 def test_debridio_wins_a_duplicate_hash(monkeypatch):
@@ -57,6 +62,40 @@ def test_all_sources_are_merged(monkeypatch):
     _wire(monkeypatch, deb=[_s("a" * 40, "debridio")], zil=[_s("b" * 40, "zilean")],
           tor=[_s("c" * 40, "torrentio")])
     assert len(scrapers.fetch_candidates("movie", "tt1")) == 3
+
+
+def test_registry_order_puts_the_torznab_scrapers_before_torrentio():
+    assert [n for n, _, _ in scrapers._SCRAPERS] == ["debridio", "zilean", "comet", "mediafusion", "torrentio"]
+    keys = {n: k for n, k, _ in scrapers._SCRAPERS}
+    assert keys["comet"] == "COMET_ENABLED" and keys["mediafusion"] == "MEDIAFUSION_ENABLED"
+
+
+def test_torznab_results_merge_and_record_also_seen_in(monkeypatch):
+    h = "a" * 40
+    _wire(monkeypatch, zil=[_s(h, "zilean")], com=[_s(h, "comet")], mf=[_s(h, "mediafusion")],
+          tor=[_s(h, "torrentio")])
+    out = scrapers.fetch_candidates("movie", "tt1")
+    assert len(out) == 1 and out[0].source == "zilean"
+    assert out[0].also_seen_in == ("comet", "mediafusion", "torrentio")
+
+
+def test_comet_adapter_passes_url_and_settings(monkeypatch):
+    seen = {}
+
+    def fake_torznab(name, base_url, path, media_type, imdb_id, season=None, episode=None, **kw):
+        seen.update(name=name, base_url=base_url, path=path, kw=kw, season=season, episode=episode)
+        return []
+
+    monkeypatch.setattr(scrapers.torznab_scraper, "fetch", fake_torznab)
+    values = {"COMET_URL": "http://comet:8000", "MEDIAFUSION_URL": "https://mf.test", "MEDIAFUSION_API_KEY": "pw"}
+    monkeypatch.setattr(scrapers._settings, "get", lambda k, d=None: values.get(k, d))
+    scrapers._fetch_comet("series", "tt1", 1, 2, timeout=9)
+    assert seen["name"] == "comet" and seen["base_url"] == "http://comet:8000" and seen["path"] == "/torznab/api"
+    assert seen["season"] == 1 and seen["episode"] == 2
+    assert seen["kw"] == {"api_key": "", "timeout": 9, "raise_on_error": True}
+    scrapers._fetch_mediafusion("movie", "tt1", None, None)
+    assert seen["name"] == "mediafusion" and seen["path"] == "/torznab" and seen["base_url"] == "https://mf.test"
+    assert seen["kw"] == {"api_key": "pw", "raise_on_error": True}
 
 
 def test_a_failing_scraper_does_not_fail_the_call(monkeypatch):

@@ -162,6 +162,7 @@ def _all_scrapers_enabled_and_healthy(monkeypatch):
     monkeypatch.setattr(scrapers.health_cache, "is_up", lambda name: True)
     monkeypatch.setattr(scrapers, "rank_streams",
                         lambda s, prefer_season_pack=False, override=None: list(s))
+    monkeypatch.setattr(scrapers.torznab_scraper, "fetch", lambda *a, **k: [])
 
 
 def test_all_three_failing_at_the_query_layer_raises(monkeypatch, _all_scrapers_enabled_and_healthy):
