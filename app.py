@@ -2082,6 +2082,23 @@ def ui_api_library_activity(imdb_id: str):
     return jsonify(activity=db.get_activity_for_title(imdb_id, (req or {}).get("title"), limit=20, before_id=before))
 
 
+@app.get("/ui/api/library/<imdb_id>/candidates")
+def ui_api_library_candidates(imdb_id: str):
+    """The candidate releases for a movie or one episode; a live scrape."""
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import release_swap
+    req = db.get_request_by_imdb(imdb_id)
+    if not req:
+        return jsonify(error="not found"), 404
+    season = request.args.get("season", type=int)
+    episode = request.args.get("episode", type=int)
+    try:
+        return jsonify(release_swap.candidates(imdb_id, req["media_type"], season, episode))
+    except release_swap.CandidatesUnavailable as exc:
+        return jsonify(error=f"scrapers unavailable: {exc}"), 502
+
+
 def _lib_action(fn, *args):
     if not auth.is_admin():
         return jsonify(error="admin required"), 403
