@@ -4,6 +4,16 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Pick another release from the Library drawer: the Release card (movies)
+  and every present episode row show the candidate list the processor
+  saw, with quality, size, seeders, languages, which scrapers returned it,
+  whether TorBox has it cached, and the rule that dropped a candidate.
+  Choosing one swaps the release behind the existing token, so the next
+  play uses it and nothing on disk changes; the old release can be
+  blacklisted in the same step.
+
 ## [0.20.1] - 2026-09-08
 
 ### Fixed

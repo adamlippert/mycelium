@@ -5,9 +5,11 @@ import type { LibraryDetail } from '../../../../api';
 import { Button } from '../../../../components/primitives';
 import { ACTIONS } from '../actions';
 import { ActionButton, DrawerCard, Row } from './DrawerCard';
+import { ReleasesPanel } from '../ReleasesPanel';
 
 function Season({ d, season, onDone }: { d: LibraryDetail; season: { season: number; present: number; wanted: number }; onDone: () => void }) {
   const [open, setOpen] = useState(false);
+  const [swapping, setSwapping] = useState<number | null>(null);
   const q = useQuery({ queryKey: ['library-season', d.request.imdb_id, season.season], queryFn: () => api.librarySeason(d.request.imdb_id, season.season), enabled: open });
   const pad = (n: number) => String(n).padStart(2, '0');
   return (
@@ -25,9 +27,13 @@ function Season({ d, season, onDone }: { d: LibraryDetail; season: { season: num
                 <span className="text-muted">{e.present ? '✓' : e.wanted_status || 'missing'}{e.air_date ? `, aired ${e.air_date}` : ''}{e.attempt_count ? `, ${e.attempt_count} attempts` : ''}{e.last_attempted ? `, last try ${e.last_attempted.slice(0, 16)}` : ''}</span>
               </span>
               {!e.present && <ActionButton label={`Retry S${pad(season.season)}E${pad(e.episode)}`} run={() => ACTIONS.retryEpisode(d, season.season, e.episode)} onDone={onDone} />}
+              {e.present && <Button variant="ghost" aria-label={`Swap S${pad(season.season)}E${pad(e.episode)}`} onClick={() => setSwapping(e.episode)}>Swap</Button>}
             </li>
           ))}
         </ul>
+      )}
+      {swapping != null && (
+        <ReleasesPanel imdb={d.request.imdb_id} season={season.season} episode={swapping} onDone={onDone} onClose={() => setSwapping(null)} />
       )}
     </div>
   );

@@ -39,6 +39,7 @@ describe('drawer cards', () => {
       { season: 2, episode: 3, present: false, strm_path: null, token: null, wanted_status: 'wanted', attempt_count: 4, air_date: '2024-01-01', last_attempted: '2026-09-01 10:00:00' },
     ] });
     apiMocks.libraryAction.mockResolvedValue({ ok: true, message: 'searching S02E03' });
+    apiMocks.libraryCandidates.mockResolvedValue({ current: null, candidates: [] });
     wrap(<EpisodesCard d={base} onDone={() => {}} />);
     expect(screen.getByText(/Season 2/)).toHaveTextContent('2 present, 1 wanted');
     await userEvent.click(screen.getByRole('button', { name: 'Expand season 2' }));
@@ -48,6 +49,11 @@ describe('drawer cards', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry S02E03' }));
     await waitFor(() => expect(apiMocks.libraryAction).toHaveBeenCalledWith('/ui/api/library/tt4/episodes/2/3/retry'));
     expect(await screen.findByText('searching S02E03')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Swap S02E01' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Swap S02E03' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Swap S02E01' }));
+    expect(await screen.findByText('Releases')).toBeInTheDocument();
+    await waitFor(() => expect(apiMocks.libraryCandidates).toHaveBeenCalledWith('tt4', 2, 1));
   });
 
   it('Requests lists every user request with reviewer and note', () => {
