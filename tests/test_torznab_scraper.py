@@ -130,3 +130,17 @@ def test_fetch_treats_bad_xml_as_a_failure(monkeypatch):
 def test_fetch_with_an_empty_base_url_returns_nothing_without_a_request(monkeypatch):
     monkeypatch.setattr(tz.requests, "get", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no request expected")))
     assert tz.fetch("comet", "", "/torznab/api", "movie", "tt1") == []
+
+
+def test_fetch_redacts_the_api_key_from_a_logged_failure(monkeypatch, caplog):
+    def boom(url, params=None, timeout=None):
+        raise tz.requests.exceptions.HTTPError(
+            "403 Client Error for url: https://mf.test/torznab?t=movie&imdbid=tt1&limit=100&apikey=secretpw"
+        )
+
+    monkeypatch.setattr(tz.requests, "get", boom)
+    with caplog.at_level(logging.WARNING):
+        out = tz.fetch("mediafusion", "https://mf.test", "/torznab", "movie", "tt1", api_key="secretpw")
+    assert out == []
+    assert "secretpw" not in caplog.text
+    assert "mediafusion" in caplog.text and "tt1" in caplog.text

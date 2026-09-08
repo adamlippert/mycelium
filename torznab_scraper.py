@@ -21,8 +21,24 @@ from torrentio import _looks_like_season_pack
 log = logging.getLogger(__name__)
 
 _HEX40_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
+_APIKEY_QS_RE = re.compile(r"apikey=[^&\s'\"]*", re.IGNORECASE)
 _NS = "{http://torznab.com/schemas/2015/feed}"
 LIMIT = 100  # MediaFusion clamps to 100; Comet ignores the parameter
+
+
+def _redact(text, api_key: str) -> str:
+    """Strip the Torznab api key out of a URL or exception message before it
+    is logged. requests/urllib3 embed the fully-resolved request URL, apikey
+    included, in HTTPError and ConnectionError text on the two most common
+    failure paths, so the literal key value is scrubbed first (works for any
+    encoding) and the apikey= query fragment is stripped as a backstop
+    (catches a differently-encoded key the literal replace would miss)."""
+    if not text:
+        return ""
+    out = str(text)
+    if api_key:
+        out = out.replace(api_key, "***")
+    return _APIKEY_QS_RE.sub("apikey=***", out)
 
 
 def build_url(base_url: str, path: str, media_type: str, imdb_id: str,
@@ -110,7 +126,7 @@ def fetch(name: str, base_url: str, path: str, media_type: str, imdb_id: str,
         resp.raise_for_status()
         streams, _ = parse_feed(name, resp.text, season)
     except Exception as exc:
-        log.warning("%s request failed for %s: %s", name, imdb_id, exc)
+        log.warning("%s request failed for %s: %s", name, imdb_id, _redact(exc, api_key))
         if raise_on_error:
             raise
         return []
