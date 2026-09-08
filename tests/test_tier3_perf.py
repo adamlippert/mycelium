@@ -187,7 +187,9 @@ def test_vendor_and_hls_have_their_own_chunks():
 
 
 def test_admin_requests_table_renders_one_page():
-    src = _src("frontend/src/pages/admin/Requests.tsx")
-    assert "ALL_REQUESTS_PAGE_SIZE" in src
-    m = re.search(r"filtered\.slice\(", src)
-    assert m, "the table still mounts every filtered row"
+    """The all-requests table moved from admin/Requests.tsx to the Library
+    tab (Task 9), which pages server-side through api.library(query) instead
+    of slicing a client-side array."""
+    src = _src("frontend/src/pages/admin/Library.tsx")
+    assert "api.library(query)" in src
+    assert "state.perPage" in src

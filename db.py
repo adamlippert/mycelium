@@ -1563,6 +1563,17 @@ def clear_failed_hash(info_hash: str) -> None:
         conn.commit()
 
 
+def titles_for_hash(info_hash: str) -> list[dict]:
+    """Requests that used this info_hash directly, or whose virtual_items
+    used it. Used by the Blacklist tab to show which titles a hash affected."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT DISTINCT r.imdb_id, r.title FROM requests r
+               WHERE r.info_hash = ? OR r.imdb_id IN (SELECT imdb_id FROM virtual_items WHERE info_hash = ?)
+               ORDER BY r.title""", (info_hash, info_hash)).fetchall()
+        return [dict(r) for r in rows]
+
+
 # ── webhook idempotency ───────────────────────────────────────────────────────
 
 def webhook_seen(dedup_key: str) -> bool:

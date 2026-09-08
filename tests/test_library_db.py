@@ -137,3 +137,16 @@ def test_the_new_indexes_exist():
     with db._connect() as conn:
         names = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
     assert {"idx_activity_imdb", "idx_user_requests_imdb", "idx_wanted_episodes_imdb_status"} <= names
+
+
+def test_titles_for_hash():
+    db.insert_request("Heat", "tt1", "movie")
+    _item("tt1", "tok", "c" * 40)
+    assert db.titles_for_hash("c" * 40) == [{"imdb_id": "tt1", "title": "Heat"}]
+    assert db.titles_for_hash("d" * 40) == []
+
+
+def test_blacklist_route_attaches_titles_for_each_hash():
+    src = _src("app.py")
+    route = src.split('def ui_api_blacklist():', 1)[1][:300]
+    assert "titles_for_hash" in route

@@ -183,6 +183,8 @@ def test_purge_title_reports_to_seerr_but_delete_does_not():
 # -- the Delete confirmation says where the files go ----------------------------
 
 def test_delete_confirmations_point_at_remove_from_library():
-    for page in ("frontend/src/pages/Requests.tsx", "frontend/src/pages/admin/Requests.tsx"):
-        src = _src(page)
-        assert "use Remove from library instead" in src, page
+    """The admin Requests tab's own delete/purge table moved to the Library
+    tab (Task 9); only the user-facing SPA page still has this Delete vs.
+    Remove from library cross-reference."""
+    src = _src("frontend/src/pages/Requests.tsx")
+    assert "use Remove from library instead" in src

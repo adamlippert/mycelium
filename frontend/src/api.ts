@@ -684,6 +684,7 @@ export interface BlacklistItem {
   fail_count: number;
   last_error: string | null;
   last_attempt: string | null;
+  titles: { imdb_id: string; title: string }[];
 }
 
 export interface ArrConn {

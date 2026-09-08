@@ -7,8 +7,6 @@ import { ToastProvider } from '../../components/primitives';
 
 const apiMocks = vi.hoisted(() => ({
   repairOverview: vi.fn(),
-  playabilityState: vi.fn(),
-  reResolve: vi.fn(),
   maintenanceRepairAll: vi.fn(),
   maintenanceRunCleanup: vi.fn(),
   maintenanceAutoUpgrade: vi.fn(),
@@ -76,25 +74,8 @@ describe('Maintenance tab', () => {
     apiMocks.arrStatus.mockResolvedValue({
       running: false, kind: null, total: 0, done: 0, added: 0, skipped: 0, errors: 0, message: '',
     });
-    apiMocks.playabilityState.mockResolvedValue({
-      items: [
-        {
-          content_key: 'tt0133093',
-          status: 'degraded',
-          last_ok_provider: 'torbox',
-          last_ok_at: '2026-08-25 12:00:00',
-          last_fail_reason: 'TB_429',
-          consecutive_failures: 4,
-          updated_at: '2026-08-30 09:00:00',
-          title: 'The Matrix',
-          token: 'a1b2c3d4e5f60718',
-          strm_path: '/media/movies/The Matrix (1999)/The Matrix (1999).strm',
-        },
-      ],
-    });
     for (const fn of Object.values(apiMocks)) {
-      if (fn !== apiMocks.repairOverview && fn !== apiMocks.arrStatus
-          && fn !== apiMocks.playabilityState) fn.mockResolvedValue({});
+      if (fn !== apiMocks.repairOverview && fn !== apiMocks.arrStatus) fn.mockResolvedValue({});
     }
   });
 
@@ -146,28 +127,10 @@ describe('Maintenance tab', () => {
     await waitFor(() => expect(apiMocks.maintenanceStrmRescan).toHaveBeenCalled());
   });
 
-  it('lists degraded items with their failure state and a re-resolve action', async () => {
+  it('points to the Library tab drawer instead of a playability panel', async () => {
     renderIt();
-    await waitFor(() => expect(screen.getByText('The Matrix')).toBeInTheDocument());
-    expect(screen.getByText('TB_429')).toBeInTheDocument();
-    expect(screen.getByText('4')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Re-resolve' })).toBeInTheDocument();
-  });
-
-  it('re-resolve calls the endpoint with the row token', async () => {
-    apiMocks.reResolve.mockResolvedValue({ ok: true, resolved: true, title: 'The Matrix' });
-    renderIt();
-    await waitFor(() => expect(screen.getByText('The Matrix')).toBeInTheDocument());
-
-    await userEvent.click(screen.getByRole('button', { name: 'Re-resolve' }));
-
-    await waitFor(() => expect(apiMocks.reResolve).toHaveBeenCalledWith('a1b2c3d4e5f60718'));
-  });
-
-  it('shows the empty state when nothing is degraded', async () => {
-    apiMocks.playabilityState.mockResolvedValue({ items: [] });
-    renderIt();
-    await waitFor(() =>
-      expect(screen.getByText(/Nothing degraded/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Foo')).toBeInTheDocument());
+    expect(screen.getByText(/Per-title playability moved to the Library tab/)).toBeInTheDocument();
+    expect(screen.queryByText('Playability')).not.toBeInTheDocument();
   });
 });

@@ -2,6 +2,31 @@
 
 All notable changes to Mycelium are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Admin Library tab: every title in one table with status and failure
+  reason, release, requester, playability, missing-episode and retry
+  badges; saved views (Needs attention, Wanted, Queue, Incomplete series,
+  Unmirrored); filters by type, status, problem, requester and date;
+  sortable columns; server-side paging; a bulk action bar (retry,
+  re-resolve, mirror, remove; run now and drop from queue in the Queue
+  view). Clicking a title opens a drawer with everything Mycelium knows
+  about it and its actions: retry, re-resolve, purge, mirror to the arr,
+  blacklist a hash, reset playability, per-episode retry and series
+  recheck, a per-title quality override, request history and the
+  activity log.
+- `activity_log.imdb_id` so the drawer can show a title's history.
+
+### Changed
+
+- The admin Requests tab keeps pending approvals and the auto-approve
+  rules; its request list moved to the Library tab. Maintenance lost its
+  per-token playability panel (the drawer replaces it); the Blacklist tab
+  shows which titles used each hash; the Overview's retry-queue count links
+  to the Queue view.
+
 ## [0.18.0] - 2026-09-07
 
 ### Changed

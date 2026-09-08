@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { api } from '../../api';
 import { Card, StatTile, StatusDot } from '../../components/primitives';
 
@@ -118,7 +119,16 @@ export default function Overview() {
         <StatTile
           value={statsQ.isLoading ? '-' : String(queueDepth)}
           label="Queue depth"
-          sub={statsQ.isLoading ? undefined : queueSub}
+          sub={
+            statsQ.isLoading ? undefined : (
+              <>
+                {queueSub}{' · '}
+                <Link to={{ hash: 'library?view=queue' }} className="text-accent-light hover:underline">
+                  Open queue
+                </Link>
+              </>
+            )
+          }
         />
         <StatTile
           value={torboxQ.isLoading ? '-' : torboxQ.isError ? 'unavailable' : String(torboxCount)}

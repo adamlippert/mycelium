@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 const GLOW: Record<string, string> = {
   accent: 'rgba(97,82,223,0.5)',
   ok: 'rgba(37,140,96,0.4)',
@@ -13,7 +15,7 @@ export function StatTile({
 }: {
   value: string;
   label: string;
-  sub?: string;
+  sub?: ReactNode;
   glow?: 'accent' | 'ok' | 'warn' | 'danger';
 }) {
   return (

@@ -1,21 +1,21 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api';
-import type { GenreRule, RequestRow } from '../../api';
+import type { GenreRule } from '../../api';
 import type { UserRequest } from '../../types';
-import { Card, DataTable, GenreRuleRows, Pill, statusLabel, statusToPillState } from '../../components/primitives';
+import { Card, DataTable, GenreRuleRows } from '../../components/primitives';
 import type { Column } from '../../components/primitives';
 
 export default function Requests() {
   return (
     <div className="space-y-8">
+      <p className="text-sm text-muted">
+        Looking for a title? <Link to={{ hash: 'library' }} className="text-accent-light hover:underline">Open the Library tab.</Link>
+      </p>
       <section>
         <h2 className="mb-3 text-lg font-bold">Pending approvals</h2>
         <PendingApprovalsPanel />
-      </section>
-      <section>
-        <h2 className="mb-3 text-lg font-bold">All requests</h2>
-        <AllRequestsPanel />
       </section>
       <AutoApprovePanel />
     </div>
@@ -100,130 +100,6 @@ function PendingApprovalsPanel() {
   ];
 
   return <DataTable columns={columns} rows={rows} empty="No requests awaiting review" />;
-}
-
-const ALL_REQUESTS_PAGE_SIZE = 50;
-
-function AllRequestsPanel() {
-  const qc = useQueryClient();
-  const [query, setQuery] = useState('');
-  const [page, setPage] = useState(1);
-  const { data } = useQuery({ queryKey: ['requests-all'], queryFn: api.requestsAll });
-  const deleteMut = useMutation({
-    mutationFn: (id: number) => api.deleteRequest(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['requests-all'] }),
-  });
-  const purgeMut = useMutation({
-    mutationFn: (id: number) => api.purgeRequest(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['requests-all'] }),
-  });
-
-  const allRows = data?.items ?? [];
-  const q = query.trim().toLowerCase();
-  const filtered = q
-    ? allRows.filter((r) => r.title.toLowerCase().includes(q) || r.imdb_id.toLowerCase().includes(q))
-    : allRows;
-  // Only one page goes into the DOM; the endpoint returns up to 5,000 rows
-  // and mounting them all as <tr> nodes froze the tab.
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ALL_REQUESTS_PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const rows = filtered.slice((safePage - 1) * ALL_REQUESTS_PAGE_SIZE, safePage * ALL_REQUESTS_PAGE_SIZE);
-
-  const columns: Column<RequestRow>[] = [
-    { key: 'title', header: 'Title', render: (r) => <span className="font-medium">{r.title || '-'}</span> },
-    {
-      key: 'imdb',
-      header: 'IMDB',
-      render: (r) => <span className="font-mono text-xs text-muted">{r.imdb_id || '-'}</span>,
-    },
-    { key: 'type', header: 'Type', render: (r) => <span className="text-muted">{r.media_type || '-'}</span> },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (r) => {
-        const st = r.status || 'pending';
-        return <Pill state={statusToPillState(st)}>{statusLabel(st)}</Pill>;
-      },
-    },
-    {
-      key: 'added',
-      header: 'Added',
-      render: (r) => <span className="text-xs text-muted">{(r.created_at || '').slice(0, 16)}</span>,
-    },
-    {
-      key: 'actions',
-      header: '',
-      align: 'right',
-      render: (r) => (
-        <>
-          <button
-            type="button"
-            title="Forget the request record. Keeps the files in your library."
-            onClick={() => {
-              if (confirm(`Forget the request "${r.title}"?\n\nThe files stay in your library and the title stays in Jellyfin. To delete the title, use Remove from library instead.`)) {
-                deleteMut.mutate(r.id);
-              }
-            }}
-            disabled={deleteMut.isPending}
-            className="rounded border border-border px-3 py-1 text-xs hover:bg-bg disabled:opacity-50"
-          >
-            Delete
-          </button>
-          <button
-            type="button"
-            title="Delete the .strm files too. Removes the title from Jellyfin/Plex."
-            onClick={() => {
-              if (
-                confirm(
-                  `Remove "${r.title}" from the library?\n\nThis deletes its .strm files and it will disappear from Jellyfin and Plex. This cannot be undone.`,
-                )
-              ) {
-                purgeMut.mutate(r.id);
-              }
-            }}
-            disabled={purgeMut.isPending}
-            className="ml-2 rounded bg-danger/20 px-3 py-1 text-xs text-danger hover:bg-danger/30 disabled:opacity-50"
-          >
-            Remove from library
-          </button>
-        </>
-      ),
-    },
-  ];
-
-  return (
-    <div className="space-y-3">
-      <input
-        type="text"
-        value={query}
-        onChange={(e) => { setQuery(e.target.value); setPage(1); }}
-        placeholder="Search..."
-        className="w-full max-w-sm rounded border border-border bg-bg px-3 py-2 text-sm"
-      />
-      <DataTable columns={columns} rows={rows} empty="No requests" />
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-2">
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={safePage === 1}
-            className="rounded border border-border px-3 py-1 text-sm text-muted hover:text-white disabled:opacity-30 transition"
-          >
-            Prev
-          </button>
-          <span className="text-sm text-muted">{safePage} / {totalPages}</span>
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={safePage === totalPages}
-            className="rounded border border-border px-3 py-1 text-sm text-muted hover:text-white disabled:opacity-30 transition"
-          >
-            Next
-          </button>
-        </div>
-      )}
-    </div>
-  );
 }
 
 function AutoApprovePanel() {

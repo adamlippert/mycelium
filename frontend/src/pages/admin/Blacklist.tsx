@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api';
 import type { BlacklistItem } from '../../api';
@@ -33,6 +34,26 @@ export default function Blacklist() {
       ),
     },
     { key: 'failures', header: 'Failures', render: (i) => <span className="font-mono">{i.fail_count}</span> },
+    {
+      key: 'titles',
+      header: 'Titles',
+      render: (i) =>
+        i.titles.length ? (
+          <span className="flex flex-wrap gap-x-2 gap-y-1">
+            {i.titles.map((t) => (
+              <Link
+                key={t.imdb_id}
+                to={{ hash: `library?open=${t.imdb_id}` }}
+                className="text-xs text-accent-light hover:underline"
+              >
+                {t.title}
+              </Link>
+            ))}
+          </span>
+        ) : (
+          <span className="text-xs text-muted">-</span>
+        ),
+    },
     {
       key: 'error',
       header: 'Last Error',

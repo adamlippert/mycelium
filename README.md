@@ -69,7 +69,7 @@ that streams directly from TorBox or RealDebrid. No FUSE, no rclone, no local do
 | | Path | Purpose |
 |--|--|--|
 | **SPA** | `/` | Discover, Library, Watchlist, multi-user request management |
-| **Admin** | `/admin` | Overview (health, quota, storage), Requests, Users, Settings, Filtering rules, Scrapers, Blacklist, Maintenance, Logs, Releases |
+| **Admin** | `/admin` | Overview (health, quota, storage), Library (every title with its status, requester, playability and queue state, plus a drawer with retry, re-resolve, purge, mirror and blacklist actions), Requests (approvals and auto-approve rules), Users, Settings, Filtering rules, Scrapers, Blacklist, Maintenance, Logs, Releases |
 
 **Works with:**
 

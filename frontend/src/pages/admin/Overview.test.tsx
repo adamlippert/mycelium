@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi } from 'vitest';
 import Overview from './Overview';
@@ -77,7 +78,13 @@ vi.mock('../../api', async () => {
 
 function renderIt() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}><Overview /></QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={['/admin']}>
+        <Overview />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
 }
 
 describe('Overview tab', () => {
@@ -90,6 +97,8 @@ describe('Overview tab', () => {
       expect(screen.getByText('41 ok / 7 fail')).toBeInTheDocument();
       // Queue depth: retry-queue rows (4) + active wanted (9)
       expect(screen.getByText('13')).toBeInTheDocument();
+      const openQueue = screen.getByRole('link', { name: 'Open queue' });
+      expect(openQueue).toHaveAttribute('href', expect.stringContaining('library?view=queue'));
       // TorBox library: item count + summed size in GiB
       expect(screen.getByText('2')).toBeInTheDocument();
       expect(screen.getByText('6.0 GiB')).toBeInTheDocument();

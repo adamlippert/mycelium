@@ -19,8 +19,8 @@ import Settings from './Settings';
 export const ADMIN_TABS: { id: string; label: string; component: ComponentType }[] = [
   { id: 'overview', label: 'Overview', component: Overview },
   { id: 'library', label: 'Library', component: Library },
-  { id: 'users', label: 'Users', component: Users },
   { id: 'requests', label: 'Requests', component: Requests },
+  { id: 'users', label: 'Users', component: Users },
   { id: 'filter-rules', label: 'Filter rules', component: FilterRules },
   { id: 'scrapers', label: 'Scrapers', component: Scrapers },
   { id: 'logs', label: 'Logs', component: Logs },

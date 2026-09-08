@@ -27,7 +27,7 @@ function renderIt(hash = '') {
 describe('AdminLayout', () => {
   it('declares the eleven tabs in order', () => {
     expect(ADMIN_TABS.map((t) => t.id)).toEqual([
-      'overview', 'library', 'users', 'requests', 'filter-rules', 'scrapers',
+      'overview', 'library', 'requests', 'users', 'filter-rules', 'scrapers',
       'logs', 'releases', 'maintenance', 'blacklist', 'settings',
     ]);
   });

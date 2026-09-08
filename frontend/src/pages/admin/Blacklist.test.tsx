@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Blacklist from './Blacklist';
@@ -19,7 +20,13 @@ vi.mock('../../api', async () => {
 
 function renderIt() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}><Blacklist /></QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={['/admin']}>
+        <Blacklist />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
 }
 
 describe('Blacklist tab', () => {
@@ -32,6 +39,7 @@ describe('Blacklist tab', () => {
           fail_count: 3,
           last_error: 'ADD_FAILED',
           last_attempt: '2026-08-20 10:00:00',
+          titles: [{ imdb_id: 'tt0113277', title: 'Heat' }],
         },
       ],
     });
@@ -46,6 +54,14 @@ describe('Blacklist tab', () => {
       expect(screen.getByText('ADD_FAILED')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /clear/i })).toBeInTheDocument();
     });
+  });
+
+  it('links each affected title to the Library tab drawer', async () => {
+    renderIt();
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Heat' })).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: 'Heat' })).toHaveAttribute(
+      'href', expect.stringContaining('library?open=tt0113277'),
+    );
   });
 
   it('clears a hash after confirming', async () => {
