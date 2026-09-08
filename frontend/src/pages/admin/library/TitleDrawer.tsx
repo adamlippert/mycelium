@@ -7,6 +7,12 @@ import { ActionButton } from './cards/DrawerCard';
 import { StatusCard } from './cards/StatusCard';
 import { ReleaseCard } from './cards/ReleaseCard';
 import { PlayabilityCard } from './cards/PlayabilityCard';
+import { EpisodesCard } from './cards/EpisodesCard';
+import { RequestsCard } from './cards/RequestsCard';
+import { PreferencesCard } from './cards/PreferencesCard';
+import { ArrCard } from './cards/ArrCard';
+import { HashesCard } from './cards/HashesCard';
+import { ActivityCard } from './cards/ActivityCard';
 
 export function TitleDrawer({ imdb, onClose, onChanged }: { imdb: string; onClose: () => void; onChanged: () => void }) {
   const qc = useQueryClient();
@@ -44,6 +50,12 @@ export function TitleDrawer({ imdb, onClose, onChanged }: { imdb: string; onClos
           <StatusCard d={d} onDone={refresh} />
           <ReleaseCard d={d} />
           <PlayabilityCard d={d} onDone={refresh} />
+          <EpisodesCard d={d} onDone={refresh} />
+          <RequestsCard d={d} onDone={refresh} />
+          <PreferencesCard d={d} onDone={refresh} />
+          <ArrCard d={d} onDone={refresh} />
+          <HashesCard d={d} onDone={refresh} />
+          <ActivityCard d={d} />
         </div>
       )}
     </aside>

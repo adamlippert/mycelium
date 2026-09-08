@@ -38,7 +38,6 @@ describe('TitleDrawer', () => {
     expect(screen.getByText('/media/movies/Heat (1995)/Heat (1995).strm')).toBeInTheDocument();
     expect(screen.getByText('cdn 404')).toBeInTheDocument();
     expect(screen.queryByText('Requests')).not.toBeInTheDocument();
-    expect(screen.queryByText('Preferences')).not.toBeInTheDocument();
   });
 
   it('runs an action, shows its message and refetches', async () => {
