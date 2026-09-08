@@ -38,10 +38,14 @@ export function useFocusTrap(containerRef: RefObject<HTMLElement | null>) {
         if (active === last || !container.contains(active)) { e.preventDefault(); first.focus(); }
       }
     };
-    container.addEventListener('keydown', onKeyDown);
+    // Attached to document, not the container: the drawer has no backdrop
+    // that swallows clicks, so focus can land outside the panel (a click on
+    // a row behind it). Attaching only to the container would then never
+    // see the Tab keypress and aria-modal would be a lie.
+    document.addEventListener('keydown', onKeyDown);
 
     return () => {
-      container.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keydown', onKeyDown);
       if (previouslyFocused && document.contains(previouslyFocused)) previouslyFocused.focus();
     };
   }, [containerRef]);

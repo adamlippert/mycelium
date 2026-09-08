@@ -82,8 +82,10 @@ export function Control({
             placeholder={cleared ? '(cleared, will remove on save)' : field.value ? '(already set, type to replace)' : '(not set)'}
             onChange={(e) => onChange(e.target.value)} className={INPUT} />
           <Button variant="ghost" aria-label={`${reveal ? 'Hide' : 'Show'} ${field.label}`} onClick={() => setReveal((r) => !r)}>{reveal ? 'Hide' : 'Show'}</Button>
-          {field.value === true && (
-            <Button variant="ghost" aria-label={`Clear ${field.label}`} onClick={() => onChange(SECRET_CLEARED)}>Clear</Button>
+          {field.overridden === true && (
+            <Button variant="ghost" aria-label={`Clear ${field.label}`}
+              title="Removes the value stored in the database; a value supplied through the environment stays"
+              onClick={() => onChange(SECRET_CLEARED)}>Clear</Button>
           )}
         </span>
       );

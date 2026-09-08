@@ -85,7 +85,12 @@ export function serialize(sections: SettingsSection[], values: Values, initial: 
 export function serviceValues(sections: SettingsSection[], service: string, values: Values): Record<string, string> {
   const out: Record<string, string> = {};
   sections.forEach((s) => s.fields.forEach((f) => {
-    if (f.test === service) out[f.key] = asString(values[f.key]);
+    if (f.test !== service) return;
+    const v = values[f.key];
+    // A cleared secret must not be sent to the tester as the literal
+    // sentinel: that reads as a real value and the tester reports an
+    // auth failure instead of "not set".
+    out[f.key] = v === SECRET_CLEARED ? '' : asString(v);
   }));
   return out;
 }

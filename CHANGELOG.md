@@ -9,10 +9,9 @@ All notable changes to Mycelium are documented in this file.
 - The source column now means release source. `virtual_items.source` and
   `requests.source` used to hold the scraper's name (torrentio, zilean)
   while the swap panel showed a release label (WEB-DL, BluRay, REMUX); the
-  processor now writes the label everywhere, `release_tags.source_label`
-  is the one helper, and a one-off startup migration re-derives labels for
-  existing rows where the stored name allows it and blanks a bare scraper
-  name where it does not.
+  processor now writes the label or nothing, never a scraper name,
+  `release_tags.source_label` is the one helper, and a one-off startup
+  migration blanks a bare scraper name left over in existing rows.
 - The catbox auto-upgrader replaces a release through `release_swap.swap`,
   so both paths share the token lock, the cleared RealDebrid id, the
   fast-start cache drop and the playability reset.
@@ -28,20 +27,22 @@ All notable changes to Mycelium are documented in this file.
   pause note.
 - Settings: MultiSelect has a keyboard path (arrows, Enter, Backspace on an
   empty input, Escape); a Select whose value is not in its list shows that
-  value as a disabled entry instead of a blank; a stored secret has a
-  Clear button; blank-field messages from the service testers use the
-  schema labels.
+  value as a disabled entry instead of a blank; a secret stored in the
+  database gets a Clear button, while a value supplied through the
+  environment stays; blank-field messages from the service testers use
+  the schema labels.
 - Admin polish: the title drawer is a proper modal dialog (focus moves in
-  on open and back on close, Tab stays inside, Escape closes); the type
-  icons are hidden from screen readers with the type as text; the Arr card
-  only renders when the mirror is on; the bulk-action bar keeps its final
-  "N of N done" line after a fully successful run; the Blacklist tab loads
-  its titles in one grouped query.
+  on open and back on close, Tab stays inside even when a click moves
+  focus out of the panel first, Escape closes); the type icons are hidden
+  from screen readers with the type as text; the Arr card only renders
+  when the mirror is on; the bulk-action bar keeps its final "N of N
+  done" line after a fully successful run; the Blacklist tab loads its
+  titles in one grouped query per 400 hashes.
 
 ### Fixed
 
-- A negative season or episode reference is rejected by the swap
-  endpoints instead of matching nothing.
+- A negative season or episode reference is rejected by both the
+  candidates and the swap endpoint instead of matching nothing.
 - The README no longer claims every integration has a Test button; it
   names the services that do.
 

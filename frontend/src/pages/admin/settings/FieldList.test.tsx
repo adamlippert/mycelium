@@ -62,8 +62,8 @@ describe('FieldList endpoint', () => {
 describe('secret field Clear button', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  function renderSecret(setValue: boolean, endpoint: 'settings' | 'setup' = 'settings') {
-    const secretField = f({ key: 'TORBOX_API_KEY', label: 'TorBox API key', kind: 'secret', value: setValue });
+  function renderSecret(setValue: boolean, overridden: boolean, endpoint: 'settings' | 'setup' = 'settings') {
+    const secretField = f({ key: 'TORBOX_API_KEY', label: 'TorBox API key', kind: 'secret', value: setValue, overridden });
     const section: SettingsSection = { id: 's', title: 'S', description: 'd', icon: 'x', fields: [secretField] };
     const onChange = vi.fn();
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -75,20 +75,25 @@ describe('secret field Clear button', () => {
     return onChange;
   }
 
-  it('offers a Clear button when the secret is set, and marks it cleared like a typed value', async () => {
-    const onChange = renderSecret(true);
+  it('offers a Clear button when the secret is set and stored in the database, and marks it cleared like a typed value', async () => {
+    const onChange = renderSecret(true, true);
     const clear = screen.getByRole('button', { name: 'Clear TorBox API key' });
     await userEvent.click(clear);
     expect(onChange).toHaveBeenCalledWith('TORBOX_API_KEY', SECRET_CLEARED);
   });
 
   it('does not offer a Clear button when the secret is not set', () => {
-    renderSecret(false);
+    renderSecret(false, false);
+    expect(screen.queryByRole('button', { name: 'Clear TorBox API key' })).not.toBeInTheDocument();
+  });
+
+  it('does not offer a Clear button when the secret is set but not overridden (comes from the environment)', () => {
+    renderSecret(true, false);
     expect(screen.queryByRole('button', { name: 'Clear TorBox API key' })).not.toBeInTheDocument();
   });
 
   it('works the same through the setup wizard endpoint', async () => {
-    const onChange = renderSecret(true, 'setup');
+    const onChange = renderSecret(true, true, 'setup');
     await userEvent.click(screen.getByRole('button', { name: 'Clear TorBox API key' }));
     expect(onChange).toHaveBeenCalledWith('TORBOX_API_KEY', SECRET_CLEARED);
   });

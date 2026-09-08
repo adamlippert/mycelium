@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { SettingsField, SettingsSection } from '../../../api';
 import {
   countChanges, dependsSatisfied, initialValue, initialValues, isVisible, matchesQuery,
-  sectionMatches, serialize, serviceValues,
+  sectionMatches, serialize, serviceValues, SECRET_CLEARED,
 } from './visibility';
 
 const f = (over: Partial<SettingsField>): SettingsField => ({
@@ -71,5 +71,9 @@ describe('serialize', () => {
     const initial = initialValues(s);
     expect(countChanges(s, { ...initial, RADARR_URL: 'http://r' }, initial)).toBe(1);
     expect(countChanges(s, initial, initial)).toBe(0);
+  });
+  it('maps a cleared secret to an empty string instead of the sentinel', () => {
+    const s = [section([f({ key: 'RADARR_API_KEY', kind: 'secret', test: 'radarr' })])];
+    expect(serviceValues(s, 'radarr', { RADARR_API_KEY: SECRET_CLEARED })).toEqual({ RADARR_API_KEY: '' });
   });
 });

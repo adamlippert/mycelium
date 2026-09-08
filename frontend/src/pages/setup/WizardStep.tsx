@@ -1,5 +1,6 @@
 import type { SettingsField, SettingsSection, WizardStepDef } from '../../api';
 import { FieldList } from '../admin/settings/FieldList';
+import { SECRET_CLEARED } from '../admin/settings/visibility';
 import type { FieldValue, Values } from '../admin/settings/visibility';
 
 /** One wizard step: its title and intro, then exactly the schema fields it
@@ -33,7 +34,11 @@ export function missingRequired(step: WizardStepDef, fields: SettingsField[], va
     .filter((f): f is SettingsField => Boolean(f && f.required))
     .filter((f) => {
       const v = values[f.key];
-      const typed = typeof v === 'string' ? v.trim() !== '' : Array.isArray(v) ? v.length > 0 : Boolean(v);
+      // The cleared-secret sentinel is not a typed value: it means the
+      // user just clicked Clear, so the field is still empty as far as
+      // "required" is concerned.
+      const typed = v === SECRET_CLEARED ? false
+        : typeof v === 'string' ? v.trim() !== '' : Array.isArray(v) ? v.length > 0 : Boolean(v);
       const alreadySet = f.kind === 'secret' ? f.value === true : false;
       return !typed && !alreadySet;
     });
