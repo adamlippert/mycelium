@@ -7,10 +7,13 @@ manual swap when the auto-picked release turns out to be wrong.
 from __future__ import annotations
 
 import logging
+import re
 
 import db
 
 log = logging.getLogger(__name__)
+
+_HASH = re.compile(r"^[0-9a-fA-F]{40}$")
 
 # Display label for each release_tags.detect_sources() value. Anything not
 # listed here falls back to an upper-cased copy of the raw tag.
@@ -127,3 +130,61 @@ def candidates(imdb_id: str, media_type: str, season: int | None = None, episode
                    "source": current_row["source"] if current_row else None}
 
     return {"current": current, "candidates": rows}
+
+
+def _drop_faststart_cache(token: str) -> None:
+    try:
+        import mp4_faststart
+        path = mp4_faststart._cache_path(token)
+        if path.exists():
+            path.unlink()
+    except Exception as exc:
+        log.debug("No fast-start cache to drop for %s: %s", token, exc)
+
+
+def swap(item: dict, candidate: dict, blacklist_old: bool = False) -> dict:
+    """Put candidate's hash behind item's token. Nothing on disk changes."""
+    import catbox
+    old_hash = (item.get("info_hash") or "").lower()
+    old_quality = item.get("quality") or "?"
+    new_hash = candidate["info_hash"].lower()
+    magnet = f"magnet:?xt=urn:btih:{new_hash}"
+    db.update_virtual_item_upgrade(item["token"], new_hash, magnet, candidate.get("quality"), candidate.get("source"))
+    catbox.invalidate_url_cache(item["token"])
+    _drop_faststart_cache(item["token"])
+    key = catbox._content_key(item)
+    if key:
+        db.reset_playability_state(key)
+    if item.get("season") is None and item.get("imdb_id"):
+        req = db.get_request_by_imdb(item["imdb_id"])
+        if req:
+            db.set_request_release(req["id"], candidate.get("quality"), candidate.get("source"), new_hash)
+    title = item.get("title") or item.get("imdb_id") or "?"
+    label = " ".join(x for x in (candidate.get("quality"), candidate.get("source")) if x) or new_hash[:8]
+    db.log_activity("swapped", title, f"{old_quality} to {candidate.get('quality') or '?'} ({candidate.get('name') or new_hash[:8]})",
+                    True, imdb_id=item.get("imdb_id"))
+    if blacklist_old and old_hash:
+        db.blacklist_hash(old_hash, "replaced by admin")
+    return {"ok": True, "message": f"next play uses {label}"}
+
+
+def swap_by_hash(imdb_id: str, info_hash: str, season: int | None = None, episode: int | None = None,
+                 blacklist_old: bool = False) -> dict:
+    if not _HASH.match(info_hash or ""):
+        return {"ok": False, "message": "not a valid info hash"}
+    req = db.get_request_by_imdb(imdb_id)
+    if not req:
+        return {"ok": False, "message": "unknown title"}
+    item = find_item(imdb_id, season, episode)
+    if not item:
+        return {"ok": False, "message": "no file for that episode" if season is not None else "no file for this title"}
+    if (item.get("info_hash") or "").lower() == info_hash.lower():
+        return {"ok": False, "message": "that is already the current release"}
+    try:
+        listing = candidates(imdb_id, req["media_type"], season, episode)
+    except CandidatesUnavailable as exc:
+        return {"ok": False, "message": f"scrapers unavailable: {exc}"}
+    match = next((c for c in listing["candidates"] if c["info_hash"] == info_hash.lower()), None)
+    if not match:
+        return {"ok": False, "message": "that hash is not in the candidate list"}
+    return swap(item, match, blacklist_old)

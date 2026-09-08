@@ -613,6 +613,16 @@ def set_request_status(row_id: int, status: str) -> None:
         conn.commit()
 
 
+def set_request_release(row_id: int, quality: str | None, source: str | None, info_hash: str | None) -> None:
+    """Replace a request's release fields only; status and error stay."""
+    with _connect() as conn:
+        conn.execute(
+            """UPDATE requests SET quality=?, source=?, info_hash=?,
+               updated_at=strftime('%Y-%m-%d %H:%M:%S','now') WHERE id=?""",
+            (quality, source, info_hash, row_id))
+        conn.commit()
+
+
 def mark_arr_mirrored(imdb_id: str) -> None:
     """Record that Radarr/Sonarr holds this title (added by us, or found
     present). Read by arr_sync.reconcile to tell "deleted in the arr" from

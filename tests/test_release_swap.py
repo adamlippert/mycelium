@@ -174,3 +174,77 @@ def test_candidates_route_exists_and_is_admin_only():
     assert route in src
     body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
     assert "auth.is_admin()" in body and "release_swap" in body and "502" in body
+
+
+def _candidate(h, quality="2160p", source="REMUX", name="Heat.1995.2160p.REMUX"):
+    return {"info_hash": h, "name": name, "quality": quality, "source": source, "size_gb": 60.0, "seeders": 5,
+            "languages": ["en"], "cached": False, "scrapers": ["zilean"], "kept": True, "rule": None, "value": None, "current": False}
+
+
+def test_swap_movie_replaces_the_release_behind_the_token(monkeypatch):
+    import catbox
+    rid = db.insert_request("Heat", "tt1", "movie")
+    db.update_request(rid, "success", quality="1080p", source="WEB-DL", info_hash=H4)
+    _item("tt1", "tok", H4)
+    db.update_virtual_torbox_id("tok", 77)
+    db.update_playability_fail("tt1", "cdn 404")
+    invalidated = []
+    monkeypatch.setattr(catbox, "invalidate_url_cache", lambda token=None: invalidated.append(token))
+    out = rs.swap(rs.find_item("tt1"), _candidate(H3), blacklist_old=True)
+    assert out["ok"] is True and "2160p" in out["message"]
+    item = db.get_virtual_item("tok")
+    assert item["info_hash"] == H3 and item["magnet"].endswith(H3) and item["quality"] == "2160p"
+    assert item["torbox_id"] is None and item["file_id"] is None
+    assert invalidated == ["tok"]
+    assert db.get_playability_state("tt1")["status"] == "unknown"
+    row = db.get_request(rid)
+    assert row["status"] == "success" and row["info_hash"] == H3 and row["quality"] == "2160p" and row["source"] == "REMUX"
+    assert H4 in db.get_blacklisted_hashes()
+    act = db.get_activity_for_title("tt1", "Heat")[0]
+    assert act["event"] == "swapped" and "1080p" in act["message"] and "2160p" in act["message"]
+
+
+def test_swap_episode_leaves_the_request_row_alone(monkeypatch):
+    import catbox
+    monkeypatch.setattr(catbox, "invalidate_url_cache", lambda token=None: None)
+    rid = db.insert_request("Loki", "tt4", "series")
+    db.update_request(rid, "success", quality="1080p", source="WEB-DL", info_hash=H1)
+    _item("tt4", "e3", H4, season=2, episode=3)
+    db.update_playability_fail("tt4:S02E03", "timeout")
+    out = rs.swap(rs.find_item("tt4", 2, 3), _candidate(H3))
+    assert out["ok"] is True
+    assert db.get_virtual_item("e3")["info_hash"] == H3
+    assert db.get_playability_state("tt4:S02E03")["status"] == "unknown"
+    row = db.get_request(rid)
+    assert row["info_hash"] == H1 and row["quality"] == "1080p", "the series row keeps its own release"
+    assert H4 not in db.get_blacklisted_hashes()
+
+
+def test_swap_by_hash_validates(monkeypatch, scrapers_fake):
+    import catbox
+    monkeypatch.setattr(catbox, "invalidate_url_cache", lambda token=None: None)
+    db.insert_request("Heat", "tt1", "movie")
+    _item("tt1", "tok", H4)
+    assert rs.swap_by_hash("tt1", "short") == {"ok": False, "message": "not a valid info hash"}
+    assert rs.swap_by_hash("tt9", H1)["message"] == "unknown title"
+    assert rs.swap_by_hash("tt1", H4)["message"] == "that is already the current release"
+    assert rs.swap_by_hash("tt1", "e" * 40)["message"] == "that hash is not in the candidate list"
+    assert rs.swap_by_hash("tt1", H1, season=1, episode=1)["message"] == "no file for that episode"
+    out = rs.swap_by_hash("tt1", H1)
+    assert out["ok"] is True and db.get_virtual_item("tok")["info_hash"] == H1
+
+
+def test_set_request_release_keeps_status_and_error():
+    rid = db.insert_request("Heat", "tt1", "movie")
+    db.update_request(rid, "failed", error="old error")
+    db.set_request_release(rid, "2160p", "REMUX", H3)
+    row = db.get_request(rid)
+    assert row["status"] == "failed" and row["error"] == "old error" and row["info_hash"] == H3
+
+
+def test_swap_route_exists_and_delegates():
+    src = _src("app.py")
+    route = '@app.post("/ui/api/library/<imdb_id>/swap")'
+    assert route in src
+    body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
+    assert "auth.is_admin()" in body and "release_swap.swap_by_hash(" in body and "blacklist_old" in body

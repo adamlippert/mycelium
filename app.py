@@ -2099,6 +2099,17 @@ def ui_api_library_candidates(imdb_id: str):
         return jsonify(error=f"scrapers unavailable: {exc}"), 502
 
 
+@app.post("/ui/api/library/<imdb_id>/swap")
+def ui_api_library_swap(imdb_id: str):
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import release_swap
+    p = request.get_json(silent=True) or {}
+    return jsonify(**release_swap.swap_by_hash(
+        imdb_id, str(p.get("info_hash") or ""), p.get("season"), p.get("episode"),
+        blacklist_old=bool(p.get("blacklist_old"))))
+
+
 def _lib_action(fn, *args):
     if not auth.is_admin():
         return jsonify(error="admin required"), 403
