@@ -12,6 +12,7 @@ from pathlib import Path
 
 import db
 import jellyfin
+import release_tags
 import scrapers
 import settings as _settings
 import strm_generator
@@ -75,9 +76,14 @@ def _better_cached(candidates: list, current_quality: str, current_hash: str) ->
 
 def _run_auto_upgrade_catbox() -> int:
     """Catbox variant: scan virtual_items for better cached releases.
-    Upgrade = swap magnet/hash/quality in DB only; .strm stays identical."""
-    import catbox
+    Upgrade = swap magnet/hash/quality in DB only; .strm stays identical.
+    The actual swap (virtual item, url-cache invalidation, playability
+    reset, .fsh drop, request release fields, activity log) is
+    release_swap.swap, the same function the admin "pick another release"
+    panel uses, so both paths share every side effect. action="upgraded"
+    keeps this path's activity log distinct from a manual swap."""
     import debrid
+    import release_swap
     upgraded = 0
     items = db.get_upgradeable_virtual_items()
     log.info("Auto-upgrade (catbox): checking %d upgradeable virtual item(s)", len(items))
@@ -99,11 +105,13 @@ def _run_auto_upgrade_catbox() -> int:
             if not better:
                 continue
             log.info("Catbox upgrade: %s  %s → %s", item["title"], item.get("quality"), better.quality)
-            source = better.name.split()[0] if better.name else None
-            db.update_virtual_item_upgrade(item["token"], better.info_hash, better.magnet,
-                                            better.quality, source)
-            catbox.invalidate_url_cache(item["token"])
-            db.log_activity("upgraded", item["title"], f"{item.get('quality')} → {better.quality}", True, imdb_id=item["imdb_id"])
+            candidate = {
+                "info_hash": better.info_hash,
+                "quality": better.quality,
+                "source": release_tags.source_label(better.name),
+                "name": better.name,
+            }
+            release_swap.swap(item, candidate, action="upgraded")
             try:
                 import arr_sync
                 arr_sync.mirror_add(item["imdb_id"], "movie", item.get("tmdb_id"), item["title"])

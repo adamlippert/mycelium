@@ -154,3 +154,24 @@ def test_detect_all_uses_unknown_not_empty_for_silence():
     tags = rt.detect_all("Some.Release.Name", ())
     for category, values in tags.items():
         assert values == (rt.UNKNOWN,), f"{category} was {values!r}"
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("Heat.1995.1080p.WEB-DL.x264", "WEB-DL"),
+    ("Heat.1995.1080p.BluRay.x264", "BluRay"),
+    ("Dune.2160p.UHD.BluRay.REMUX.HEVC", "REMUX"),
+    ("Movie.720p.HDTV.x264", "HDTV"),
+    ("Some.Release.Name", None),
+    ("", None),
+    (None, None),
+])
+def test_source_label(name, expected):
+    assert rt.source_label(name) == expected
+
+
+def test_source_label_falls_back_to_uppercase_for_an_unlabelled_tag():
+    """Every SOURCE_VALUES entry except UNKNOWN has a row in _SOURCE_LABELS
+    today, so this pins the fallback behaviour rather than a live gap: if a
+    new source tag is ever added to _SOURCE_PATTERNS without a label, it
+    still gets a readable (if unstyled) display value instead of None."""
+    assert rt.source_label("Movie.1080p.R5.x264") == rt._SOURCE_LABELS["r5"]

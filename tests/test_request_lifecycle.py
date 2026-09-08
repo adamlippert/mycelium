@@ -120,6 +120,33 @@ def test_per_episode_already_registered_is_success(monkeypatch):
     assert "tt7587890" not in processor._WANTED
 
 
+def test_lazy_season_registers_the_release_source_label_not_the_scraper_name(monkeypatch):
+    """virtual_items.source now means a release-source label (WEB-DL, BluRay,
+    ...), not the winning scraper's name; the Stream's own source="torrentio"
+    must not leak into the write once the release name says WEB-DL."""
+    import blacklist
+    import debrid
+    import strm_generator
+    pack = streams_mod.Stream(
+        name="The.Rookie.S05.1080p.WEB-DL.DDP5.1", title="The.Rookie.S05.1080p.WEB-DL",
+        info_hash="a" * 40, quality="1080p", seeders=10, size_gb=5.0,
+        is_season_pack=True, source="torrentio",
+    )
+    monkeypatch.setattr(processor, "_fetch_season_candidates", lambda *a, **k: [pack])
+    monkeypatch.setattr(blacklist, "filter_candidates", lambda c: list(c))
+    monkeypatch.setattr(debrid, "check_cached_multi", lambda hashes: {"torbox": set(hashes)})
+    monkeypatch.setattr(processor, "_get_season_episode_count", lambda i, s: 3)
+    calls = []
+    monkeypatch.setattr(strm_generator, "create_lazy_episode_strm",
+                        lambda *a, **k: calls.append(k) or True)
+    monkeypatch.setattr(db, "get_virtual_item_by_episode", lambda imdb, s, e: None)
+
+    ok, winner = processor._lazy_register_season(_req(), 5)
+
+    assert ok is True
+    assert calls and calls[0]["source"] == "WEB-DL"
+
+
 def test_deleting_a_request_clears_its_webhook_dedup_key():
     """Otherwise the re-request is swallowed as a duplicate for up to 24h."""
     key = "tt1234567:series:1,2,3"

@@ -71,6 +71,43 @@ def detect_sources(text: str) -> tuple[str, ...]:
     return ()
 
 
+# Display label for each detect_sources() value. Anything not listed here
+# falls back to an upper-cased copy of the raw tag.
+_SOURCE_LABELS = {
+    "remux": "REMUX",
+    "bluray": "BluRay",
+    "bdrip": "BDRip",
+    "brrip": "BRRip",
+    "webdl": "WEB-DL",
+    "webrip": "WEBRip",
+    "web": "WEB",
+    "hdrip": "HDRip",
+    "dvdrip": "DVDRip",
+    "dvd": "DVD",
+    "hdtv": "HDTV",
+    "satrip": "SATRip",
+    "tvrip": "TVRip",
+    "r5": "R5",
+    "ppvrip": "PPVRip",
+    "ts": "TS",
+    "tc": "TC",
+    "scr": "SCR",
+    "cam": "CAM",
+    "workprint": "Workprint",
+}
+
+
+def source_label(name: str) -> str | None:
+    """Release-source display label detected from a release name, for
+    example "WEB-DL" or "BluRay". None when nothing in the name matches a
+    known source tag, which callers should treat as "could not derive one",
+    not "the release has no source"."""
+    found = detect_sources(name or "")
+    if not found:
+        return None
+    return _SOURCE_LABELS.get(found[0], found[0].upper())
+
+
 ENCODE_VALUES = ("hevc", "avc", "av1", "xvid", "divx", UNKNOWN)
 
 _ENCODE_PATTERNS = (

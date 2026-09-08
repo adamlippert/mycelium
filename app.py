@@ -88,6 +88,13 @@ except Exception:
     log.exception("Filter migration failed; leaving the new rule settings "
                   "untouched. The service starts with defaults and the rules "
                   "can be set in the admin UI.")
+import migrate_source
+try:
+    migrate_source.migrate()
+except Exception:
+    log.exception("Source label migration failed; leaving virtual_items.source "
+                  "and requests.source untouched. Existing rows keep whatever "
+                  "value they already had.")
 import os as _os
 LITE_MODE: bool = (
     _settings_mod.get("LITE_MODE", False)

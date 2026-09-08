@@ -8,6 +8,7 @@ import jellyfin
 import locks
 import monitor
 import notify
+import release_tags
 import scrapers
 import strm_generator
 import torbox
@@ -187,7 +188,8 @@ def _lazy_register_movie(req: MediaRequest, candidates: list) -> Optional[Torren
     if strm_generator.create_lazy_movie_strm(
         winner.info_hash, winner.magnet, req.title, year,
         imdb_id=req.imdb_id, tmdb_id=getattr(req, 'tmdb_id', None),
-        quality=winner.quality, source=winner.source, size_gb=winner.size_gb,
+        quality=winner.quality, source=release_tags.source_label(winner.name) or winner.source,
+        size_gb=winner.size_gb,
     ):
         log.info("Lazy-registered movie %s (cached, %s)  -  createtorrent deferred to first play",
                  req.title, winner.quality)
@@ -379,7 +381,7 @@ def _lazy_register_season(req: MediaRequest, season: int) -> tuple[bool, Optiona
                 pack.info_hash, pack.magnet, req.title, season, ep,
                 imdb_id=req.imdb_id,
                 quality=pack.quality,
-                source=pack.source,
+                source=release_tags.source_label(pack.name) or pack.source,
                 size_gb=pack.size_gb,
                 preload_first=not preload_done,
             ):
@@ -442,7 +444,7 @@ def _lazy_register_season(req: MediaRequest, season: int) -> tuple[bool, Optiona
             winner.info_hash, winner.magnet, req.title, season, episode,
             imdb_id=req.imdb_id,
             quality=winner.quality,
-            source=winner.source,
+            source=release_tags.source_label(winner.name) or winner.source,
             size_gb=winner.size_gb,
             preload_first=not preload_done,
         ):
@@ -679,7 +681,7 @@ def _process_locked(req: MediaRequest, _retry_attempt: int) -> bool:
         db.update_request(
             row_id, "success",
             quality=winner.quality if winner else None,
-            source=winner.source if winner else None,
+            source=(release_tags.source_label(winner.name) or winner.source) if winner else None,
             info_hash=winner.info_hash if winner else None,
         )
         if not req.is_movie:

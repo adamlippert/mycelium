@@ -422,10 +422,49 @@ def test_upgrades_refresh_the_stubs():
     assert auto.index('strm_generator._cache_cdn_url(') < auto.index('arr_sync.mirror_add(')
     catbox = src.split("def _run_auto_upgrade_catbox(", 1)[1].split("\ndef ", 1)[0]
     assert 'arr_sync.mirror_add(item["imdb_id"], "movie", item.get("tmdb_id"), item["title"])' in catbox
-    assert catbox.index('db.update_virtual_item_upgrade(') < catbox.index('arr_sync.mirror_add(')
+    # The catbox path shares its DB write with the admin swap panel via
+    # release_swap.swap (action="upgraded") instead of writing the virtual
+    # item inline.
+    assert 'release_swap.swap(item, candidate, action="upgraded")' in catbox
+    assert catbox.index('release_swap.swap(') < catbox.index('arr_sync.mirror_add(')
     pack = src.split("def run_pack_consolidation(", 1)[1].split("\ndef ", 1)[0]
     assert "arr_sync.mirror_add(" in pack
     assert pack.index('db.log_activity("consolidated"') < pack.index('arr_sync.mirror_add(')
+
+
+def test_catbox_auto_upgrade_shares_release_swaps_side_effects(monkeypatch):
+    """Behavioural companion to test_upgrades_refresh_the_stubs: the catbox
+    auto-upgrade path really does drive release_swap.swap, so the virtual
+    item, the request-adjacent DB write, and the activity log all come out
+    exactly as a manual admin swap would - just labelled "upgraded"."""
+    import catbox
+    import debrid
+    import upgrader
+    from streams import Stream
+
+    h_old, h_new = "a" * 40, "b" * 40
+    with db._connect() as conn:
+        conn.execute(
+            "INSERT INTO virtual_items (token, info_hash, magnet, title, media_type, strm_path, imdb_id, quality) "
+            "VALUES (?, ?, ?, 'Heat (1995)', 'movie', ?, 'tt1', '1080p')",
+            ("tok1", h_old, f"magnet:?xt=urn:btih:{h_old}", "/media/tok1.strm"),
+        )
+        conn.commit()
+
+    better = Stream(name="Heat.1995.2160p.BluRay.x264", title="Heat.1995.2160p.BluRay.x264",
+                    info_hash=h_new, quality="2160p", seeders=10, size_gb=40.0,
+                    is_season_pack=False, source="torrentio")
+    monkeypatch.setattr(upgrader, "_fetch_movie_candidates", lambda imdb: [better])
+    monkeypatch.setattr(debrid, "check_cached_multi", lambda hashes: {"torbox": {h_new}})
+    monkeypatch.setattr(catbox, "invalidate_url_cache", lambda token=None: None)
+
+    upgraded = upgrader._run_auto_upgrade_catbox()
+
+    assert upgraded == 1
+    item = db.get_virtual_item("tok1")
+    assert item["info_hash"] == h_new and item["quality"] == "2160p" and item["source"] == "BluRay"
+    act = db.get_activity_for_title("tt1", "Heat (1995)")[0]
+    assert act["event"] == "upgraded"
 
 
 def test_health_reports_the_stub_mount(stubs_env, monkeypatch):

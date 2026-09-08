@@ -40,6 +40,16 @@ def _isolated_db(tmp_path, monkeypatch):
     _drop_cached_conn()
 
 
+@pytest.fixture(autouse=True)
+def _clear_candidates_cache():
+    """The candidates() cache is module-level so swap_by_hash can reuse it
+    across the route/function boundary; clear it around every test so one
+    test's cached entry can never change another test's scrape-call count."""
+    rs._candidates_cache.clear()
+    yield
+    rs._candidates_cache.clear()
+
+
 def _stream(name, h, quality="1080p", seeders=10, size=4.0, langs=("en",), src="torrentio", pack=False):
     return Stream(name=name, title=name, info_hash=h, quality=quality, seeders=seeders, size_gb=size,
                   is_season_pack=pack, languages=langs, source=src)
@@ -302,6 +312,79 @@ def test_swap_by_hash_validates(monkeypatch, scrapers_fake):
     assert out["ok"] is True and db.get_virtual_item("tok")["info_hash"] == H1
 
 
+def test_swap_by_hash_reuses_a_fresh_candidates_cache(monkeypatch, scrapers_fake):
+    import scrapers
+    calls = []
+    monkeypatch.setattr(scrapers, "merge_candidates", lambda *a, **k: calls.append(1) or list(scrapers_fake))
+    monkeypatch.setattr(rs.time, "monotonic", lambda: 1000.0)
+    db.insert_request("Heat", "tt1", "movie")
+    _item("tt1", "tok", H4)
+    rs.candidates("tt1", "movie")
+    assert len(calls) == 1
+    out = rs.swap_by_hash("tt1", H1)
+    assert out["ok"] is True
+    assert len(calls) == 1, "swap_by_hash should reuse the cached candidates() result, not scrape again"
+
+
+def test_swap_by_hash_rescrapes_once_the_cache_entry_is_stale(monkeypatch, scrapers_fake):
+    import scrapers
+    calls = []
+    monkeypatch.setattr(scrapers, "merge_candidates", lambda *a, **k: calls.append(1) or list(scrapers_fake))
+    clock = [1000.0]
+    monkeypatch.setattr(rs.time, "monotonic", lambda: clock[0])
+    db.insert_request("Heat", "tt1", "movie")
+    _item("tt1", "tok", H4)
+    rs.candidates("tt1", "movie")
+    assert len(calls) == 1
+    clock[0] += rs._CANDIDATES_CACHE_TTL_SEC + 1
+    out = rs.swap_by_hash("tt1", H1)
+    assert out["ok"] is True
+    assert len(calls) == 2, "a stale cache entry must not be reused"
+
+
+def test_swap_by_hash_scrapes_when_nothing_was_cached_yet(monkeypatch, scrapers_fake):
+    import scrapers
+    calls = []
+    monkeypatch.setattr(scrapers, "merge_candidates", lambda *a, **k: calls.append(1) or list(scrapers_fake))
+    db.insert_request("Heat", "tt1", "movie")
+    _item("tt1", "tok", H4)
+    out = rs.swap_by_hash("tt1", H1)
+    assert out["ok"] is True
+    assert len(calls) == 1
+
+
+def test_candidates_function_always_scrapes_even_with_a_fresh_cache_entry(monkeypatch, scrapers_fake):
+    """candidates() is what the route and the drawer panel call; neither may
+    ever be served a stale list, so the function itself must never read its
+    own cache back, only populate it for swap_by_hash to use."""
+    import scrapers
+    db.insert_request("Heat", "tt1", "movie")
+    _item("tt1", "tok", H4)
+    monkeypatch.setattr(scrapers, "merge_candidates", lambda *a, **k: list(scrapers_fake))
+    first = rs.candidates("tt1", "movie")
+    assert ("f" * 40) not in [r["info_hash"] for r in first["candidates"]]
+    extra = _stream("Heat.1995.2160p.BluRay.x264", "f" * 40, quality="2160p")
+    monkeypatch.setattr(scrapers, "merge_candidates", lambda *a, **k: list(scrapers_fake) + [extra])
+    second = rs.candidates("tt1", "movie")
+    assert ("f" * 40) in [r["info_hash"] for r in second["candidates"]]
+
+
+def test_candidates_cache_prunes_stale_entries_on_insert(monkeypatch, scrapers_fake):
+    import scrapers
+    monkeypatch.setattr(scrapers, "merge_candidates", lambda *a, **k: list(scrapers_fake))
+    clock = [1000.0]
+    monkeypatch.setattr(rs.time, "monotonic", lambda: clock[0])
+    db.insert_request("Heat", "tt1", "movie")
+    _item("tt1", "tok", H4)
+    rs.candidates("tt1", "movie")
+    assert ("tt1", None, None) in rs._candidates_cache
+    clock[0] += rs._CANDIDATES_CACHE_TTL_SEC + 1
+    db.insert_request("Loki", "tt4", "series")
+    rs.candidates("tt4", "series", season=1, episode=1)
+    assert ("tt1", None, None) not in rs._candidates_cache, "a stale entry must be pruned by the next insert"
+    assert ("tt4", 1, 1) in rs._candidates_cache
+
+
 def test_set_request_release_keeps_status_and_error():
     rid = db.insert_request("Heat", "tt1", "movie")
     db.update_request(rid, "failed", error="old error")
@@ -325,6 +408,11 @@ def test_swap_route_exists_and_delegates():
     ([1], 2, None),
     (True, 1, None),
     (2, None, None),
+    (0, 0, (0, 0)),
+    (-1, 1, None),
+    (1, -1, None),
+    ("-1", 1, None),
+    (-1, -1, None),
 ])
 def test_parse_episode_ref(season, episode, expected):
     assert rs.parse_episode_ref(season, episode) == expected

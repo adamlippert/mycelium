@@ -8,37 +8,24 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
+import time
 
 import db
+import release_tags
 
 log = logging.getLogger(__name__)
 
 _HASH = re.compile(r"^[0-9a-fA-F]{40}$")
 
-# Display label for each release_tags.detect_sources() value. Anything not
-# listed here falls back to an upper-cased copy of the raw tag.
-_SOURCE_LABELS = {
-    "remux": "REMUX",
-    "bluray": "BluRay",
-    "bdrip": "BDRip",
-    "brrip": "BRRip",
-    "webdl": "WEB-DL",
-    "webrip": "WEBRip",
-    "web": "WEB",
-    "hdrip": "HDRip",
-    "dvdrip": "DVDRip",
-    "dvd": "DVD",
-    "hdtv": "HDTV",
-    "satrip": "SATRip",
-    "tvrip": "TVRip",
-    "r5": "R5",
-    "ppvrip": "PPVRip",
-    "ts": "TS",
-    "tc": "TC",
-    "scr": "SCR",
-    "cam": "CAM",
-    "workprint": "Workprint",
-}
+# How long swap_by_hash may reuse a candidates() result instead of scraping
+# again. The candidates route and the panel never read this cache - they
+# always scrape - only swap_by_hash's own re-validation does.
+_CANDIDATES_CACHE_TTL_SEC = 300.0
+
+_candidates_cache_lock = threading.Lock()
+# (imdb_id, season, episode) -> (time.monotonic() at insert, candidates() result)
+_candidates_cache: dict[tuple, tuple[float, dict]] = {}
 
 
 class CandidatesUnavailable(Exception):
@@ -52,23 +39,47 @@ def find_item(imdb_id: str, season: int | None = None, episode: int | None = Non
     return items[0] if items else None
 
 
-def _release_source(name: str) -> str | None:
-    import release_tags
-    found = release_tags.detect_sources(name or "")
-    if not found:
-        return None
-    return _SOURCE_LABELS.get(found[0], found[0].upper())
-
-
 def _row(s, verdict, cached: set[str], current_hash: str) -> dict:
     return {
         "info_hash": s.info_hash.lower(), "name": s.name, "quality": s.quality,
-        "source": _release_source(s.name), "size_gb": s.size_gb, "seeders": s.seeders,
+        "source": release_tags.source_label(s.name), "size_gb": s.size_gb, "seeders": s.seeders,
         "languages": list(s.languages), "cached": s.info_hash.lower() in cached,
         "scrapers": [s.source, *s.also_seen_in], "kept": verdict.kept,
         "rule": None if verdict.kept else verdict.rule, "value": None if verdict.kept else verdict.value,
         "current": s.info_hash.lower() == current_hash,
     }
+
+
+def _cache_key(imdb_id: str, season: int | None, episode: int | None) -> tuple:
+    return (imdb_id, season, episode)
+
+
+def _store_candidates_cache(imdb_id: str, season: int | None, episode: int | None, result: dict) -> None:
+    """Remember a candidates() result for swap_by_hash to reuse, and drop any
+    entry older than the TTL so the dict never grows without bound. There is
+    no "never" sentinel to worry about: an absent key already means that."""
+    now = time.monotonic()
+    with _candidates_cache_lock:
+        stale = [k for k, (ts, _) in _candidates_cache.items() if now - ts > _CANDIDATES_CACHE_TTL_SEC]
+        for k in stale:
+            del _candidates_cache[k]
+        _candidates_cache[_cache_key(imdb_id, season, episode)] = (now, result)
+
+
+def _fresh_cached_candidates(imdb_id: str, season: int | None, episode: int | None) -> dict | None:
+    """A cached candidates() result younger than the TTL, or None when there
+    is no entry or it has expired."""
+    key = _cache_key(imdb_id, season, episode)
+    now = time.monotonic()
+    with _candidates_cache_lock:
+        entry = _candidates_cache.get(key)
+        if entry is None:
+            return None
+        ts, result = entry
+        if now - ts > _CANDIDATES_CACHE_TTL_SEC:
+            del _candidates_cache[key]
+            return None
+        return result
 
 
 def candidates(imdb_id: str, media_type: str, season: int | None = None, episode: int | None = None) -> dict:
@@ -129,7 +140,12 @@ def candidates(imdb_id: str, media_type: str, season: int | None = None, episode
         current = {"info_hash": current_hash, "quality": item.get("quality"),
                    "source": current_row["source"] if current_row else None}
 
-    return {"current": current, "candidates": rows}
+    result = {"current": current, "candidates": rows}
+    # Cached for swap_by_hash's own re-validation only; the route and the
+    # panel that called this always want a live scrape, so nothing here reads
+    # the cache back.
+    _store_candidates_cache(imdb_id, season, episode, result)
+    return result
 
 
 def _drop_faststart_cache(token: str) -> None:
@@ -155,18 +171,23 @@ def _drop_faststart_cache(token: str) -> None:
 def parse_episode_ref(season, episode) -> tuple[int | None, int | None] | None:
     """Coerce a season/episode pair from a JSON body into ints, or None when
     invalid. None stays None; an int (not bool) or a digit string becomes
-    int; anything else is invalid. Both must be given together or both
-    absent, otherwise invalid."""
+    int; anything else is invalid. A negative season or episode is invalid
+    the same way a non-integer is (season 0 stays allowed, for specials).
+    Both must be given together or both absent, otherwise invalid."""
     def _coerce(v):
         if v is None:
             return None, True
         if isinstance(v, bool):
             return None, False
         if isinstance(v, int):
-            return v, True
-        if isinstance(v, str) and v.strip().lstrip("-").isdigit():
-            return int(v), True
-        return None, False
+            n = v
+        elif isinstance(v, str) and v.strip().lstrip("-").isdigit():
+            n = int(v)
+        else:
+            return None, False
+        if n < 0:
+            return None, False
+        return n, True
 
     s, s_ok = _coerce(season)
     e, e_ok = _coerce(episode)
@@ -177,8 +198,12 @@ def parse_episode_ref(season, episode) -> tuple[int | None, int | None] | None:
     return (s, e)
 
 
-def swap(item: dict, candidate: dict, blacklist_old: bool = False) -> dict:
-    """Put candidate's hash behind item's token. Nothing on disk changes."""
+def swap(item: dict, candidate: dict, blacklist_old: bool = False, action: str = "swapped") -> dict:
+    """Put candidate's hash behind item's token. Nothing on disk changes.
+
+    action names the activity-log event: the admin panel logs "swapped", the
+    catbox auto-upgrader shares this same function but logs "upgraded", so
+    both paths get identical side effects without identical labels."""
     import catbox
     old_hash = (item.get("info_hash") or "").lower()
     old_quality = item.get("quality") or "?"
@@ -198,7 +223,7 @@ def swap(item: dict, candidate: dict, blacklist_old: bool = False) -> dict:
             db.set_request_release(req["id"], candidate.get("quality"), candidate.get("source"), new_hash)
     title = item.get("title") or item.get("imdb_id") or "?"
     label = " ".join(x for x in (candidate.get("quality"), candidate.get("source")) if x) or new_hash[:8]
-    db.log_activity("swapped", title, f"{old_quality} to {candidate.get('quality') or '?'} ({candidate.get('name') or new_hash[:8]})",
+    db.log_activity(action, title, f"{old_quality} to {candidate.get('quality') or '?'} ({candidate.get('name') or new_hash[:8]})",
                     True, imdb_id=item.get("imdb_id"))
     if blacklist_old and old_hash:
         db.blacklist_hash(old_hash, "replaced by admin")
@@ -217,10 +242,12 @@ def swap_by_hash(imdb_id: str, info_hash: str, season: int | None = None, episod
         return {"ok": False, "message": "no file for that episode" if season is not None else "no file for this title"}
     if (item.get("info_hash") or "").lower() == info_hash.lower():
         return {"ok": False, "message": "that is already the current release"}
-    try:
-        listing = candidates(imdb_id, req["media_type"], season, episode)
-    except CandidatesUnavailable as exc:
-        return {"ok": False, "message": f"scrapers unavailable: {exc}"}
+    listing = _fresh_cached_candidates(imdb_id, season, episode)
+    if listing is None:
+        try:
+            listing = candidates(imdb_id, req["media_type"], season, episode)
+        except CandidatesUnavailable as exc:
+            return {"ok": False, "message": f"scrapers unavailable: {exc}"}
     match = next((c for c in listing["candidates"] if c["info_hash"] == info_hash.lower()), None)
     if not match:
         return {"ok": False, "message": "that hash is not in the candidate list"}
