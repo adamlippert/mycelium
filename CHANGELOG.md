@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-09-08
+
 ### Added
 
 - Pick another release from the Library drawer: the Release card (movies)

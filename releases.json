@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.21.0",
+    "date": "2026-09-08",
+    "notes": [
+      "Pick another release from the Library drawer: the Release card (movies) and every present episode row show the candidate list the processor saw, with quality, size, seeders, languages, which scrapers returned it, whether TorBox has it cached, and the rule that dropped a candidate. Choosing one swaps the release behind the existing token, so the next play uses it and nothing on disk changes; the old release can be blacklisted in the same step",
+      "The swap clears the TorBox and RealDebrid ids and the URL and fast-start caches for the token, resets the playability record, and keeps the request row's status; a stream in progress may switch to the new file on its next range request",
+      "Whole-season swap (picking a new season pack for every episode at once) is a follow-up"
+    ]
+  },
+  {
     "version": "0.20.1",
     "date": "2026-09-08",
     "notes": [
