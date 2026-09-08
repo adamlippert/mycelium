@@ -9,7 +9,6 @@ the rail counts and the table agree by construction.
 from __future__ import annotations
 
 import admin_query
-import arr_sync
 import db
 
 VIEWS = ("all", "attention", "wanted", "queue", "incomplete", "unmirrored")
@@ -193,6 +192,7 @@ def _seasons_summary(imdb_id: str) -> list[dict]:
 
 
 def title_detail(imdb_id: str) -> dict | None:
+    import arr_sync  # lazy: a module-level import pins a stale settings module in tests that reload settings
     req = db.get_request_by_imdb(imdb_id)
     if not req:
         return None
