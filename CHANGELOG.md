@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-09-08
+
 ### Fixed
 
 - The TorBox add budget counts only uncached adds. TorBox's 60 per hour
