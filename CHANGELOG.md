@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-09-08
+
 ### Changed
 
 - The Overview egress tile counts MKV plays. Those plays are a redirect

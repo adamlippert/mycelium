@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.22.0",
+    "date": "2026-09-08",
+    "notes": [
+      "The Overview egress tile counts MKV plays. Those plays are a redirect to the TorBox CDN, so nothing passed through Mycelium and the tile read near zero on an MKV library. The redirect branch now records the file size once per play as an estimate (a play is a redirect for a title not resolved in the last two hours); the tile shows proxied plus estimated with the split in its sub-line, and the stats payload gains egress_estimated_bytes_month",
+      "The estimate is an upper bound per play: a viewer who stops early still counts the whole file, and two viewers on one title at once count as one"
+    ]
+  },
+  {
     "version": "0.21.2",
     "date": "2026-09-08",
     "notes": [
