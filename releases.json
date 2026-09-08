@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.20.1",
+    "date": "2026-09-08",
+    "notes": [
+      "The monthly request cap can be set on the Users tab: the column is an inline field (blank means no cap) that saves on Enter or when you leave it. Until now the tab only displayed the cap, so the quotas enforced since 0.20.0 could not be changed from the SPA"
+    ]
+  },
+  {
     "version": "0.20.0",
     "date": "2026-09-08",
     "notes": [

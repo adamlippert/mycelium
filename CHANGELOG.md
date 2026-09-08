@@ -4,6 +4,15 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-09-08
+
+### Fixed
+
+- The monthly request cap can be set on the Users tab: the column is an
+  inline field (blank means no cap) that saves on Enter or when you leave
+  it. Until now the tab only displayed the cap, so the quotas enforced
+  since 0.20.0 could not be changed from the SPA.
+
 ## [0.20.0] - 2026-09-08
 
 ### Added
