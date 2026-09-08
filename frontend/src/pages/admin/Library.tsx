@@ -26,16 +26,17 @@ export default function Library() {
   const total = page.data?.total || 0;
   const first = (state.page - 1) * state.perPage + 1;
   const last = Math.min(total, state.page * state.perPage);
-  const mirrorOn = (counts.data?.unmirrored ?? 0) > 0 || rows.some((r) => r.arr_mirrored);
 
   return (
     <div className="grid gap-6 pb-24 md:grid-cols-[14rem_1fr]">
       <span data-testid="library-hash" hidden>{toHash(state)}</span>
-      <Rail state={state} counts={counts.data || {}} users={users.data?.users || []} mirrorOn={mirrorOn} onChange={update} />
+      <Rail state={state} counts={counts.data?.counts || {}} users={users.data?.users || []} mirrorOn={counts.data?.mirror_on ?? false} onChange={update} />
       <main className="space-y-3">
         <TitleTable rows={rows} sort={state.sort} order={state.order} onSort={onSort} selected={selected} loading={page.isFetching}
           onSelect={(id, on) => setSelected((s) => { const n = new Set(s); on ? n.add(id) : n.delete(id); return n; })}
-          onSelectAll={(on) => setSelected(on ? new Set(rows.map((r) => r.imdb_id)) : new Set())}
+          onSelectAll={(on) => setSelected((s) => (on
+            ? new Set([...s, ...rows.map((r) => r.imdb_id)])
+            : new Set([...s].filter((id) => !rows.some((r) => r.imdb_id === id)))))}
           onOpen={(id) => update({ open: id })} />
         {!rows.length && !page.isFetching && (
           <p className="text-sm text-muted">Nothing here. {EMPTY[state.view] || ''}</p>

@@ -34,7 +34,10 @@ function renderIt(hash = '#library') {
 describe('Library tab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    apiMocks.libraryViews.mockResolvedValue({ all: 2, attention: 1, wanted: 0, queue: 1, incomplete: 0, unmirrored: 0 });
+    apiMocks.libraryViews.mockResolvedValue({
+      counts: { all: 2, attention: 1, wanted: 0, queue: 1, incomplete: 0, unmirrored: 0 },
+      mirror_on: true,
+    });
     apiMocks.users.mockResolvedValue({ users: [{ id: 1, username: 'adam' }] });
     apiMocks.library.mockResolvedValue({
       rows: [row({}), row({ id: 2, imdb_id: 'tt2', title: 'Alien', status: 'failed', error: 'no release', requester: 'auto',
@@ -80,9 +83,48 @@ describe('Library tab', () => {
     await screen.findByText('Heat');
     await userEvent.click(screen.getByRole('button', { name: 'Sort by title' }));
     await waitFor(() => expect(apiMocks.library).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'title', order: 'asc' })));
+    await userEvent.click(screen.getByRole('button', { name: 'Sort by added' }));
+    await waitFor(() => expect(apiMocks.library).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'created', order: 'asc' })));
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select Heat' }));
     expect(screen.getByText('1 selected')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }));
     expect(screen.getByText('2 selected')).toBeInTheDocument();
+  });
+
+  it('select all merges with other pages selections instead of discarding them', async () => {
+    apiMocks.library.mockImplementation((params: Record<string, string | string[]>) => Promise.resolve(
+      params.page === '2'
+        ? { rows: [row({ id: 3, imdb_id: 'tt3', title: 'Batman' }), row({ id: 4, imdb_id: 'tt4', title: 'Casino' })], total: 60, page: 2, per_page: 50 }
+        : { rows: [row({}), row({ id: 2, imdb_id: 'tt2', title: 'Alien' })], total: 60, page: 1, per_page: 50 },
+    ));
+    renderIt();
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Select Heat' }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    await screen.findByText('Batman');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }));
+    expect(screen.getByText('3 selected')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+  });
+
+  it('gates the Unmirrored view on the mirror setting', async () => {
+    apiMocks.libraryViews.mockResolvedValue({
+      counts: { all: 2, attention: 1, wanted: 0, queue: 1, incomplete: 0, unmirrored: 0 },
+      mirror_on: false,
+    });
+    const first = renderIt();
+    const nav = await screen.findByRole('navigation', { name: 'Library views' });
+    await waitFor(() => expect(within(nav).getByRole('button', { name: /Needs attention/ })).toHaveTextContent('1'));
+    expect(within(nav).queryByRole('button', { name: /Unmirrored/ })).not.toBeInTheDocument();
+    first.unmount();
+
+    apiMocks.libraryViews.mockResolvedValue({
+      counts: { all: 2, attention: 1, wanted: 0, queue: 1, incomplete: 0, unmirrored: 0 },
+      mirror_on: true,
+    });
+    renderIt();
+    const nav2 = await screen.findByRole('navigation', { name: 'Library views' });
+    await waitFor(() => expect(within(nav2).getByRole('button', { name: /Unmirrored/ })).toBeInTheDocument());
   });
 });

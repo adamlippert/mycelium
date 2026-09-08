@@ -178,6 +178,8 @@ def test_the_routes_exist_and_are_admin_only():
         assert "auth.is_admin()" in body and "library_admin" in body
     body = src.split('@app.get("/ui/api/library")', 1)[1].split("\n\n\n", 1)[0]
     assert 'request.args.getlist("status")' in body
+    views_body = src.split('@app.get("/ui/api/library/views")', 1)[1].split("\n\n\n", 1)[0]
+    assert "mirror_on" in views_body
 
 
 def test_title_detail_gathers_every_record(seeded):

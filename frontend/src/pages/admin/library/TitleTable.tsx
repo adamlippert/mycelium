@@ -30,6 +30,7 @@ export function TitleTable({ rows, sort, order, onSort, selected, onSelect, onSe
             {header('requester', 'Requester')}
             <th className="px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-muted">Flags</th>
             {header('updated', 'Updated')}
+            {header('created', 'Added')}
           </tr>
         </thead>
         <tbody>
@@ -56,6 +57,7 @@ export function TitleTable({ rows, sort, order, onSort, selected, onSelect, onSe
                 {r.in_torbox && <Badge title="in TorBox" tone="muted">tb</Badge>}
               </td>
               <td className="px-3 py-2 text-xs text-muted">{r.updated_at.slice(0, 16)}</td>
+              <td className="px-3 py-2 text-xs text-muted">{r.created_at.slice(0, 10)}</td>
             </tr>
           ))}
         </tbody>

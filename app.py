@@ -2006,8 +2006,9 @@ def ui_api_library():
 def ui_api_library_views():
     if not auth.is_admin():
         return jsonify(error="admin required"), 403
+    import arr_sync
     import library_admin
-    return jsonify(library_admin.view_counts())
+    return jsonify(counts=library_admin.view_counts(), mirror_on=arr_sync.is_enabled())
 
 
 @app.get("/ui/api/library/<imdb_id>")

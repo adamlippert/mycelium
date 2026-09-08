@@ -281,7 +281,7 @@ export const api = {
     Object.entries(params).forEach(([k, v]) => (Array.isArray(v) ? v : [v]).forEach((x) => x !== '' && qs.append(k, x)));
     return http<LibraryPage>(`/ui/api/library?${qs.toString()}`);
   },
-  libraryViews: () => http<Record<string, number>>('/ui/api/library/views'),
+  libraryViews: () => http<{ counts: Record<string, number>; mirror_on: boolean }>('/ui/api/library/views'),
   recent: () => http<{ items: any[] }>('/ui/api/activity'),
   myRequests: () => http<{ items: any[] }>('/ui/api/user-requests?mine=1'),
   myQuota: () => http<QuotaInfo>('/ui/api/me/quota'),
