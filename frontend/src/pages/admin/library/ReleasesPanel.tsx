@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../api';
 import type { Candidate } from '../../../api';
 import { Button } from '../../../components/primitives';
@@ -11,8 +11,9 @@ function Badge({ tone, children }: { tone: 'ok' | 'muted' | 'warn'; children: Re
 }
 
 export function ReleasesPanel({ imdb, season, episode, onDone, onClose }: {
-  imdb: string; season?: number; episode?: number; onDone: () => void; onClose: () => void;
+  imdb: string; season?: number; episode?: number; onDone: (result: { ok: boolean; message: string }) => void; onClose: () => void;
 }) {
+  const qc = useQueryClient();
   const q = useQuery({ queryKey: ['library-candidates', imdb, season, episode], queryFn: () => api.libraryCandidates(imdb, season, episode), retry: false });
   const [picked, setPicked] = useState<Candidate | null>(null);
   const [blacklistOld, setBlacklistOld] = useState(false);
@@ -25,8 +26,13 @@ export function ReleasesPanel({ imdb, season, episode, onDone, onClose }: {
     try {
       const body = { info_hash: picked.info_hash, ...(season != null && episode != null ? { season, episode } : {}), blacklist_old: blacklistOld };
       const r = await api.librarySwap(imdb, body);
-      setMsg({ ok: r.ok, text: r.message });
-      if (r.ok) { onDone(); onClose(); }
+      if (r.ok) {
+        qc.invalidateQueries({ queryKey: ['library-candidates', imdb, season, episode] });
+        onDone(r);
+        onClose();
+      } else {
+        setMsg({ ok: false, text: r.message });
+      }
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : 'swap failed' });
     } finally {

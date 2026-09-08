@@ -7,6 +7,7 @@ import { ReleasesPanel } from '../ReleasesPanel';
 export function ReleaseCard({ d, onDone }: { d: LibraryDetail; onDone: () => void }) {
   const r = d.request;
   const [open, setOpen] = useState(false);
+  const [lastResult, setLastResult] = useState<{ ok: boolean; message: string } | null>(null);
   if (!r.info_hash && !d.items.length) return null;
   return (
     <DrawerCard title="Release" description="The release in use and the files written for it.">
@@ -21,9 +22,12 @@ export function ReleaseCard({ d, onDone }: { d: LibraryDetail; onDone: () => voi
         </div>
       ))}
       {r.media_type === 'movie' && d.items.length > 0 && (
-        <Button variant="ghost" onClick={() => setOpen((v) => !v)}>Pick another release</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" onClick={() => setOpen((v) => !v)}>Pick another release</Button>
+          {lastResult && <span className={lastResult.ok ? 'text-ok' : 'text-danger'}>{lastResult.message}</span>}
+        </div>
       )}
-      {open && <ReleasesPanel imdb={r.imdb_id} onDone={onDone} onClose={() => setOpen(false)} />}
+      {open && <ReleasesPanel imdb={r.imdb_id} onDone={(result) => { setLastResult(result); onDone(); }} onClose={() => setOpen(false)} />}
     </DrawerCard>
   );
 }

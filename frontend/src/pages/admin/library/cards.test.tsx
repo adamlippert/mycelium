@@ -9,7 +9,7 @@ import { HashesCard } from './cards/HashesCard';
 import { ActivityCard } from './cards/ActivityCard';
 import { ReleaseCard } from './cards/ReleaseCard';
 
-const apiMocks = vi.hoisted(() => ({ librarySeason: vi.fn(), libraryAction: vi.fn(), libraryActivity: vi.fn(), libraryCandidates: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({ librarySeason: vi.fn(), libraryAction: vi.fn(), libraryActivity: vi.fn(), libraryCandidates: vi.fn(), librarySwap: vi.fn() }));
 vi.mock('../../../api', async () => {
   const actual = await vi.importActual<typeof import('../../../api')>('../../../api');
   return { ...actual, api: { ...actual.api, ...apiMocks } };
@@ -117,8 +117,12 @@ describe('drawer cards', () => {
     expect(await screen.findByText('network down')).toBeInTheDocument();
   });
 
-  it('Release shows Pick another release for a movie with an item, and opens the Releases panel', async () => {
-    apiMocks.libraryCandidates.mockResolvedValue({ current: null, candidates: [] });
+  it('Release shows Pick another release for a movie with an item, opens the Releases panel, and reports a successful swap next to the button', async () => {
+    apiMocks.libraryCandidates.mockResolvedValue({ current: null, candidates: [
+      { info_hash: 'f'.repeat(40), name: 'Heat.1995.2160p.REMUX', quality: '2160p', source: 'REMUX', size_gb: 60, seeders: 10,
+        languages: ['en'], cached: true, scrapers: ['torrentio'], kept: true, rule: null, value: null, current: false },
+    ] });
+    apiMocks.librarySwap.mockResolvedValue({ ok: true, message: 'next play uses 2160p REMUX' });
     const movie = {
       ...base,
       request: { ...base.request, media_type: 'movie', info_hash: 'e'.repeat(40) },
@@ -130,5 +134,9 @@ describe('drawer cards', () => {
     await userEvent.click(button);
     expect(await screen.findByText('Releases')).toBeInTheDocument();
     await waitFor(() => expect(apiMocks.libraryCandidates).toHaveBeenCalledWith('tt4', undefined, undefined));
+    await userEvent.click(screen.getByRole('button', { name: 'Use' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(await screen.findByText('next play uses 2160p REMUX')).toBeInTheDocument();
+    expect(screen.queryByText('Releases')).not.toBeInTheDocument();
   });
 });

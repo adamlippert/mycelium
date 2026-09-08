@@ -18,9 +18,10 @@ const cand = (over: Partial<Candidate>): Candidate => ({
 
 function renderIt(props: Partial<React.ComponentProps<typeof ReleasesPanel>> = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
   const onDone = vi.fn(); const onClose = vi.fn();
   render(<QueryClientProvider client={qc}><ReleasesPanel imdb="tt1" onDone={onDone} onClose={onClose} {...props} /></QueryClientProvider>);
-  return { onDone, onClose };
+  return { onDone, onClose, invalidateSpy };
 }
 
 describe('ReleasesPanel', () => {
@@ -48,9 +49,9 @@ describe('ReleasesPanel', () => {
     expect(apiMocks.libraryCandidates).toHaveBeenCalledWith('tt1', undefined, undefined);
   });
 
-  it('Use opens the confirm strip, warns for an uncached one, and Confirm posts the swap', async () => {
+  it('Use opens the confirm strip, warns for an uncached one, and Confirm posts the swap, invalidates the cache and hands the result to onDone', async () => {
     apiMocks.librarySwap.mockResolvedValue({ ok: true, message: 'next play uses 2160p REMUX' });
-    const { onDone, onClose } = renderIt();
+    const { onDone, onClose, invalidateSpy } = renderIt();
     const rows = await screen.findAllByRole('listitem');
     await userEvent.click(within(rows[0]).getByRole('button', { name: 'Use' }));
     expect(screen.getByText(/Switch to this release\?/)).toBeInTheDocument();
@@ -62,9 +63,20 @@ describe('ReleasesPanel', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'Blacklist the current release' }));
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(apiMocks.librarySwap).toHaveBeenCalledWith('tt1', { info_hash: 'c'.repeat(40), blacklist_old: true }));
-    expect(await screen.findByText('next play uses 2160p REMUX')).toBeInTheDocument();
-    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['library-candidates', 'tt1', undefined, undefined] }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith({ ok: true, message: 'next play uses 2160p REMUX' }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('a failed swap shows the message inline and does not close the panel', async () => {
+    apiMocks.librarySwap.mockResolvedValue({ ok: false, message: 'that hash is not in the candidate list' });
+    const { onDone, onClose } = renderIt();
+    const rows = await screen.findAllByRole('listitem');
+    await userEvent.click(within(rows[0]).getByRole('button', { name: 'Use' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(await screen.findByText('that hash is not in the candidate list')).toBeInTheDocument();
+    expect(onDone).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('passes season and episode through', async () => {
