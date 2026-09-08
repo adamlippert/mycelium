@@ -132,10 +132,10 @@ def test_unknown_values_are_ignored_not_errors(seeded):
     assert total == 4
 
 
-def test_the_index_exists():
+def test_the_status_index_exists():
     with db._connect() as conn:
         names = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
-    assert "idx_user_requests_status_created" in names
+    assert "idx_user_requests_status" in names
 
 
 def test_the_routes_exist_and_are_admin_only():
