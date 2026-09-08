@@ -2101,6 +2101,10 @@ def ui_api_library_candidates(imdb_id: str):
         return jsonify(error="not found"), 404
     season = request.args.get("season", type=int)
     episode = request.args.get("episode", type=int)
+    ref = release_swap.parse_episode_ref(season, episode)
+    if ref is None:
+        return jsonify(ok=False, message="season and episode must be whole numbers")
+    season, episode = ref
     try:
         return jsonify(release_swap.candidates(imdb_id, req["media_type"], season, episode))
     except release_swap.CandidatesUnavailable as exc:

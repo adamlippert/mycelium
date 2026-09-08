@@ -130,15 +130,15 @@ def candidates(imdb_id: str, media_type: str, season: int | None = None, episode
     dropped = [s for s in found if s.info_hash.lower() not in kept_hashes]
     rows = [_row(s, verdict_of[s.info_hash.lower()], cached, current_hash) for s in kept + dropped]
 
-    # current.source is the candidate row's release-type label, not the raw
-    # virtual_items.source DB value (which holds the scraper name, not a
-    # release-type tag); null when the current hash isn't among the found
-    # candidates at all.
+    # current.source prefers the freshly-scraped candidate row's label, since
+    # that reflects this live scrape; when the current hash isn't among the
+    # found candidates at all, fall back to the stored virtual_items.source,
+    # which now holds the same kind of release-type label.
     current = None
     if item:
         current_row = next((r for r in rows if r["current"]), None)
         current = {"info_hash": current_hash, "quality": item.get("quality"),
-                   "source": current_row["source"] if current_row else None}
+                   "source": current_row["source"] if current_row else item.get("source")}
 
     result = {"current": current, "candidates": rows}
     # Cached for swap_by_hash's own re-validation only; the route and the
@@ -181,8 +181,8 @@ def parse_episode_ref(season, episode) -> tuple[int | None, int | None] | None:
             return None, False
         if isinstance(v, int):
             n = v
-        elif isinstance(v, str) and v.strip().lstrip("-").isdigit():
-            n = int(v)
+        elif isinstance(v, str) and re.fullmatch(r"-?\d+", v.strip()):
+            n = int(v.strip())
         else:
             return None, False
         if n < 0:

@@ -157,11 +157,16 @@ def test_titles_for_hashes_with_no_hashes_returns_empty():
     assert db.titles_for_hashes([]) == {}
 
 
-def test_titles_for_hashes_spans_chunks():
-    """A hash list longer than one chunk still returns matches from every chunk."""
+def test_titles_for_hashes_spans_chunks(monkeypatch):
+    """A hash list longer than one chunk still returns matches from every
+    chunk. _HASH_CHUNK is forced down to 2 so 5 hashes span three chunks
+    ([0,1], [2,3], [4]); the match in the first chunk and the match in the
+    last chunk must both survive the merge, which is what this test is
+    really pinning (not the chunk size itself)."""
+    monkeypatch.setattr(db, "_HASH_CHUNK", 2)
     db.insert_request("Heat", "tt1", "movie")
     db.insert_request("Alien", "tt2", "movie")
-    hashes = [f"{i:040x}" for i in range(db._HASH_CHUNK * 2 + 5)]
+    hashes = [f"{i:040x}" for i in range(5)]
     db.set_request_release(db.get_request_by_imdb("tt1")["id"], "1080p", "src", hashes[0])
     _item("tt2", "tok", hashes[-1])
     out = db.titles_for_hashes(hashes)

@@ -467,6 +467,76 @@ def test_catbox_auto_upgrade_shares_release_swaps_side_effects(monkeypatch):
     assert act["event"] == "upgraded"
 
 
+def test_fixed_mode_auto_upgrade_stores_the_release_label_not_the_scraper_name(monkeypatch):
+    """The non-catbox upgrade path (run_auto_upgrade) used to write
+    better.name.split()[0], the first whitespace token of the release name.
+    It must now write the same release-source label the catbox path writes,
+    and NULL when the release name carries no source tag at all."""
+    import jellyfin
+    import settings
+    import strm_generator
+    import torbox
+    import upgrader
+    from streams import Stream
+
+    imdb = "tt0113277"
+    db.insert_request("Heat", imdb, "movie", tmdb_id=949)
+    row = db.get_request_by_imdb(imdb)
+    db.update_request(row["id"], "success", quality="1080p", info_hash="a" * 40)
+
+    better = Stream(name="Heat.1995.2160p.BluRay.x264", title="Heat.1995.2160p.BluRay.x264",
+                    info_hash="b" * 40, quality="2160p", seeders=10, size_gb=40.0,
+                    is_season_pack=False, source="torrentio")
+    monkeypatch.setattr(settings, "get", lambda k, d=None: {"AUTO_UPGRADE_ENABLED": True,
+                                                             "CATBOX_MODE": False}.get(k, d))
+    monkeypatch.setattr(upgrader, "_fetch_movie_candidates", lambda imdb: [better])
+    monkeypatch.setattr(torbox, "check_cached", lambda hashes: {"b" * 40})
+    monkeypatch.setattr(torbox, "add_magnet", lambda magnet, reason=None: None)
+    monkeypatch.setattr(torbox, "wait_until_ready", lambda info_hash: {"id": "tb1"})
+    monkeypatch.setattr(strm_generator, "create_strm_for_torrent", lambda *a, **k: True)
+    monkeypatch.setattr(strm_generator, "_cache_cdn_url", lambda *a, **k: None)
+    monkeypatch.setattr(jellyfin, "refresh_library", lambda *a, **k: None)
+
+    upgraded = upgrader.run_auto_upgrade()
+
+    assert upgraded == 1
+    updated = db.get_request_by_imdb(imdb)
+    assert updated["source"] == "BluRay"
+
+
+def test_fixed_mode_auto_upgrade_stores_null_when_the_name_has_no_source_tag(monkeypatch):
+    import jellyfin
+    import settings
+    import strm_generator
+    import torbox
+    import upgrader
+    from streams import Stream
+
+    imdb = "tt0113277"
+    db.insert_request("Heat", imdb, "movie", tmdb_id=949)
+    row = db.get_request_by_imdb(imdb)
+    db.update_request(row["id"], "success", quality="1080p", info_hash="a" * 40)
+
+    better = Stream(name="Heat.1995.2160p.DDP5.1.x264", title="Heat.1995.2160p",
+                    info_hash="b" * 40, quality="2160p", seeders=10, size_gb=40.0,
+                    is_season_pack=False, source="torrentio")
+    monkeypatch.setattr(settings, "get", lambda k, d=None: {"AUTO_UPGRADE_ENABLED": True,
+                                                             "CATBOX_MODE": False}.get(k, d))
+    monkeypatch.setattr(upgrader, "_fetch_movie_candidates", lambda imdb: [better])
+    monkeypatch.setattr(torbox, "check_cached", lambda hashes: {"b" * 40})
+    monkeypatch.setattr(torbox, "add_magnet", lambda magnet, reason=None: None)
+    monkeypatch.setattr(torbox, "wait_until_ready", lambda info_hash: {"id": "tb1"})
+    monkeypatch.setattr(strm_generator, "create_strm_for_torrent", lambda *a, **k: True)
+    monkeypatch.setattr(strm_generator, "_cache_cdn_url", lambda *a, **k: None)
+    monkeypatch.setattr(jellyfin, "refresh_library", lambda *a, **k: None)
+
+    upgraded = upgrader.run_auto_upgrade()
+
+    assert upgraded == 1
+    updated = db.get_request_by_imdb(imdb)
+    assert updated["source"] is None
+
+
 def test_health_reports_the_stub_mount(stubs_env, monkeypatch):
     import health
     monkeypatch.setattr(health, "_ping", lambda name, *a, **k: {"name": name, "status": "ok"})

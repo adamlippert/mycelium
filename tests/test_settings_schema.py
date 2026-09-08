@@ -199,8 +199,40 @@ def test_clearing_a_secret_with_an_empty_value_removes_the_override():
     settings.set("TRAKT_CLIENT_SECRET", "abc123")
     assert settings.get("TRAKT_CLIENT_SECRET") == "abc123"
     settings.set("TRAKT_CLIENT_SECRET", "")
-    assert settings.get("TRAKT_CLIENT_SECRET") in (None, "")
+    # No TRAKT_CLIENT_SECRET in the environment, so config.TRAKT_CLIENT_SECRET
+    # is "" (config._env's own default) and that is exactly what falls
+    # through once the DB override is gone.
+    assert settings.get("TRAKT_CLIENT_SECRET") == ""
     assert db.get_setting("TRAKT_CLIENT_SECRET") is None
+
+
+def test_clearing_a_secret_backed_by_the_environment_leaves_the_env_value_in_force(monkeypatch):
+    """settings.set(key, None) only ever deletes the DB override row
+    (db.set_setting(key, None) -> DELETE). A secret supplied through the
+    environment (config.<KEY>, e.g. a Dokploy env var) has no override to
+    delete, so clearing it must be a no-op: settings.get(key) keeps
+    returning the config value, and _field_for_ui must keep reporting the
+    field as set. Only clearing an actual DB override removes the value."""
+    import config
+    assert settings.fields_by_key()["TORBOX_API_KEY"]["kind"] == "secret"
+    monkeypatch.setattr(config, "TORBOX_API_KEY", "env-supplied-key")
+
+    # No override yet: clearing is a no-op, the env value is still in force.
+    settings.set("TORBOX_API_KEY", None)
+    assert settings.get("TORBOX_API_KEY") == "env-supplied-key"
+    field = settings._field_for_ui(settings.fields_by_key()["TORBOX_API_KEY"], db.get_all_settings())
+    assert field["value"] is True
+    assert field["overridden"] is False
+
+    # An override present: clearing removes it and the env value takes over.
+    settings.set("TORBOX_API_KEY", "db-override-key")
+    assert settings.get("TORBOX_API_KEY") == "db-override-key"
+    settings.set("TORBOX_API_KEY", None)
+    assert db.get_setting("TORBOX_API_KEY") is None
+    assert settings.get("TORBOX_API_KEY") == "env-supplied-key"
+    field = settings._field_for_ui(settings.fields_by_key()["TORBOX_API_KEY"], db.get_all_settings())
+    assert field["value"] is True
+    assert field["overridden"] is False
 
 
 def test_settings_and_setup_save_routes_clear_any_empty_posted_value():

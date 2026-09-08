@@ -151,7 +151,7 @@ def run_auto_upgrade() -> int:
                 continue
             strm_generator.create_strm_for_torrent(item["id"], row["title"], "movie")
             db.update_request(row["id"], "success", quality=better.quality,
-                              source=better.name.split()[0], info_hash=better.info_hash)
+                              source=release_tags.source_label(better.name), info_hash=better.info_hash)
             db.log_activity("upgraded", row["title"], f"{row.get('quality')} → {better.quality}", True, imdb_id=row["imdb_id"])
             strm_generator._cache_cdn_url(better.info_hash, item, row["title"])
             try:

@@ -1,5 +1,6 @@
-"""migrate_source: the one-off backfill of virtual_items.source and
-requests.source from a scraper name to a release-source label."""
+"""migrate_source: the one-off backfill that blanks a leftover scraper name
+out of virtual_items.source and requests.source. It no longer tries to
+derive a label for a row that has none; see the module docstring for why."""
 import os
 import sys
 
@@ -50,85 +51,61 @@ def _request(imdb_id, title, media_type="movie", source="torrentio"):
     return rid
 
 
-def test_virtual_item_with_a_source_tag_in_its_title_gets_labelled():
-    _virtual_item("tok1", "Heat.1995.1080p.BluRay.x264", imdb_id="tt1")
-    out = migrate_source.migrate()
-    assert out["virtual_items_updated"] == 1
-    assert out["virtual_items_unchanged"] == 0
-    assert db.get_virtual_item("tok1")["source"] == "BluRay"
-
-
-def test_virtual_item_with_no_detectable_source_and_an_already_correct_source_is_left_unchanged():
-    """virtual_items.title is normally the sanitised display folder name
-    (e.g. "Heat (1995)"), which carries no source tag at all; when the
-    stored source is already a release-source label (not a leftover scraper
-    name) the migration must leave it alone rather than touch it."""
+def test_virtual_item_with_a_release_label_is_left_unchanged():
+    """A row whose source is already a release-source label (not a leftover
+    scraper name) must not be touched."""
     _virtual_item("tok1", "Heat (1995)", imdb_id="tt1", source="WEB-DL")
     out = migrate_source.migrate()
-    assert out["virtual_items_updated"] == 0
     assert out["virtual_items_blanked"] == 0
     assert out["virtual_items_unchanged"] == 1
     assert db.get_virtual_item("tok1")["source"] == "WEB-DL"
 
 
-def test_virtual_item_with_a_leftover_scraper_name_and_no_detectable_title_is_blanked():
+def test_virtual_item_with_a_leftover_scraper_name_is_blanked():
     """A row whose source is still a scraper name (torrentio, zilean, ...)
-    and whose title carries no source tag to re-derive a label from must not
-    keep that scraper name in a column that now means release source."""
+    must not keep that scraper name in a column that now means release
+    source; the migration blanks it instead of trying to guess a label."""
     _virtual_item("tok1", "Heat (1995)", imdb_id="tt1", source="torrentio")
     out = migrate_source.migrate()
-    assert out["virtual_items_updated"] == 0
     assert out["virtual_items_blanked"] == 1
     assert out["virtual_items_unchanged"] == 0
     assert db.get_virtual_item("tok1")["source"] is None
 
 
-def test_request_falls_back_to_its_movie_virtual_items_label():
-    """requests has no release-name column of its own; a movie request
-    borrows the label already derived for its virtual_item."""
-    _virtual_item("tok1", "Heat.1995.1080p.BluRay.x264", imdb_id="tt1")
-    _request("tt1", "Heat")
-    out = migrate_source.migrate()
-    assert out["requests_updated"] == 1
-    assert db.get_request_by_imdb("tt1")["source"] == "BluRay"
-
-
-def test_request_with_no_matching_virtual_item_and_an_already_correct_source_is_left_unchanged():
+def test_request_with_a_release_label_is_left_unchanged():
     _request("tt9", "Nothing Here", source="WEB-DL")
     out = migrate_source.migrate()
-    assert out["requests_updated"] == 0
     assert out["requests_blanked"] == 0
     assert out["requests_unchanged"] == 1
     assert db.get_request_by_imdb("tt9")["source"] == "WEB-DL"
 
 
-def test_request_with_a_leftover_scraper_name_and_no_fallback_label_is_blanked():
+def test_request_with_a_leftover_scraper_name_is_blanked():
     _request("tt9", "Nothing Here", source="torrentio")
     out = migrate_source.migrate()
-    assert out["requests_updated"] == 0
     assert out["requests_blanked"] == 1
     assert out["requests_unchanged"] == 0
     assert db.get_request_by_imdb("tt9")["source"] is None
 
 
 def test_second_run_is_a_noop_once_migrated():
-    _virtual_item("tok1", "Heat.1995.1080p.BluRay.x264", imdb_id="tt1")
+    _virtual_item("tok1", "Heat (1995)", imdb_id="tt1", source="torrentio")
     first = migrate_source.migrate()
-    assert first["virtual_items_updated"] == 1
+    assert first["virtual_items_blanked"] == 1
     # Hand-edit after the first run to prove a second run leaves it alone -
     # a re-run that clobbers this would silently discard an admin's swap.
     with db._connect() as conn:
-        conn.execute("UPDATE virtual_items SET source=? WHERE token=?", ("REMUX", "tok1"))
+        conn.execute("UPDATE virtual_items SET source=? WHERE token=?", ("torrentio", "tok1"))
         conn.commit()
     second = migrate_source.migrate()
     assert second == {}
-    assert db.get_virtual_item("tok1")["source"] == "REMUX"
+    assert db.get_virtual_item("tok1")["source"] == "torrentio"
 
 
 def test_dry_run_reports_without_writing():
-    _virtual_item("tok1", "Heat.1995.1080p.BluRay.x264", imdb_id="tt1")
+    _virtual_item("tok1", "Heat (1995)", imdb_id="tt1", source="torrentio")
     out = migrate_source.migrate(dry_run=True)
-    assert out["virtual_items_updated"] == 1
+    assert out["virtual_items_blanked"] == 1
     assert db.get_virtual_item("tok1")["source"] == "torrentio", "dry_run must not write"
     assert _settings.get(migrate_source.MIGRATION_MARKER, False) is False
 

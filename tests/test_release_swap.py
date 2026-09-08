@@ -113,9 +113,20 @@ def test_candidates_are_kept_first_then_dropped_with_badges(scrapers_fake):
                             "cached", "scrapers", "kept", "rule", "value", "current"}
 
 
-def test_current_source_is_null_when_current_hash_not_in_candidates(scrapers_fake):
+def test_current_source_falls_back_to_the_stored_label_when_not_in_candidates(scrapers_fake):
+    """When the current hash isn't among the freshly-scraped candidates,
+    current.source must come from the stored virtual_items.source (now a
+    release-type label like the candidate rows use), not be dropped to
+    None."""
     db.insert_request("Heat", "tt1", "movie")
-    _item("tt1", "tok", "e" * 40, source="torrentio")
+    _item("tt1", "tok", "e" * 40, source="REMUX")
+    out = rs.candidates("tt1", "movie")
+    assert out["current"]["source"] == "REMUX"
+
+
+def test_current_source_is_null_when_current_hash_not_in_candidates_and_nothing_stored(scrapers_fake):
+    db.insert_request("Heat", "tt1", "movie")
+    _item("tt1", "tok", "e" * 40, source=None)
     out = rs.candidates("tt1", "movie")
     assert out["current"]["source"] is None
 
@@ -402,6 +413,20 @@ def test_swap_route_exists_and_delegates():
     assert "season and episode must be whole numbers" in body
 
 
+def test_candidates_route_rejects_a_negative_season_or_episode_like_swap_does():
+    """The candidates route used to pass season/episode straight through to
+    a live scrape without validating them; a negative value now gets the
+    same {ok: false, message} rejection the swap route already used for an
+    invalid ref, via the same parse_episode_ref helper."""
+    src = _src("app.py")
+    route = '@app.get("/ui/api/library/<imdb_id>/candidates")'
+    assert route in src
+    body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
+    assert "release_swap.parse_episode_ref(" in body
+    assert "season and episode must be whole numbers" in body
+    assert body.index("release_swap.parse_episode_ref(") < body.index("release_swap.candidates(")
+
+
 @pytest.mark.parametrize("season, episode, expected", [
     ("2", 3, (2, 3)),
     (None, None, (None, None)),
@@ -413,6 +438,8 @@ def test_swap_route_exists_and_delegates():
     (1, -1, None),
     ("-1", 1, None),
     (-1, -1, None),
+    ("x", 1, None),
+    ("--3", 1, None),
 ])
 def test_parse_episode_ref(season, episode, expected):
     assert rs.parse_episode_ref(season, episode) == expected

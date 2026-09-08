@@ -1624,21 +1624,6 @@ def titles_for_hashes(hashes: list[str]) -> dict[str, list[dict]]:
             for row in rows:
                 result[row["matched_hash"]].append({"imdb_id": row["imdb_id"], "title": row["title"]})
     return result
-    placeholders = ",".join("?" for _ in hashes)
-    with _connect() as conn:
-        rows = conn.execute(
-            f"""SELECT DISTINCT h.hash AS matched_hash, r.imdb_id, r.title
-                FROM (
-                    SELECT info_hash AS hash, imdb_id FROM requests WHERE info_hash IN ({placeholders})
-                    UNION
-                    SELECT info_hash AS hash, imdb_id FROM virtual_items WHERE info_hash IN ({placeholders})
-                ) h
-                JOIN requests r ON r.imdb_id = h.imdb_id
-                ORDER BY h.hash, r.title""",
-            (*hashes, *hashes)).fetchall()
-    for row in rows:
-        result[row["matched_hash"]].append({"imdb_id": row["imdb_id"], "title": row["title"]})
-    return result
 
 
 # ── webhook idempotency ───────────────────────────────────────────────────────
