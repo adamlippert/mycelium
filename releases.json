@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.23.0",
+    "date": "2026-09-08",
+    "notes": [
+      "The webhook secret can be rotated from Settings. Rotate issues a new auto-generated secret and keeps the previous one valid for 24 hours, so Seerr, Radarr, Sonarr and the Jellyfin webhook plugin can be updated one by one; a webhook that still sends the old value is logged with its address and user agent",
+      "GET /ui/api/webhook-secret reports previous_valid_until during that window and POST /ui/api/webhook-secret/rotate does the rotation; both refuse when the secret comes from the WEBHOOK_SECRET environment variable"
+    ]
+  },
+  {
     "version": "0.22.1",
     "date": "2026-09-08",
     "notes": [

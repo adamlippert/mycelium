@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-09-08
+
 ### Added
 
 - The webhook secret can be rotated from Settings. Rotate issues a new
