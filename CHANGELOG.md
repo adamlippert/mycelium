@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-09-08
+
 ### Fixed
 
 - A release swap no longer waits without limit for a title that is being
