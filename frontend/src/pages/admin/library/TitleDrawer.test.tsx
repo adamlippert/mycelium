@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TitleDrawer } from './TitleDrawer';
 
-const apiMocks = vi.hoisted(() => ({ libraryDetail: vi.fn(), libraryAction: vi.fn(), retryRequest: vi.fn(), purgeRequest: vi.fn(), reResolve: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({ libraryDetail: vi.fn(), libraryAction: vi.fn(), retryRequest: vi.fn(), purgeRequest: vi.fn(), reResolve: vi.fn(), deleteRequest: vi.fn() }));
 vi.mock('../../../api', async () => {
   const actual = await vi.importActual<typeof import('../../../api')>('../../../api');
   return { ...actual, api: { ...actual.api, ...apiMocks } };
@@ -68,6 +68,17 @@ describe('TitleDrawer', () => {
     const { onPurged, onChanged, onClose } = renderIt();
     await userEvent.click(await screen.findByRole('button', { name: 'Purge' }));
     await waitFor(() => expect(apiMocks.purgeRequest).toHaveBeenCalledWith(1));
+    expect(onPurged).toHaveBeenCalledWith('tt1');
+    expect(onChanged).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('Forget request keeps the files and prunes the selection before closing', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    apiMocks.deleteRequest.mockResolvedValue({ ok: true });
+    const { onPurged, onChanged, onClose } = renderIt();
+    await userEvent.click(await screen.findByRole('button', { name: 'Forget request' }));
+    await waitFor(() => expect(apiMocks.deleteRequest).toHaveBeenCalledWith(1));
     expect(onPurged).toHaveBeenCalledWith('tt1');
     expect(onChanged).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();

@@ -15,6 +15,7 @@ export const ACTIONS = {
   mirror: (d: LibraryDetail) => api.libraryAction(path(d.request.imdb_id, 'mirror')),
   unmirror: (d: LibraryDetail) => api.libraryAction(path(d.request.imdb_id, 'unmirror')),
   purge: async (d: LibraryDetail): Promise<Result> => { await api.purgeRequest(d.request.id); return { ok: true, message: 'removed from the library' }; },
+  forget: async (d: LibraryDetail): Promise<Result> => { await api.deleteRequest(d.request.id); return { ok: true, message: 'request forgotten, files kept' }; },
   blacklistCurrent: (d: LibraryDetail) => d.request.info_hash
     ? api.libraryAction(`/ui/api/library/hash/${d.request.info_hash}/blacklist`)
     : Promise.resolve({ ok: false, message: 'no current hash' }),

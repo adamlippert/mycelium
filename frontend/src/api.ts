@@ -196,6 +196,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ note }),
     }),
+  reopenRequest: (id: number) =>
+    http<{ ok: boolean; message: string }>(`/ui/api/user-requests/${id}/reopen`, { method: 'POST' }),
+  adminQuotas: () => http<{ rows: QuotaRow[] }>('/ui/api/admin/quotas'),
 
   // Users (admin)
   users: () => http<{ users: UserRecord[] }>('/ui/api/users'),
@@ -793,6 +796,12 @@ export interface AdminRequestRow {
 }
 
 export interface AdminRequestPage { rows: AdminRequestRow[]; total: number; page: number; per_page: number }
+
+/** GET /ui/api/admin/quotas row shape (Requests admin tab). */
+export interface QuotaRow {
+  user_id: number; username: string; used: number; limit: number; remaining: number | null;
+  unlimited: boolean; resets_at: string; auto_approve: boolean; paused: boolean;
+}
 
 export interface RequestRow {
   id: number;

@@ -48,6 +48,8 @@ export function TitleDrawer({ imdb, onClose, onChanged, onPurged }: {
             <ActionButton label="Blacklist current hash" run={() => ACTIONS.blacklistCurrent(d)} onDone={refresh} />
             <ActionButton label="Purge" run={() => ACTIONS.purge(d)} onDone={() => { onPurged?.(d.request.imdb_id); onChanged(); onClose(); }}
               confirm={`Remove "${d.request.title}" from the library? Its files, monitoring and request go too.`} />
+            <ActionButton label="Forget request" run={() => ACTIONS.forget(d)} onDone={() => { onPurged?.(d.request.imdb_id); onChanged(); onClose(); }}
+              confirm={`Forget the request for "${d.request.title}" but keep its files? It disappears from the Library table; the files stay in Jellyfin.`} />
           </div>
           <StatusCard d={d} onDone={refresh} />
           <ReleaseCard d={d} />

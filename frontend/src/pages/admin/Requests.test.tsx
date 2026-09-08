@@ -77,4 +77,17 @@ describe('Requests tab', () => {
     renderIt();
     expect(await screen.findByText('No requests waiting for review')).toBeInTheDocument();
   });
+
+  it('clicking a title opens the drawer and updates the hash', async () => {
+    apiMocks.libraryDetail.mockResolvedValue({
+      request: { id: 1, imdb_id: 'tt1', title: 'Heat', media_type: 'movie', status: 'failed', error: 'no release', quality: null, source: null,
+        info_hash: null, seasons: null, created_at: '2026-09-01 10:00:00', updated_at: '2026-09-02 10:00:00', tmdb_id: 949, arr_mirrored_at: null },
+      items: [], playability: [], episodes: null, monitored: null, retry: null, wanted_movie: null,
+      user_requests: [], seerr_request_id: null, override: null, hashes: [], activity: [], arr: { mirrored_at: null },
+    });
+    renderIt();
+    await userEvent.click(await screen.findByText('Heat'));
+    expect(await screen.findByRole('dialog', { name: 'Title details' })).toBeInTheDocument();
+    expect(screen.getByTestId('requests-hash').textContent).toContain('open=tt1');
+  });
 });
