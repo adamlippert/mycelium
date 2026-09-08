@@ -1,8 +1,12 @@
+import { useState } from 'react';
 import type { LibraryDetail } from '../../../../api';
+import { Button } from '../../../../components/primitives';
 import { Copy, DrawerCard, Row } from './DrawerCard';
+import { ReleasesPanel } from '../ReleasesPanel';
 
-export function ReleaseCard({ d }: { d: LibraryDetail }) {
+export function ReleaseCard({ d, onDone }: { d: LibraryDetail; onDone: () => void }) {
   const r = d.request;
+  const [open, setOpen] = useState(false);
   if (!r.info_hash && !d.items.length) return null;
   return (
     <DrawerCard title="Release" description="The release in use and the files written for it.">
@@ -16,6 +20,10 @@ export function ReleaseCard({ d }: { d: LibraryDetail }) {
           {i.season != null && <Row label="Episode">S{String(i.season).padStart(2, '0')}E{String(i.episode ?? 0).padStart(2, '0')}</Row>}
         </div>
       ))}
+      {r.media_type === 'movie' && d.items.length > 0 && (
+        <Button variant="ghost" onClick={() => setOpen((v) => !v)}>Pick another release</Button>
+      )}
+      {open && <ReleasesPanel imdb={r.imdb_id} onDone={onDone} onClose={() => setOpen(false)} />}
     </DrawerCard>
   );
 }

@@ -293,6 +293,12 @@ export const api = {
   adminRequestViews: () => http<{ counts: Record<string, number> }>('/ui/api/admin/requests/views'),
   libraryDetail: (imdb: string) => http<LibraryDetail>(`/ui/api/library/${imdb}`),
   librarySeason: (imdb: string, season: number) => http<{ episodes: SeasonEpisode[] }>(`/ui/api/library/${imdb}/season/${season}`),
+  libraryCandidates: (imdb: string, season?: number, episode?: number) => {
+    const qs = season != null && episode != null ? `?season=${season}&episode=${episode}` : '';
+    return http<CandidatesResponse>(`/ui/api/library/${imdb}/candidates${qs}`);
+  },
+  librarySwap: (imdb: string, body: { info_hash: string; season?: number; episode?: number; blacklist_old: boolean }) =>
+    http<{ ok: boolean; message: string }>(`/ui/api/library/${imdb}/swap`, { method: 'POST', body: JSON.stringify(body) }),
   libraryActivity: (imdb: string, before: number) => http<{ activity: LibraryDetail['activity'] }>(`/ui/api/library/${imdb}/activity?before=${before}`),
   libraryAction: (path: string, method: 'POST' | 'DELETE' = 'POST', body?: unknown) =>
     http<{ ok: boolean; message: string }>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) }),
@@ -837,6 +843,12 @@ export interface LibraryDetail {
 }
 export interface SeasonEpisode { season: number; episode: number; present: boolean; strm_path: string | null; token: string | null;
   wanted_status: string | null; attempt_count: number; air_date: string | null; last_attempted: string | null }
+
+export interface Candidate {
+  info_hash: string; name: string; quality: string | null; source: string | null; size_gb: number; seeders: number;
+  languages: string[]; cached: boolean; scrapers: string[]; kept: boolean; rule: string | null; value: string | null; current: boolean;
+}
+export interface CandidatesResponse { current: { info_hash: string; quality: string | null; source: string | null } | null; candidates: Candidate[] }
 
 export interface GenreRule {
   media_type: 'movie' | 'tv';

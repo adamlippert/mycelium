@@ -58,7 +58,7 @@ export function TitleDrawer({ imdb, onClose, onChanged, onPurged }: {
               confirm={`Forget the request for "${d.request.title}" but keep its files? It leaves the Library table; the files stay in Jellyfin and the request history on the Requests tab stays too.`} />
           </div>
           <StatusCard d={d} onDone={refresh} />
-          <ReleaseCard d={d} />
+          <ReleaseCard d={d} onDone={refresh} />
           <PlayabilityCard d={d} onDone={refresh} />
           <EpisodesCard d={d} onDone={refresh} />
           <RequestsCard d={d} onDone={refresh} />

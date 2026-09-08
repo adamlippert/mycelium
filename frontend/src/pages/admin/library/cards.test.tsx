@@ -7,8 +7,9 @@ import { RequestsCard } from './cards/RequestsCard';
 import { PreferencesCard } from './cards/PreferencesCard';
 import { HashesCard } from './cards/HashesCard';
 import { ActivityCard } from './cards/ActivityCard';
+import { ReleaseCard } from './cards/ReleaseCard';
 
-const apiMocks = vi.hoisted(() => ({ librarySeason: vi.fn(), libraryAction: vi.fn(), libraryActivity: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({ librarySeason: vi.fn(), libraryAction: vi.fn(), libraryActivity: vi.fn(), libraryCandidates: vi.fn() }));
 vi.mock('../../../api', async () => {
   const actual = await vi.importActual<typeof import('../../../api')>('../../../api');
   return { ...actual, api: { ...actual.api, ...apiMocks } };
@@ -114,5 +115,20 @@ describe('drawer cards', () => {
     wrap(<ActivityCard d={{ ...base, activity: activity20 }} />);
     await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
     expect(await screen.findByText('network down')).toBeInTheDocument();
+  });
+
+  it('Release shows Pick another release for a movie with an item, and opens the Releases panel', async () => {
+    apiMocks.libraryCandidates.mockResolvedValue({ current: null, candidates: [] });
+    const movie = {
+      ...base,
+      request: { ...base.request, media_type: 'movie', info_hash: 'e'.repeat(40) },
+      items: [{ token: 't1', info_hash: 'e'.repeat(40), strm_path: '/m/film.strm', torbox_id: 1, last_played: null,
+        play_count: 0, season: null, episode: null, debrid_provider: 'torbox', quality: '1080p' }],
+    };
+    wrap(<ReleaseCard d={movie} onDone={() => {}} />);
+    const button = screen.getByRole('button', { name: 'Pick another release' });
+    await userEvent.click(button);
+    expect(await screen.findByText('Releases')).toBeInTheDocument();
+    await waitFor(() => expect(apiMocks.libraryCandidates).toHaveBeenCalledWith('tt4', undefined, undefined));
   });
 });
