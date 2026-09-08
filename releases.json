@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.21.1",
+    "date": "2026-09-08",
+    "notes": [
+      "Cleanup pass over the review leftovers of 0.17 to 0.21. The title drawer is a real modal (focus moves in and back, Tab stays inside, Escape closes) and the type icons are hidden from screen readers",
+      "Settings: MultiSelect has a keyboard path, a Select whose value is not in its list shows it as a disabled entry, a secret stored in the database gets a Clear button (an environment value stays), tester messages use the schema labels",
+      "Library and Requests: an out-of-range page clamps to the last page, disabled users show in the Quotas card, approving a paused request clears the pause note, duplicate requests by one user count once, the Arr card only renders with the mirror on, the bulk bar keeps its final result line, blacklist titles load in grouped queries",
+      "Release swap: negative season or episode references are rejected on both endpoints, a swap reuses the candidate list from the last five minutes instead of scraping twice, and the catbox upgrader shares release_swap.swap",
+      "The source column means release source: the processor writes the label (WEB-DL, BluRay, REMUX) or nothing, never a scraper name, and a one-off startup migration blanks scraper names left in old rows"
+    ]
+  },
+  {
     "version": "0.21.0",
     "date": "2026-09-08",
     "notes": [

@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-09-08
+
 ### Changed
 
 - The source column now means release source. `virtual_items.source` and
