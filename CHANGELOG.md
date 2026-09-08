@@ -4,6 +4,24 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Admin Requests tab rebuilt on the Library kit: views Pending, Approved,
+  Denied and All with counts; filters by user, type and date; sortable
+  columns; server-side paging; Approve, inline Deny with a reason, and
+  Reopen for a denied request; a Quotas card with each user's requests
+  this month against their cap; the auto-approve rules moved under the
+  table. Clicking a title opens the same drawer as the Library tab.
+- Monthly request quotas are enforced: a user at the cap is refused with a
+  clear message, and an auto-approve user at the cap has new requests
+  wait for review until the month resets. Admins are never limited.
+- The title drawer gains "Forget request", which drops the request but
+  keeps the files.
+
+### Removed
+
+- `GET /ui/api/requests/all`, unused since the Library tab.
+
 ## [0.19.0] - 2026-09-08
 
 ### Added

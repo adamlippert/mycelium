@@ -160,3 +160,9 @@ def test_quota_rows_cover_enabled_non_admin_users(seeded):
     bea = rows[1]
     assert bea["unlimited"] is True and bea["remaining"] is None and bea["paused"] is False
     assert adam["resets_at"].endswith("-01T00:00:00Z")
+
+
+def test_the_old_requests_panels_are_gone():
+    src = _src("frontend/src/pages/admin/Requests.tsx")
+    assert "PendingApprovalsPanel" not in src and "AllRequestsPanel" not in src
+    assert "RowActions" in src and "QuotasCard" in src and "AutoApproveCard" in src
