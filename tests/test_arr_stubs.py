@@ -444,7 +444,8 @@ def test_upgrades_refresh_the_stubs():
     # The catbox path shares its DB write with the admin swap panel via
     # release_swap.swap (action="upgraded") instead of writing the virtual
     # item inline.
-    assert 'release_swap.swap(item, candidate, action="upgraded")' in catbox
+    assert 'release_swap.swap(item, candidate, action="upgraded",' in catbox
+    assert 'lock_timeout=release_swap.UPGRADER_LOCK_TIMEOUT_SEC' in catbox
     assert catbox.index('release_swap.swap(') < catbox.index('arr_sync.mirror_add(')
     pack = src.split("def run_pack_consolidation(", 1)[1].split("\ndef ", 1)[0]
     assert "arr_sync.mirror_add(" in pack
@@ -484,6 +485,46 @@ def test_catbox_auto_upgrade_shares_release_swaps_side_effects(monkeypatch):
     assert item["info_hash"] == h_new and item["quality"] == "2160p" and item["source"] == "BluRay"
     act = db.get_activity_for_title("tt1", "Heat (1995)")[0]
     assert act["event"] == "upgraded"
+
+
+def test_catbox_auto_upgrade_skips_a_busy_token_and_continues(monkeypatch):
+    """A playback that is materializing holds the token lock for up to ten
+    minutes; the upgrader must not wait for it on the scheduler thread."""
+    import catbox
+    import debrid
+    import release_swap
+    import upgrader
+    from streams import Stream
+
+    h_old, h_new = "a" * 40, "b" * 40
+    with db._connect() as conn:
+        for tok, imdb in (("busy", "tt1"), ("free", "tt2")):
+            conn.execute(
+                "INSERT INTO virtual_items (token, info_hash, magnet, title, media_type, strm_path, imdb_id, quality) "
+                "VALUES (?, ?, ?, ?, 'movie', ?, ?, '1080p')",
+                (tok, h_old, f"magnet:?xt=urn:btih:{h_old}", f"Film {tok}", f"/media/{tok}.strm", imdb),
+            )
+        conn.commit()
+
+    better = Stream(name="Film.2160p.BluRay.x264", title="Film.2160p.BluRay.x264",
+                    info_hash=h_new, quality="2160p", seeders=10, size_gb=40.0,
+                    is_season_pack=False, source="torrentio")
+    monkeypatch.setattr(upgrader, "_fetch_movie_candidates", lambda imdb: [better])
+    monkeypatch.setattr(debrid, "check_cached_multi", lambda hashes: {"torbox": {h_new}})
+    monkeypatch.setattr(catbox, "invalidate_url_cache", lambda token=None: None)
+    monkeypatch.setattr(release_swap, "UPGRADER_LOCK_TIMEOUT_SEC", 0.05)
+
+    lock = catbox._token_lock("busy")
+    assert lock.acquire(timeout=1)
+    try:
+        upgraded = upgrader._run_auto_upgrade_catbox()
+    finally:
+        lock.release()
+
+    assert upgraded == 1, "the free title upgraded, the busy one was skipped"
+    assert db.get_virtual_item("busy")["info_hash"] == h_old
+    assert db.get_virtual_item("free")["info_hash"] == h_new
+    assert db.get_activity_for_title("tt1", "Film busy") == []
 
 
 def test_fixed_mode_auto_upgrade_stores_the_release_label_not_the_scraper_name(monkeypatch):

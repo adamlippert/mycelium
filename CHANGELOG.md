@@ -4,6 +4,14 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- A release swap no longer waits without limit for a title that is being
+  materialized for playback (the token lock can be held for up to ten
+  minutes). The catbox auto-upgrader waits five seconds, then skips the
+  title for that cycle; the admin swap waits ten seconds, then reports
+  "busy" in the panel. Nothing changes on a timeout.
+
 ## [0.22.0] - 2026-09-08
 
 ### Changed

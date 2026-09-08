@@ -198,18 +198,32 @@ def parse_episode_ref(season, episode) -> tuple[int | None, int | None] | None:
     return (s, e)
 
 
-def swap(item: dict, candidate: dict, blacklist_old: bool = False, action: str = "swapped") -> dict:
+BUSY_MESSAGE = "busy: a playback is materializing this title, try again in a few minutes"
+ADMIN_LOCK_TIMEOUT_SEC = 10.0
+UPGRADER_LOCK_TIMEOUT_SEC = 5.0
+
+
+def swap(item: dict, candidate: dict, blacklist_old: bool = False, action: str = "swapped",
+         lock_timeout: float | None = None) -> dict:
     """Put candidate's hash behind item's token. Nothing on disk changes.
 
     action names the activity-log event: the admin panel logs "swapped", the
     catbox auto-upgrader shares this same function but logs "upgraded", so
-    both paths get identical side effects without identical labels."""
+    both paths get identical side effects without identical labels.
+
+    lock_timeout bounds the wait for the token lock, which catbox.materialize
+    can hold for up to ten minutes while TorBox readies the torrent. On a
+    timeout nothing is changed and {ok: False, message: BUSY_MESSAGE} comes
+    back; None waits without limit."""
     import catbox
     old_hash = (item.get("info_hash") or "").lower()
     old_quality = item.get("quality") or "?"
     new_hash = candidate["info_hash"].lower()
     magnet = f"magnet:?xt=urn:btih:{new_hash}"
-    with catbox._token_lock(item["token"]):
+    lock = catbox._token_lock(item["token"])
+    if not lock.acquire(timeout=-1 if lock_timeout is None else lock_timeout):
+        return {"ok": False, "message": BUSY_MESSAGE}
+    try:
         db.update_virtual_item_upgrade(item["token"], new_hash, magnet, candidate.get("quality"), candidate.get("source"))
         db.update_virtual_rd_id(item["token"], None)
         catbox.invalidate_url_cache(item["token"])
@@ -217,6 +231,8 @@ def swap(item: dict, candidate: dict, blacklist_old: bool = False, action: str =
         key = catbox._content_key(item)
         if key:
             db.reset_playability_state(key)
+    finally:
+        lock.release()
     if item.get("season") is None and item.get("imdb_id"):
         req = db.get_request_by_imdb(item["imdb_id"])
         if req:
@@ -251,4 +267,4 @@ def swap_by_hash(imdb_id: str, info_hash: str, season: int | None = None, episod
     match = next((c for c in listing["candidates"] if c["info_hash"] == info_hash.lower()), None)
     if not match:
         return {"ok": False, "message": "that hash is not in the candidate list"}
-    return swap(item, match, blacklist_old)
+    return swap(item, match, blacklist_old, lock_timeout=ADMIN_LOCK_TIMEOUT_SEC)

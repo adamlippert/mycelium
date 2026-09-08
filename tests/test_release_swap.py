@@ -225,6 +225,37 @@ def test_swap_movie_replaces_the_release_behind_the_token(monkeypatch):
     assert act["event"] == "swapped" and "1080p" in act["message"] and "2160p" in act["message"]
 
 
+def test_swap_gives_up_on_a_held_token_lock_without_side_effects(monkeypatch):
+    """catbox.materialize can hold the token lock for up to ten minutes; a
+    bounded wait returns the busy result and changes nothing."""
+    import catbox
+    rid = db.insert_request("Heat", "tt1", "movie")
+    db.update_request(rid, "success", quality="1080p", source="WEB-DL", info_hash=H4)
+    _item("tt1", "tok", H4)
+    invalidated = []
+    monkeypatch.setattr(catbox, "invalidate_url_cache", lambda token=None: invalidated.append(token))
+    lock = catbox._token_lock("tok")
+    assert lock.acquire(timeout=1)
+    try:
+        out = rs.swap(rs.find_item("tt1"), _candidate(H3), blacklist_old=True, lock_timeout=0.05)
+    finally:
+        lock.release()
+    assert out == {"ok": False, "message": rs.BUSY_MESSAGE}
+    assert db.get_virtual_item("tok")["info_hash"] == H4
+    assert invalidated == []
+    assert db.get_request(rid)["info_hash"] == H4
+    assert H4 not in db.get_blacklisted_hashes()
+    assert db.get_activity_for_title("tt1", "Heat") == []
+    # Released again: the same call goes through.
+    assert rs.swap(rs.find_item("tt1"), _candidate(H3), lock_timeout=0.05)["ok"] is True
+
+
+def test_swap_by_hash_bounds_the_admin_wait():
+    src = open(os.path.join(_ROOT, "release_swap.py"), encoding="utf-8").read()
+    body = src.split("def swap_by_hash(", 1)[1]
+    assert "lock_timeout=ADMIN_LOCK_TIMEOUT_SEC" in body
+
+
 def test_swap_clears_the_realdebrid_id_but_keeps_the_provider(monkeypatch):
     import catbox
     rid = db.insert_request("Heat", "tt1", "movie")
@@ -453,10 +484,11 @@ def test_swap_holds_the_token_lock_around_the_write(monkeypatch):
             self._token = token
             self._log = log
 
-        def __enter__(self):
+        def acquire(self, timeout=-1):
             self._log.append(f"enter:{self._token}")
+            return True
 
-        def __exit__(self, *exc):
+        def release(self):
             self._log.append(f"exit:{self._token}")
 
     events = []

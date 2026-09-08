@@ -111,7 +111,13 @@ def _run_auto_upgrade_catbox() -> int:
                 "source": release_tags.source_label(better.name),
                 "name": better.name,
             }
-            release_swap.swap(item, candidate, action="upgraded")
+            result = release_swap.swap(item, candidate, action="upgraded",
+                                       lock_timeout=release_swap.UPGRADER_LOCK_TIMEOUT_SEC)
+            if not result.get("ok"):
+                # A playback is materializing this token; skip it this cycle
+                # rather than hold the scheduler thread for up to ten minutes.
+                log.info("Catbox upgrade: %s skipped (%s)", item["title"], result.get("message"))
+                continue
             try:
                 import arr_sync
                 arr_sync.mirror_add(item["imdb_id"], "movie", item.get("tmdb_id"), item["title"])
