@@ -14,21 +14,22 @@ const OPS: Op[] = [
   { label: 'Remove from library', confirm: (n) => `Remove ${n} title${n === 1 ? '' : 's'} from the library? Their files, monitoring and requests go too.`, run: (r) => api.purgeRequest(r.id) },
 ];
 
-export function ActionBar({ rows, selected, view, onDone, onClear }: {
-  rows: LibraryRow[]; selected: Set<string>; view: string; onDone: () => void; onClear: () => void;
+export function ActionBar({ selected, view, onDone, onClear }: {
+  selected: Map<string, LibraryRow>; view: string; onDone: (processed: string[]) => void; onClear: () => void;
 }) {
   const [progress, setProgress] = useState<{ label: string; done: number; total: number; failures: string[] } | null>(null);
-  const targets = rows.filter((r) => selected.has(r.imdb_id));
+  const targets = [...selected.values()];
   const run = async (op: Op) => {
     if (op.confirm && !window.confirm(op.confirm(targets.length))) return;
     const failures: string[] = [];
+    const processed: string[] = [];
     let done = 0;
     setProgress({ label: op.label, done, total: targets.length, failures });
     for (const r of targets) {
-      try { await op.run(r); done += 1; } catch (e: any) { failures.push(`${r.title}: ${e.message}`); }
+      try { await op.run(r); done += 1; processed.push(r.imdb_id); } catch (e: any) { failures.push(`${r.title}: ${e.message}`); }
       setProgress({ label: op.label, done, total: targets.length, failures: [...failures] });
     }
-    onDone();
+    onDone(processed);
   };
   return (
     <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-bg/95 px-4 py-3 backdrop-blur md:left-auto">

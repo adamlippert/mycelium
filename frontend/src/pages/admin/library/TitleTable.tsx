@@ -8,7 +8,7 @@ function Badge({ title, tone, children }: { title: string; tone: 'danger' | 'war
 
 export function TitleTable({ rows, sort, order, onSort, selected, onSelect, onSelectAll, onOpen, loading }: {
   rows: LibraryRow[]; sort: string; order: 'asc' | 'desc'; onSort: (col: string) => void;
-  selected: Set<string>; onSelect: (imdb: string, on: boolean) => void; onSelectAll: (on: boolean) => void;
+  selected: Set<string>; onSelect: (row: LibraryRow, on: boolean) => void; onSelectAll: (on: boolean) => void;
   onOpen: (imdb: string) => void; loading: boolean;
 }) {
   const header = (key: string, label: string) => (
@@ -37,7 +37,7 @@ export function TitleTable({ rows, sort, order, onSort, selected, onSelect, onSe
           {rows.map((r) => (
             <tr key={r.imdb_id} className="cursor-pointer border-b border-border last:border-0 hover:bg-white/[0.03]" onClick={() => onOpen(r.imdb_id)}>
               <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                <input type="checkbox" aria-label={`Select ${r.title}`} checked={selected.has(r.imdb_id)} onChange={(e) => onSelect(r.imdb_id, e.target.checked)} />
+                <input type="checkbox" aria-label={`Select ${r.title}`} checked={selected.has(r.imdb_id)} onChange={(e) => onSelect(r, e.target.checked)} />
               </td>
               <td className="px-3 py-2">
                 <div className="font-medium">{r.media_type === 'movie' ? '\u{1F3AC}' : '\u{1F4FA}'} <span>{r.title}</span></div>

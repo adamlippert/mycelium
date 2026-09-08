@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api';
+import type { LibraryRow } from '../../api';
 import { Button, Select } from '../../components/primitives';
 import { Rail } from './library/Rail';
 import { TitleTable } from './library/TitleTable';
@@ -14,7 +15,8 @@ export default function Library() {
   const location = useLocation();
   const navigate = useNavigate();
   const [state, setState] = useState<LibraryState>(() => parseHash(location.hash));
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Map<string, LibraryRow>>(new Map());
+  const selectedIds = useMemo(() => new Set(selected.keys()), [selected]);
   const query = useMemo(() => toQuery(state), [state]);
   const page = useQuery({ queryKey: ['library', query], queryFn: () => api.library(query), placeholderData: (p) => p });
   const counts = useQuery({ queryKey: ['library-views'], queryFn: api.libraryViews });
@@ -34,11 +36,13 @@ export default function Library() {
       <span data-testid="library-hash" hidden>{toHash(state)}</span>
       <Rail state={state} counts={counts.data?.counts || {}} users={users.data?.users || []} mirrorOn={counts.data?.mirror_on ?? false} onChange={update} />
       <main className="space-y-3">
-        <TitleTable rows={rows} sort={state.sort} order={state.order} onSort={onSort} selected={selected} loading={page.isFetching}
-          onSelect={(id, on) => setSelected((s) => { const n = new Set(s); on ? n.add(id) : n.delete(id); return n; })}
-          onSelectAll={(on) => setSelected((s) => (on
-            ? new Set([...s, ...rows.map((r) => r.imdb_id)])
-            : new Set([...s].filter((id) => !rows.some((r) => r.imdb_id === id)))))}
+        <TitleTable rows={rows} sort={state.sort} order={state.order} onSort={onSort} selected={selectedIds} loading={page.isFetching}
+          onSelect={(row, on) => setSelected((s) => { const n = new Map(s); on ? n.set(row.imdb_id, row) : n.delete(row.imdb_id); return n; })}
+          onSelectAll={(on) => setSelected((s) => {
+            const n = new Map(s);
+            rows.forEach((r) => (on ? n.set(r.imdb_id, r) : n.delete(r.imdb_id)));
+            return n;
+          })}
           onOpen={(id) => update({ open: id })} />
         {!rows.length && !page.isFetching && (
           <p className="text-sm text-muted">Nothing here. {EMPTY[state.view] || ''}</p>
@@ -52,7 +56,18 @@ export default function Library() {
             <Button aria-label="Next page" disabled={last >= total} onClick={() => update({ page: state.page + 1 })}>Next</Button>
           </div>
         </div>
-        {selected.size > 0 && <ActionBar rows={rows} selected={selected} view={state.view} onDone={() => { page.refetch(); counts.refetch(); }} onClear={() => setSelected(new Set())} />}
+        {selected.size > 0 && (
+          <ActionBar
+            selected={selected}
+            view={state.view}
+            onDone={(processed) => {
+              page.refetch();
+              counts.refetch();
+              setSelected((s) => { const n = new Map(s); processed.forEach((id) => n.delete(id)); return n; });
+            }}
+            onClear={() => setSelected(new Map())}
+          />
+        )}
       </main>
       {state.open && <TitleDrawer key={state.open} imdb={state.open} onClose={() => update({ open: null })} onChanged={() => { page.refetch(); counts.refetch(); }} />}
     </div>
