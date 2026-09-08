@@ -2014,6 +2014,29 @@ def ui_api_library_views():
     return jsonify(counts=library_admin.view_counts(), mirror_on=arr_sync.is_enabled())
 
 
+@app.get("/ui/api/admin/requests")
+def ui_api_admin_requests():
+    """The Requests tab's table: views, filters, sort and paging in SQL."""
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import requests_admin
+    filters = {k: request.args.get(k) for k in
+               ("view", "user", "type", "added", "q", "sort", "order", "page", "per_page")}
+    rows, total = requests_admin.list_requests(filters)
+    return jsonify(rows=rows, total=total,
+                   page=requests_admin._int(filters["page"], 1, 1, 10_000_000),
+                   per_page=requests_admin._int(filters["per_page"], requests_admin.DEFAULT_PER_PAGE, 1,
+                                                requests_admin.MAX_PER_PAGE))
+
+
+@app.get("/ui/api/admin/requests/views")
+def ui_api_admin_request_views():
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import requests_admin
+    return jsonify(counts=requests_admin.view_counts())
+
+
 @app.get("/ui/api/library/<imdb_id>")
 def ui_api_library_detail(imdb_id: str):
     if not auth.is_admin():

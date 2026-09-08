@@ -412,6 +412,7 @@ def _migrate() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_imdb ON activity_log(imdb_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_user_requests_imdb ON user_requests(imdb_id, created_at DESC)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_wanted_episodes_imdb_status ON wanted_episodes(imdb_id, status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_user_requests_status_created ON user_requests(status, created_at DESC)")
         if "info_hash" in req_cols:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_requests_info_hash ON requests(info_hash)")
 
