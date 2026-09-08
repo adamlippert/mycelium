@@ -2105,8 +2105,12 @@ def ui_api_library_swap(imdb_id: str):
         return jsonify(error="admin required"), 403
     import release_swap
     p = request.get_json(silent=True) or {}
+    ref = release_swap.parse_episode_ref(p.get("season"), p.get("episode"))
+    if ref is None:
+        return jsonify(ok=False, message="season and episode must be whole numbers")
+    season, episode = ref
     return jsonify(**release_swap.swap_by_hash(
-        imdb_id, str(p.get("info_hash") or ""), p.get("season"), p.get("episode"),
+        imdb_id, str(p.get("info_hash") or ""), season, episode,
         blacklist_old=bool(p.get("blacklist_old"))))
 
 

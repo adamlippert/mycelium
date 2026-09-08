@@ -142,6 +142,31 @@ def _drop_faststart_cache(token: str) -> None:
         log.debug("No fast-start cache to drop for %s: %s", token, exc)
 
 
+def parse_episode_ref(season, episode) -> tuple[int | None, int | None] | None:
+    """Coerce a season/episode pair from a JSON body into ints, or None when
+    invalid. None stays None; an int (not bool) or a digit string becomes
+    int; anything else is invalid. Both must be given together or both
+    absent, otherwise invalid."""
+    def _coerce(v):
+        if v is None:
+            return None, True
+        if isinstance(v, bool):
+            return None, False
+        if isinstance(v, int):
+            return v, True
+        if isinstance(v, str) and v.strip().lstrip("-").isdigit():
+            return int(v), True
+        return None, False
+
+    s, s_ok = _coerce(season)
+    e, e_ok = _coerce(episode)
+    if not s_ok or not e_ok:
+        return None
+    if (s is None) != (e is None):
+        return None
+    return (s, e)
+
+
 def swap(item: dict, candidate: dict, blacklist_old: bool = False) -> dict:
     """Put candidate's hash behind item's token. Nothing on disk changes."""
     import catbox
@@ -149,12 +174,13 @@ def swap(item: dict, candidate: dict, blacklist_old: bool = False) -> dict:
     old_quality = item.get("quality") or "?"
     new_hash = candidate["info_hash"].lower()
     magnet = f"magnet:?xt=urn:btih:{new_hash}"
-    db.update_virtual_item_upgrade(item["token"], new_hash, magnet, candidate.get("quality"), candidate.get("source"))
-    catbox.invalidate_url_cache(item["token"])
-    _drop_faststart_cache(item["token"])
-    key = catbox._content_key(item)
-    if key:
-        db.reset_playability_state(key)
+    with catbox._token_lock(item["token"]):
+        db.update_virtual_item_upgrade(item["token"], new_hash, magnet, candidate.get("quality"), candidate.get("source"))
+        catbox.invalidate_url_cache(item["token"])
+        _drop_faststart_cache(item["token"])
+        key = catbox._content_key(item)
+        if key:
+            db.reset_playability_state(key)
     if item.get("season") is None and item.get("imdb_id"):
         req = db.get_request_by_imdb(item["imdb_id"])
         if req:

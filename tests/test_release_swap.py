@@ -248,3 +248,48 @@ def test_swap_route_exists_and_delegates():
     assert route in src
     body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
     assert "auth.is_admin()" in body and "release_swap.swap_by_hash(" in body and "blacklist_old" in body
+    assert "season and episode must be whole numbers" in body
+
+
+@pytest.mark.parametrize("season, episode, expected", [
+    ("2", 3, (2, 3)),
+    (None, None, (None, None)),
+    ([1], 2, None),
+    (True, 1, None),
+    (2, None, None),
+])
+def test_parse_episode_ref(season, episode, expected):
+    assert rs.parse_episode_ref(season, episode) == expected
+
+
+def test_swap_holds_the_token_lock_around_the_write(monkeypatch):
+    import catbox
+
+    class _RecordingLock:
+        def __init__(self, token, log):
+            self._token = token
+            self._log = log
+
+        def __enter__(self):
+            self._log.append(f"enter:{self._token}")
+
+        def __exit__(self, *exc):
+            self._log.append(f"exit:{self._token}")
+
+    events = []
+    monkeypatch.setattr(catbox, "_token_lock", lambda token: _RecordingLock(token, events))
+    monkeypatch.setattr(catbox, "invalidate_url_cache", lambda token=None: None)
+
+    real_upgrade = db.update_virtual_item_upgrade
+
+    def _recording_upgrade(*a, **k):
+        events.append("update")
+        return real_upgrade(*a, **k)
+    monkeypatch.setattr(db, "update_virtual_item_upgrade", _recording_upgrade)
+
+    rid = db.insert_request("Heat", "tt1", "movie")
+    db.update_request(rid, "success", quality="1080p", source="WEB-DL", info_hash=H4)
+    _item("tt1", "tok", H4)
+    out = rs.swap(rs.find_item("tt1"), _candidate(H3))
+    assert out["ok"] is True
+    assert events == ["enter:tok", "update", "exit:tok"]
