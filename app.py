@@ -2037,6 +2037,23 @@ def ui_api_admin_request_views():
     return jsonify(counts=requests_admin.view_counts())
 
 
+@app.get("/ui/api/admin/quotas")
+def ui_api_admin_quotas():
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import requests_admin
+    return jsonify(rows=requests_admin.quota_rows())
+
+
+@app.post("/ui/api/user-requests/<int:req_id>/reopen")
+def ui_api_user_request_reopen(req_id: int):
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    if db.reopen_user_request(req_id):
+        return jsonify(ok=True, message="back in the pending list")
+    return jsonify(ok=False, message="only a denied request can be reopened")
+
+
 @app.get("/ui/api/library/<imdb_id>")
 def ui_api_library_detail(imdb_id: str):
     if not auth.is_admin():
@@ -2224,12 +2241,6 @@ def ui_api_clear_retry_queue():
 @app.get("/ui/api/retry-queue")
 def ui_api_retry_queue():
     return jsonify(items=db.get_pending_retries())
-
-
-@app.get("/ui/api/requests/all")
-def ui_api_all_requests():
-    rows = db.get_recent(5000)
-    return jsonify(items=rows)
 
 
 @app.get("/ui/api/requests/status")
@@ -2643,11 +2654,17 @@ def ui_api_discover_add():
 
     user_rec = auth.current_user_record()
     if user_rec and user_rec.get("id"):
-        # Multi-user mode: go through approval flow
+        # Multi-user mode: go through approval flow, quota first
+        ok, info = quota.allows(user_rec)
         auto = bool(user_rec.get("auto_approve")) or user_rec.get("role") == "admin"
-        status = "approved" if auto else "pending"
+        if not ok and not auto:
+            return jsonify(error="quota reached", used=info["used"], limit=info["limit"],
+                           resets_at=info["resets_at"]), 409
+        status = "approved" if auto and ok else "pending"
         rid = db.create_user_request(user_rec["id"], imdb_id, tmdb_id, media_type,
                                        title, status=status)
+        if not ok:
+            db.update_user_request_status(rid, "pending", note="auto-approve paused: monthly quota reached")
         if status == "approved":
             _kick_off_processing(title, imdb_id, media_type, tmdb_id, monitor_mode, seasons)
         return jsonify(status=status, request_id=rid, imdb_id=imdb_id)

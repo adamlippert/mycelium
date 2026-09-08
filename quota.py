@@ -23,3 +23,15 @@ def get_quota(user: dict | None) -> dict:
         "resets_at": _first_of_next_month(),
         "unlimited": limit == 0,
     }
+
+
+def allows(user: dict | None) -> tuple[bool, dict]:
+    """The one quota rule. Admins and users with no cap always pass; a
+    capped user passes while used < limit. The info dict is get_quota()
+    plus a reason when refused, so a route can hand it to the client."""
+    info = get_quota(user)
+    if not user or user.get("role") == "admin" or info["unlimited"]:
+        return True, info
+    if info["used"] >= info["limit"]:
+        return False, {**info, "reason": "quota reached"}
+    return True, info

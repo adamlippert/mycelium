@@ -144,3 +144,19 @@ def test_the_routes_exist_and_are_admin_only():
         assert route in src, route
         body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
         assert "auth.is_admin()" in body and "requests_admin" in body
+
+
+def test_quota_rows_cover_enabled_non_admin_users(seeded):
+    db.update_user(seeded["adam"], auto_approve=1)
+    db.create_user_request(seeded["adam"], "tt9", 9, "movie", "Third")
+    carl = db.create_user("carl", "scrypt$x$y", role="user", quota_monthly=5)
+    db.update_user(carl, enabled=0)
+    rows = ra.quota_rows()
+    assert [r["username"] for r in rows] == ["adam", "bea"], "admins and disabled users are left out"
+    adam = rows[0]
+    # r1 sits two days back; on the 1st or 2nd of a month it falls into last month, so allow 2 or 3
+    assert adam["used"] in (2, 3) and adam["limit"] == 2 and adam["remaining"] == 0
+    assert adam["unlimited"] is False and adam["auto_approve"] is True and adam["paused"] is True
+    bea = rows[1]
+    assert bea["unlimited"] is True and bea["remaining"] is None and bea["paused"] is False
+    assert adam["resets_at"].endswith("-01T00:00:00Z")

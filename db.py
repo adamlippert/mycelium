@@ -2069,6 +2069,17 @@ def get_user_request(req_id: int) -> dict | None:
         return dict(row) if row else None
 
 
+def reopen_user_request(req_id: int) -> bool:
+    """A denied request goes back to pending with the review cleared.
+    Returns False when the row is missing or not denied."""
+    with _connect() as conn:
+        cur = conn.execute(
+            """UPDATE user_requests SET status='pending', reviewed_by=NULL, reviewed_at=NULL, note=NULL
+               WHERE id=? AND status='denied'""", (req_id,))
+        conn.commit()
+        return cur.rowcount == 1
+
+
 def count_user_requests_this_month(user_id: int) -> int:
     with _connect() as conn:
         row = conn.execute(

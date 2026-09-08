@@ -98,3 +98,20 @@ def view_counts() -> dict[str, int]:
     with db._connect() as conn:
         return {v: conn.execute(f"SELECT COUNT(*) FROM ({_BASE}) t WHERE {_VIEW_WHERE[v]}").fetchone()[0]
                 for v in VIEWS}
+
+
+def quota_rows() -> list[dict]:
+    """One row per enabled non-admin user for the Quotas card."""
+    import quota
+    out = []
+    for u in sorted(db.list_users(), key=lambda x: (x["username"] or "").lower()):
+        if u.get("role") == "admin" or not u.get("enabled", 1):
+            continue
+        q = quota.get_quota(u)
+        auto = bool(u.get("auto_approve"))
+        at_cap = (not q["unlimited"]) and q["used"] >= q["limit"]
+        out.append({"user_id": u["id"], "username": u["username"], "used": q["used"], "limit": q["limit"],
+                    "remaining": None if q["unlimited"] else max(0, q["limit"] - q["used"]),
+                    "unlimited": q["unlimited"], "resets_at": q["resets_at"],
+                    "auto_approve": auto, "paused": auto and at_cap})
+    return out

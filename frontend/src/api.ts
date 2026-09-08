@@ -357,9 +357,6 @@ export const api = {
   wantedRecheck: () => http<{ ok: boolean; message?: string }>('/ui/api/wanted-recheck', { method: 'POST' }),
   wantedEpisodes: () => http<{ items: WantedEpisode[] }>('/ui/api/wanted-episodes'),
 
-  // All requests (admin Requests tab)
-  requestsAll: () => http<{ items: RequestRow[] }>('/ui/api/requests/all'),
-
   // Failed processing requests
   failedRequests: () => http<{ items: any[] }>('/ui/api/requests/failed'),
   retryRequest: (id: number) =>
