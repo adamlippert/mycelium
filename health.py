@@ -78,16 +78,19 @@ def _jellyfin_libraries_row(jellyfin_url: str, jellyfin_key: str) -> dict | None
 
 
 def _torbox_budget_row() -> dict | None:
-    """TorBox adds used this hour against the 60/hour limit. Every request
-    with CATBOX_PRELOAD on spends one, whoever filed it."""
+    """Uncached TorBox adds used this hour against the 60/hour limit. Cached
+    adds are shown but do not count: TorBox only limits uncached ones."""
     try:
         import torbox
         usage = torbox.createtorrent_usage()
         count, limit = int(usage.get("count", 0)), int(usage.get("limit", 60) or 60)
+        cached = int(usage.get("cached_count", 0) or 0)
     except Exception as exc:
         log.debug("TorBox add budget unavailable: %s", exc)
         return None
-    note = f"{count}/{limit}"
+    note = f"{count}/{limit} uncached"
+    if cached:
+        note += f", {cached} cached (not limited)"
     if count >= _ADD_BUDGET_WARN_AT:
         note += " used; auto-requesters (Suggestarr, Trakt, MDBList, auto-approve) share this budget"
         return {"name": "TorBox adds this hour", "status": "warn", "note": note}

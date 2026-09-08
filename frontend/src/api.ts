@@ -640,7 +640,10 @@ export type TorboxTorrent = {
 export type Release = { version: string; date: string; notes: string[] };
 
 export type TorboxQuota = {
+  /** Uncached adds this hour: the figure TorBox limits. */
   count: number;
+  /** Cached adds this hour; TorBox does not count them against the hour. */
+  cached_count: number;
   limit: number;
   window_sec: number;
   by_reason: Record<string, number>;

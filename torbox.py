@@ -24,15 +24,17 @@ def _headers() -> dict[str, str]:
 
 
 # ── createtorrent rate-limit visibility ───────────────────────────────────────
-# TorBox limits POST /torrents/createtorrent to 60/hour per API token. Every
-# call is reserved in the createtorrent_log table BEFORE the HTTP request, in
+# TorBox limits POST /torrents/createtorrent to 60/hour per API key for
+# UNCACHED torrents; cached adds fall under the general 300/minute limit
+# (support.torbox.app, "API Rate Limits"). Every call is reserved in the
+# createtorrent_log table BEFORE the HTTP request, in
 # one immediate transaction, so the budget holds across threads AND across
 # processes: the database is the single source of truth, and adding gunicorn
 # workers cannot multiply the local guard into N independent 60/hour counters
 # (TorBox's real limit does not care how many workers we run).
 
 
-def _reserve_createtorrent_slot(reason: str) -> int:
+def _reserve_createtorrent_slot(reason: str, cached: bool = False) -> int:
     """Atomically check both the hourly and per-minute budgets and reserve a
     slot in the same transaction, so two concurrent callers can't both pass
     the check before either recorded a call. Raises RateLimited if no budget
@@ -40,17 +42,17 @@ def _reserve_createtorrent_slot(reason: str) -> int:
     roll it back if the API call itself fails."""
     import db as _db
     res = _db.reserve_createtorrent_slot(
-        time.time(), reason, _CREATETORRENT_LIMIT_HOUR, _CREATETORRENT_LIMIT_MIN)
+        time.time(), reason, _CREATETORRENT_LIMIT_HOUR, _CREATETORRENT_LIMIT_MIN, cached=cached)
     if res["id"] is None:
-        if res["hour_count"] >= _CREATETORRENT_LIMIT_HOUR - 2:
+        if not cached and res["hour_count"] >= _CREATETORRENT_LIMIT_HOUR - 2:
             log.warning("createtorrent [%s] SKIPPED  -  hourly quota %d/%d reached",
                         reason, res["hour_count"], _CREATETORRENT_LIMIT_HOUR)
         else:
             log.warning("createtorrent [%s] SKIPPED  -  per-minute burst %d/%d reached",
                         reason, res["min_count"], _CREATETORRENT_LIMIT_MIN)
         raise RateLimited()
-    log.info("createtorrent [%s] (%d/60h, %d/10m): reserving slot",
-             reason, res["hour_count"], res["min_count"])
+    log.info("createtorrent [%s] (%d/60h uncached, %d/10m, %s): reserving slot",
+             reason, res["hour_count"], res["min_count"], "cached" if cached else "uncached")
     return res["id"]
 
 
@@ -71,11 +73,18 @@ def createtorrent_usage(window_sec: int = 3600) -> dict:
     cutoff = time.time() - window_sec
     recent = _db.get_createtorrent_log(cutoff)
     by_reason: dict[str, int] = {}
-    for _, reason in recent:
+    cached_count = 0
+    for _, reason, cached in recent:
+        if cached:
+            cached_count += 1
+            continue
         by_reason[reason] = by_reason.get(reason, 0) + 1
-    oldest = min((ts for ts, _ in recent), default=None)
+    uncached = [ts for ts, _, cached in recent if not cached]
+    oldest = min(uncached, default=None)
     return {
-        "count": len(recent),
+        # `count` is the figure TorBox limits: uncached adds only.
+        "count": len(uncached),
+        "cached_count": cached_count,
         "limit": 60,
         "window_sec": window_sec,
         "by_reason": by_reason,
@@ -84,8 +93,8 @@ def createtorrent_usage(window_sec: int = 3600) -> dict:
     }
 
 
-_CREATETORRENT_LIMIT_HOUR = 60   # TorBox: 60/hour per IP
-_CREATETORRENT_LIMIT_MIN  = 10   # TorBox: 10/min edge burst limit
+_CREATETORRENT_LIMIT_HOUR = 60   # TorBox: 60/hour per API key, uncached adds only
+_CREATETORRENT_LIMIT_MIN  = 10   # local burst guard on every add, cached or not
 
 
 class RateLimited(Exception):
@@ -93,11 +102,15 @@ class RateLimited(Exception):
     we never even send a request we know TorBox will reject with 429."""
 
 
-def add_magnet(magnet: str, timeout: int = 30, reason: str = "unknown") -> dict:
+def add_magnet(magnet: str, timeout: int = 30, reason: str = "unknown",
+               cached: bool | None = None) -> dict:
+    """Add a magnet. `cached` is what the caller's cache check said: True
+    means the add does not count against TorBox's hourly uncached budget.
+    TorBox's answer corrects the flag afterwards where it is explicit."""
     url = f"{_base_url().rstrip('/')}/torrents/createtorrent"
     # Client-side guard: check both the 60/hour and the 10/minute edge limits,
     # and reserve the slot in the same locked step (see _reserve_createtorrent_slot).
-    entry = _reserve_createtorrent_slot(reason)
+    entry = _reserve_createtorrent_slot(reason, cached=bool(cached))
     log.info("createtorrent [%s]: %s", reason, magnet[:80])
     try:
         resp = requests.post(url, headers=_headers(), data={"magnet": magnet}, timeout=timeout)
@@ -116,16 +129,44 @@ def add_magnet(magnet: str, timeout: int = 30, reason: str = "unknown") -> dict:
         # DUPLICATE_ITEM means the torrent is already in TorBox  -  treat as success
         if payload.get("error") == "DUPLICATE_ITEM":
             log.info("Torbox: torrent already exists (DUPLICATE_ITEM), treating as success")
+            _correct_cached_flag(entry, bool(cached), True)
             invalidate_mylist_cache()
             return payload.get("data", {}) or {}
         raise RuntimeError(f"Torbox add failed: {payload}")
     data = payload.get("data", {}) or {}
+    _correct_cached_flag(entry, bool(cached), _response_says_cached(payload))
     # Normalize: TorBox returns "torrent_id" for cached adds, "id" for others.
     if data.get("torrent_id") and not data.get("id"):
         data["id"] = data["torrent_id"]
     log.info("Torbox createtorrent response: %s (id=%s)", payload.get("detail") or data, data.get("id"))
     invalidate_mylist_cache()
     return data
+
+
+def _response_says_cached(payload: dict) -> bool | None:
+    """True/False when TorBox's createtorrent answer is explicit about the
+    torrent being cached ("Found cached torrent") or queued for download,
+    None when it says neither."""
+    detail = str(payload.get("detail") or "").lower()
+    if "cached" in detail:
+        return True
+    if "queue" in detail or "download" in detail:
+        return False
+    return None
+
+
+def _correct_cached_flag(entry: int, reserved_cached: bool, actual: bool | None) -> None:
+    """Fix the reservation's flag when TorBox's answer contradicts what the
+    caller expected, so the hourly count matches what TorBox counted."""
+    if actual is None or actual == reserved_cached:
+        return
+    import db as _db
+    try:
+        _db.mark_createtorrent_cached(entry, actual)
+        log.info("createtorrent slot %s corrected to %s after TorBox's answer",
+                 entry, "cached" if actual else "uncached")
+    except Exception as exc:
+        log.debug("Could not correct createtorrent slot %s: %s", entry, exc)
 
 
 _MYLIST_TTL_SECONDS = 45

@@ -243,10 +243,13 @@ export default function Overview() {
           ) : (
             <div className="space-y-2">
               <div className="flex items-baseline justify-between text-xs">
-                <span className="text-muted">createtorrent / hour</span>
+                <span className="text-muted">uncached adds / hour</span>
                 <span className="font-mono text-body">
                   {quotaQ.data.count} / {quotaQ.data.limit}
                 </span>
+              </div>
+              <div className="text-[11px] text-muted">
+                {quotaQ.data.cached_count ?? 0} cached this hour, not limited by TorBox
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
                 <div

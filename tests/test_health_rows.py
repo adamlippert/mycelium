@@ -142,7 +142,15 @@ def test_no_jellyfin_no_row(env):
 def test_add_budget_row_is_ok_below_the_threshold(env):
     row = _row("TorBox adds this hour")
     assert row["status"] == "ok"
-    assert row["note"] == "17/60"
+    assert row["note"] == "17/60 uncached"
+
+
+def test_add_budget_row_shows_cached_adds_without_counting_them(env):
+    values, state = env
+    state["usage"] = {"count": 3, "cached_count": 58, "limit": 60}
+    row = _row("TorBox adds this hour")
+    assert row["status"] == "ok", "cached adds never trip the warning"
+    assert row["note"] == "3/60 uncached, 58 cached (not limited)"
 
 
 def test_add_budget_row_warns_from_45(env):
@@ -150,7 +158,7 @@ def test_add_budget_row_warns_from_45(env):
     state["usage"] = {"count": 45, "limit": 60}
     row = _row("TorBox adds this hour")
     assert row["status"] == "warn"
-    assert row["note"].startswith("45/60")
+    assert row["note"].startswith("45/60 uncached")
     assert "auto-requesters" in row["note"]
 
 

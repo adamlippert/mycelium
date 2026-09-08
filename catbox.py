@@ -492,7 +492,7 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
             item["file_id"] = None
 
         try:
-            added = torbox.add_magnet(new_magnet, reason="catbox-search")
+            added = torbox.add_magnet(new_magnet, reason="catbox-search", cached=True)
             # Use the ID from the add response to avoid a full mylist refresh.
             # TorBox returns "torrent_id" for cached adds, "id" for others.
             _tid = added.get("id") or added.get("torrent_id")

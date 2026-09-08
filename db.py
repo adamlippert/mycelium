@@ -382,6 +382,11 @@ def _migrate() -> None:
             conn.execute("ALTER TABLE wanted_movies ADD COLUMN seerr_reported INTEGER NOT NULL DEFAULT 0")
             log.info("Migration: added wanted_movies.seerr_reported")
 
+        ct_cols = {r["name"] for r in conn.execute("PRAGMA table_info(createtorrent_log)")}
+        if "cached" not in ct_cols:
+            conn.execute("ALTER TABLE createtorrent_log ADD COLUMN cached INTEGER NOT NULL DEFAULT 0")
+            log.info("Migration: added createtorrent_log.cached")
+
         egress_cols = {r["name"] for r in conn.execute("PRAGMA table_info(egress_log)")}
         if "estimated" not in egress_cols:
             conn.execute("ALTER TABLE egress_log ADD COLUMN estimated INTEGER NOT NULL DEFAULT 0")
@@ -2374,13 +2379,19 @@ def integrity_report() -> dict:
 
 
 def reserve_createtorrent_slot(now: float, reason: str,
-                               hour_limit: int, min_limit: int) -> dict:
+                               hour_limit: int, min_limit: int,
+                               cached: bool = False) -> dict:
     """Count against the createtorrent budget and reserve a slot in ONE
     immediate transaction, so the check-then-insert is atomic across threads
     AND across processes. This table is the single source of truth for the
     quota: adding gunicorn workers must never multiply the local budget into
     N independent counters (TorBox's real 60/hour does not care how many
     workers we run).
+
+    TorBox's hourly limit applies to uncached adds only; cached adds fall
+    under the general per-minute limit. So the hour count covers uncached
+    rows alone and a reservation flagged `cached` skips the hourly check,
+    while the per-minute check covers every call.
 
     Returns {"id": rowid, "hour_count", "min_count"} with the counts
     including this reservation, or id None (and the counts that blocked it)
@@ -2389,21 +2400,21 @@ def reserve_createtorrent_slot(now: float, reason: str,
         conn.execute("BEGIN IMMEDIATE")
         try:
             hour_count = conn.execute(
-                "SELECT COUNT(*) AS n FROM createtorrent_log WHERE ts >= ?",
+                "SELECT COUNT(*) AS n FROM createtorrent_log WHERE ts >= ? AND cached = 0",
                 (now - 3600,)).fetchone()["n"]
             min_count = conn.execute(
                 "SELECT COUNT(*) AS n FROM createtorrent_log WHERE ts >= ?",
                 (now - 60,)).fetchone()["n"]
-            if hour_count >= hour_limit - 2 or min_count >= min_limit - 1:
+            if (not cached and hour_count >= hour_limit - 2) or min_count >= min_limit - 1:
                 conn.execute("COMMIT")
                 return {"id": None, "hour_count": hour_count, "min_count": min_count}
             cur = conn.execute(
-                "INSERT INTO createtorrent_log (ts, reason) VALUES (?, ?)",
-                (now, reason))
+                "INSERT INTO createtorrent_log (ts, reason, cached) VALUES (?, ?, ?)",
+                (now, reason, 1 if cached else 0))
             conn.execute("DELETE FROM createtorrent_log WHERE ts < ?", (now - 7200,))
             row_id = cur.lastrowid
             conn.execute("COMMIT")
-            return {"id": row_id, "hour_count": hour_count + 1,
+            return {"id": row_id, "hour_count": hour_count + (0 if cached else 1),
                     "min_count": min_count + 1}
         except Exception:
             try:
@@ -2413,6 +2424,14 @@ def reserve_createtorrent_slot(now: float, reason: str,
             raise
 
 
+def mark_createtorrent_cached(row_id: int, cached: bool) -> None:
+    """Correct a reservation's cached flag once TorBox's answer is known, so
+    an add that turned out cached stops counting against the hour."""
+    with _connect() as conn:
+        conn.execute("UPDATE createtorrent_log SET cached=? WHERE id=?", (1 if cached else 0, row_id))
+        conn.commit()
+
+
 def release_createtorrent_slot(row_id: int) -> None:
     """Give a reserved slot back when the API call never reached TorBox."""
     with _connect() as conn:
@@ -2420,11 +2439,11 @@ def release_createtorrent_slot(row_id: int) -> None:
         conn.commit()
 
 
-def get_createtorrent_log(since_ts: float) -> list[tuple[float, str]]:
-    """Return all createtorrent entries after since_ts as (ts, reason) tuples."""
+def get_createtorrent_log(since_ts: float) -> list[tuple[float, str, bool]]:
+    """Return all createtorrent entries after since_ts as (ts, reason, cached) tuples."""
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT ts, reason FROM createtorrent_log WHERE ts >= ? ORDER BY ts",
+            "SELECT ts, reason, cached FROM createtorrent_log WHERE ts >= ? ORDER BY ts",
             (since_ts,),
         ).fetchall()
-    return [(r["ts"], r["reason"]) for r in rows]
+    return [(r["ts"], r["reason"], bool(r["cached"])) for r in rows]

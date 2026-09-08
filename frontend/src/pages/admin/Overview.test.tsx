@@ -44,6 +44,7 @@ vi.mock('../../api', async () => {
       webhookSecret: () => Promise.resolve({ secret: 'super-secret-value', source: 'env' }),
       torboxQuota: () => Promise.resolve({
         count: 5, limit: 60, window_sec: 3600,
+        cached_count: 27,
         by_reason: { webhook: 3, manual: 9 },
         oldest_ts: 1700000000, resets_in_sec: 125,
       }),

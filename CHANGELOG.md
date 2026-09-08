@@ -4,6 +4,19 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- The TorBox add budget counts only uncached adds. TorBox's 60 per hour
+  limit applies to torrents it does not have yet; cached adds fall under
+  the general per-minute limit. Mycelium counted every add, so the
+  "TorBox adds this hour" row and the Overview meter overstated usage and
+  the client-side guard could refuse cached adds TorBox would have taken.
+  Each add is now logged with what the cache check said, corrected by
+  TorBox's own answer; the hour count, the warning threshold and the
+  guard cover uncached adds, the per-minute burst guard still covers
+  every add, and both figures are shown. README corrected: the limit is
+  per API key, not per IP.
+
 ## [0.23.0] - 2026-09-08
 
 ### Added

@@ -73,7 +73,7 @@ def _is_429(exc: Exception) -> bool:
     return "429" in str(exc)
 
 
-def _try_add_magnet(stream: TorrentioStream, label: str) -> bool:
+def _try_add_magnet(stream: TorrentioStream, label: str, cached: bool = False) -> bool:
     """Add a single magnet to TorBox. Raises RateLimited (without blacklisting)
     when the hourly createtorrent budget is gone, so the request is rescheduled
     rather than wasting the quota or marking a good torrent bad. We do NOT retry
@@ -90,7 +90,7 @@ def _try_add_magnet(stream: TorrentioStream, label: str) -> bool:
                  existing.get("id"), label)
         return True
     try:
-        torbox.add_magnet(stream.magnet, reason="processor")
+        torbox.add_magnet(stream.magnet, reason="processor", cached=cached)
         item = torbox.wait_until_ready(stream.info_hash)
         if not item or not torbox._is_ready(item):
             # wait_until_ready() timed out without TorBox ever reporting the
@@ -148,7 +148,7 @@ def _add_best_from(candidates: list, label: str) -> tuple[bool, Optional[Torrent
     for i, stream in enumerate(to_try):
         if i > 0:
             time.sleep(2)
-        if _try_add_magnet(stream, label):
+        if _try_add_magnet(stream, label, cached=stream.info_hash in cached_hashes):
             return True, stream
         log.warning("Candidate %d/%d failed for %s  -  %s", i + 1, len(to_try), label,
                     "trying next" if i + 1 < len(to_try) else "giving up")

@@ -8,6 +8,8 @@ failed call must give the budget back.
 import os
 import sys
 
+import time
+
 import pytest
 
 os.environ.setdefault("TORBOX_API_KEY", "test")
@@ -101,3 +103,97 @@ def test_released_slot_is_available_again(monkeypatch):
     torbox._reserve_createtorrent_slot("test")
     with pytest.raises(torbox.RateLimited):
         torbox._reserve_createtorrent_slot("test")
+
+
+# -- cached adds do not count against the hour ---------------------------------
+
+def test_cached_reservation_skips_the_hourly_budget(monkeypatch):
+    monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 10_000)
+    for _ in range(torbox._CREATETORRENT_LIMIT_HOUR - 2):
+        torbox._reserve_createtorrent_slot("play")
+    with pytest.raises(torbox.RateLimited):
+        torbox._reserve_createtorrent_slot("play")
+    entry = torbox._reserve_createtorrent_slot("play", cached=True)
+    assert isinstance(entry, int), "a cached add goes through with the hour full"
+    usage = torbox.createtorrent_usage()
+    assert usage["count"] == torbox._CREATETORRENT_LIMIT_HOUR - 2
+    assert usage["cached_count"] == 1
+    assert "play" in usage["by_reason"] and usage["by_reason"]["play"] == torbox._CREATETORRENT_LIMIT_HOUR - 2
+
+
+def test_cached_reservation_still_obeys_the_per_minute_burst(monkeypatch):
+    monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 3)
+    torbox._reserve_createtorrent_slot("play", cached=True)
+    torbox._reserve_createtorrent_slot("play", cached=True)
+    with pytest.raises(torbox.RateLimited):
+        torbox._reserve_createtorrent_slot("play", cached=True)
+
+
+class _Resp:
+    def __init__(self, payload, status=200):
+        self._payload = payload
+        self.status_code = status
+        self.headers = {}
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        pass
+
+
+def test_torbox_saying_cached_frees_the_hourly_slot(monkeypatch):
+    monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 10_000)
+    monkeypatch.setattr(torbox, "_headers", lambda: {})
+    monkeypatch.setattr(torbox, "_base_url", lambda: "http://torbox.test")
+    monkeypatch.setattr(torbox, "invalidate_mylist_cache", lambda: None)
+    monkeypatch.setattr(torbox.requests, "post", lambda *a, **k: _Resp(
+        {"success": True, "detail": "Found cached torrent. Using cached torrent.", "data": {"torrent_id": 7}}))
+    torbox.add_magnet("magnet:?xt=urn:btih:" + "a" * 40, reason="processor")  # caller did not know
+    usage = torbox.createtorrent_usage()
+    assert usage["count"] == 0 and usage["cached_count"] == 1
+
+
+def test_torbox_queueing_a_download_counts_even_when_the_caller_expected_cached(monkeypatch):
+    monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 10_000)
+    monkeypatch.setattr(torbox, "_headers", lambda: {})
+    monkeypatch.setattr(torbox, "_base_url", lambda: "http://torbox.test")
+    monkeypatch.setattr(torbox, "invalidate_mylist_cache", lambda: None)
+    monkeypatch.setattr(torbox.requests, "post", lambda *a, **k: _Resp(
+        {"success": True, "detail": "Torrent added to queue.", "data": {"id": 8}}))
+    torbox.add_magnet("magnet:?xt=urn:btih:" + "b" * 40, reason="processor", cached=True)
+    usage = torbox.createtorrent_usage()
+    assert usage["count"] == 1 and usage["cached_count"] == 0
+
+
+def test_a_duplicate_item_answer_is_not_an_uncached_add(monkeypatch):
+    monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 10_000)
+    monkeypatch.setattr(torbox, "_headers", lambda: {})
+    monkeypatch.setattr(torbox, "_base_url", lambda: "http://torbox.test")
+    monkeypatch.setattr(torbox, "invalidate_mylist_cache", lambda: None)
+    monkeypatch.setattr(torbox.requests, "post", lambda *a, **k: _Resp(
+        {"success": False, "error": "DUPLICATE_ITEM", "data": {}}))
+    torbox.add_magnet("magnet:?xt=urn:btih:" + "c" * 40, reason="processor")
+    assert torbox.createtorrent_usage()["count"] == 0
+
+
+def test_an_existing_log_gains_the_cached_column():
+    import sqlite3
+    _drop_cached_conn()
+    with sqlite3.connect(db.DB_PATH) as conn:
+        conn.execute("DROP TABLE createtorrent_log")
+        conn.execute("CREATE TABLE createtorrent_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, reason TEXT NOT NULL DEFAULT '')")
+        conn.execute("INSERT INTO createtorrent_log (ts, reason) VALUES (?, 'old')", (time.time(),))
+        conn.commit()
+    db.init()
+    usage = torbox.createtorrent_usage()
+    assert usage["count"] == 1 and usage["cached_count"] == 0, "pre-migration rows count as uncached"
+
+
+def test_cached_rows_do_not_fill_the_hour_for_an_uncached_add(monkeypatch):
+    monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 10_000)
+    for _ in range(torbox._CREATETORRENT_LIMIT_HOUR + 5):
+        torbox._reserve_createtorrent_slot("play", cached=True)
+    entry = torbox._reserve_createtorrent_slot("play")
+    assert isinstance(entry, int), "65 cached adds leave the uncached budget untouched"
+    assert torbox.createtorrent_usage()["count"] == 1

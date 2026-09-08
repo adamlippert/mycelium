@@ -482,14 +482,14 @@ A ready-made Grafana dashboard lives at [`assets/grafana-dashboard.json`](assets
 
 ## ⚠️ TorBox API rate limits
 
-TorBox enforces two limits on `POST /torrents/createtorrent`, **per IP**:
+TorBox limits `POST /torrents/createtorrent` **per API key**, and only for torrents it does not already have:
 
-| Limit | Window |
+| Limit | Applies to |
 |---|---|
-| 60 requests | per hour |
-| 10 requests | per minute |
+| 60 per hour | uncached torrents |
+| 300 per minute | everything else, cached adds included |
 
-In Catbox mode (default), `createtorrent` is only called on first playback, not at add-time. Normal single-user usage stays well within the limits. All other endpoints: 5 req/s per IP.
+Mycelium counts only uncached adds against the hour (the Overview shows both figures) and keeps a local burst guard of 10 adds per minute on every add. In Catbox mode (default), `createtorrent` is only called on first playback, not at add-time, and the release picked is one TorBox already has cached, so the hourly budget is rarely touched.
 
 ---
 
