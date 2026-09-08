@@ -48,13 +48,13 @@ def _stream(name, h, quality="1080p", seeders=10, size=4.0, langs=("en",), src="
 H1, H2, H3, H4 = "a" * 40, "b" * 40, "c" * 40, "d" * 40
 
 
-def _item(imdb, token, info_hash, season=None, episode=None, quality="1080p"):
+def _item(imdb, token, info_hash, season=None, episode=None, quality="1080p", source=None):
     with db._connect() as conn:
         conn.execute(
-            "INSERT INTO virtual_items (token, info_hash, magnet, title, media_type, strm_path, imdb_id, season, episode, quality) "
-            "VALUES (?, ?, ?, 'Heat', ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO virtual_items (token, info_hash, magnet, title, media_type, strm_path, imdb_id, season, episode, quality, source) "
+            "VALUES (?, ?, ?, 'Heat', ?, ?, ?, ?, ?, ?, ?)",
             (token, info_hash, f"magnet:?xt=urn:btih:{info_hash}", "movie" if season is None else "series",
-             f"/media/{token}.strm", imdb, season, episode, quality))
+             f"/media/{token}.strm", imdb, season, episode, quality, source))
         conn.commit()
 
 
@@ -87,9 +87,9 @@ def scrapers_fake(monkeypatch):
 
 def test_candidates_are_kept_first_then_dropped_with_badges(scrapers_fake):
     db.insert_request("Heat", "tt1", "movie")
-    _item("tt1", "tok", H4)
+    _item("tt1", "tok", H4, source="torrentio")
     out = rs.candidates("tt1", "movie")
-    assert out["current"] == {"info_hash": H4, "quality": "1080p", "source": None}
+    assert out["current"] == {"info_hash": H4, "quality": "1080p", "source": "BluRay"}
     rows = out["candidates"]
     assert [r["info_hash"] for r in rows] == [H1, H3, H4, H2], "kept in rank order, dropped last"
     by = {r["info_hash"]: r for r in rows}
@@ -101,6 +101,25 @@ def test_candidates_are_kept_first_then_dropped_with_badges(scrapers_fake):
     assert by[H1]["languages"] == ["en"] and by[H3]["size_gb"] == 60.0
     assert set(rows[0]) == {"info_hash", "name", "quality", "source", "size_gb", "seeders", "languages",
                             "cached", "scrapers", "kept", "rule", "value", "current"}
+
+
+def test_current_source_is_null_when_current_hash_not_in_candidates(scrapers_fake):
+    db.insert_request("Heat", "tt1", "movie")
+    _item("tt1", "tok", "e" * 40, source="torrentio")
+    out = rs.candidates("tt1", "movie")
+    assert out["current"]["source"] is None
+
+
+def test_duplicate_hash_case_insensitive_is_deduped(monkeypatch, scrapers_fake):
+    import scrapers
+    dup = _stream("Heat.1995.1080p.WEB-DL.x264", H1.upper())
+    streams_with_dup = [scrapers_fake[0], dup, scrapers_fake[1], scrapers_fake[2], scrapers_fake[3]]
+    monkeypatch.setattr(scrapers, "merge_candidates", lambda *a, **k: list(streams_with_dup))
+    db.insert_request("Heat", "tt1", "movie")
+    rows = rs.candidates("tt1", "movie")["candidates"]
+    matches = [r for r in rows if r["info_hash"] == H1]
+    assert len(matches) == 1
+    assert matches[0]["kept"] is True and matches[0]["rule"] is None
 
 
 def test_blacklisted_hashes_are_excluded(scrapers_fake):

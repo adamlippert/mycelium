@@ -85,6 +85,19 @@ def candidates(imdb_id: str, media_type: str, season: int | None = None, episode
         found = scrapers.merge_candidates(media_type, imdb_id, season, episode, raise_if_inconclusive=True)
     except scrapers.ScrapersUnavailable as exc:
         raise CandidatesUnavailable(str(exc) or exc.__class__.__name__) from exc
+
+    # merge_candidates dedups per scraper but not across a mixed-case rehit of
+    # the same torrent; collapse before ranking so no hash produces two rows.
+    seen: set[str] = set()
+    deduped = []
+    for s in found:
+        h = s.info_hash.lower()
+        if h in seen:
+            continue
+        seen.add(h)
+        deduped.append(s)
+    found = deduped
+
     found = blacklist.filter_candidates(found)
 
     kept, verdicts = streams.rank_streams_explained(found, override=db.get_show_override(imdb_id))
@@ -98,11 +111,19 @@ def candidates(imdb_id: str, media_type: str, season: int | None = None, episode
 
     item = find_item(imdb_id, season, episode)
     current_hash = item["info_hash"].lower() if item else ""
-    current = None
-    if item:
-        current = {"info_hash": current_hash, "quality": item.get("quality"), "source": item.get("source")}
 
     kept_hashes = {s.info_hash.lower() for s in kept}
     dropped = [s for s in found if s.info_hash.lower() not in kept_hashes]
     rows = [_row(s, verdict_of[s.info_hash.lower()], cached, current_hash) for s in kept + dropped]
+
+    # current.source is the candidate row's release-type label, not the raw
+    # virtual_items.source DB value (which holds the scraper name, not a
+    # release-type tag); null when the current hash isn't among the found
+    # candidates at all.
+    current = None
+    if item:
+        current_row = next((r for r in rows if r["current"]), None)
+        current = {"info_hash": current_hash, "quality": item.get("quality"),
+                   "source": current_row["source"] if current_row else None}
+
     return {"current": current, "candidates": rows}
