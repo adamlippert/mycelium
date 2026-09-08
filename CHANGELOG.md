@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-09-08
+
 ### Added
 
 - Comet and MediaFusion as scrapers, read through their Torznab feeds by

@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.24.0",
+    "date": "2026-09-08",
+    "notes": [
+      "Comet and MediaFusion as scrapers, read through their Torznab feeds by one shared adapter. Each has an enable toggle, a URL and a Test button in Settings > Scrapers; MediaFusion defaults to the public ElfHosted instance, Comet needs your own instance (the public one refuses the Torznab path). They rank between Zilean and Torrentio, share the dedupe, outage guard and latency metrics, and show on the Scrapers page",
+      "Neither feed reports cache status, so TorBox's own check decides as before. A private MediaFusion instance takes its API password; the key and any Comet access-token path are kept out of the logs"
+    ]
+  },
+  {
     "version": "0.23.1",
     "date": "2026-09-08",
     "notes": [
