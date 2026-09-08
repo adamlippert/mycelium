@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { SettingsField, SettingsSection } from '../../../api';
 import { FieldList } from './FieldList';
+import { SECRET_CLEARED } from './visibility';
 
 const apiMocks = vi.hoisted(() => ({ settingsTest: vi.fn(), setupTest: vi.fn(), settingsPicker: vi.fn(), setupPicker: vi.fn() }));
 vi.mock('../../../api', async () => {
@@ -55,5 +56,40 @@ describe('FieldList endpoint', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Load Radarr root folder' }));
     await waitFor(() => expect(apiMocks.setupPicker).toHaveBeenCalledWith('radarr_root_folders', { RADARR_URL: 'http://r.test' }));
     expect(apiMocks.settingsTest).not.toHaveBeenCalled();
+  });
+});
+
+describe('secret field Clear button', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function renderSecret(setValue: boolean, endpoint: 'settings' | 'setup' = 'settings') {
+    const secretField = f({ key: 'TORBOX_API_KEY', label: 'TorBox API key', kind: 'secret', value: setValue });
+    const section: SettingsSection = { id: 's', title: 'S', description: 'd', icon: 'x', fields: [secretField] };
+    const onChange = vi.fn();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <FieldList fields={[secretField]} sections={[section]} values={{ TORBOX_API_KEY: '' }} onChange={onChange} advanced endpoint={endpoint} />
+      </QueryClientProvider>,
+    );
+    return onChange;
+  }
+
+  it('offers a Clear button when the secret is set, and marks it cleared like a typed value', async () => {
+    const onChange = renderSecret(true);
+    const clear = screen.getByRole('button', { name: 'Clear TorBox API key' });
+    await userEvent.click(clear);
+    expect(onChange).toHaveBeenCalledWith('TORBOX_API_KEY', SECRET_CLEARED);
+  });
+
+  it('does not offer a Clear button when the secret is not set', () => {
+    renderSecret(false);
+    expect(screen.queryByRole('button', { name: 'Clear TorBox API key' })).not.toBeInTheDocument();
+  });
+
+  it('works the same through the setup wizard endpoint', async () => {
+    const onChange = renderSecret(true, 'setup');
+    await userEvent.click(screen.getByRole('button', { name: 'Clear TorBox API key' }));
+    expect(onChange).toHaveBeenCalledWith('TORBOX_API_KEY', SECRET_CLEARED);
   });
 });

@@ -3,6 +3,12 @@ import type { SettingsField, SettingsSection } from '../../../api';
 export type FieldValue = string | boolean | string[];
 export type Values = Record<string, FieldValue>;
 
+/** Sentinel FieldValue for "the user explicitly cleared this secret". A
+ * plain empty string means "untouched, keep the current .env/db value"
+ * (see serialize below), so an intentional clear needs its own marker to
+ * survive the changed/unchanged comparison and still post an empty value. */
+export const SECRET_CLEARED = '__secret_cleared__';
+
 const ARRAY_KINDS = new Set(['multiselect', 'ordered']);
 
 export function initialValue(f: SettingsField): FieldValue {
@@ -59,7 +65,13 @@ export function serialize(sections: SettingsSection[], values: Values, initial: 
   sections.forEach((s) => s.fields.forEach((f) => {
     if (f.kind === 'custom' || f.readonly) return;
     const v = values[f.key];
-    if (f.kind === 'secret' && (v === '' || v === undefined)) return;
+    if (f.kind === 'secret') {
+      // SECRET_CLEARED is an explicit "clear this secret" request: it must
+      // still post an empty value even though a plain untouched empty
+      // string never does (see below).
+      if (v === SECRET_CLEARED) { out[`setting_${f.key}`] = ''; return; }
+      if (v === '' || v === undefined) return;
+    }
     // Only post what actually changed: posting every field would write an
     // override for every untouched key, freezing today's .env value into
     // the database. A blank still differs from its initial value, so

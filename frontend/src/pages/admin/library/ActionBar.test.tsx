@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -56,5 +57,52 @@ describe('ActionBar', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Drop from queue' }));
     await waitFor(() => expect(apiMocks.libraryAction).toHaveBeenCalledWith('/ui/api/library/tt1/drop-retry'));
     expect(screen.getByRole('button', { name: 'Run now' })).toBeInTheDocument();
+  });
+
+  // Mirrors how the Library page wires ActionBar: onDone prunes the
+  // succeeded ids straight out of the selection it hands back down.
+  function Harness({ onDone }: { onDone: (processed: string[]) => void }) {
+    const [selected, setSelected] = useState(selMap(row(1, 'tt1', 'Heat'), row(2, 'tt2', 'Alien')));
+    return (
+      <ActionBar
+        selected={selected}
+        view="all"
+        onDone={(processed) => {
+          onDone(processed);
+          setSelected((s) => { const n = new Map(s); processed.forEach((id) => n.delete(id)); return n; });
+        }}
+        onClear={() => setSelected(new Map())}
+      />
+    );
+  }
+
+  it('keeps "N of N done" visible after a fully successful run empties the selection', async () => {
+    apiMocks.retryRequest.mockResolvedValue({ ok: true });
+    const onDone = vi.fn();
+    render(<Harness onDone={onDone} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(['tt1', 'tt2']));
+    expect(await screen.findByText(/2 of 2 done/)).toBeInTheDocument();
+    expect(screen.getByText('0 selected')).toBeInTheDocument();
+  });
+
+  it('Clear drops the last progress line along with the selection', async () => {
+    apiMocks.retryRequest.mockResolvedValue({ ok: true });
+    const onDone = vi.fn();
+    render(<Harness onDone={onDone} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText(/2 of 2 done/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(screen.queryByText(/done/)).not.toBeInTheDocument();
+    expect(screen.queryByText('0 selected')).not.toBeInTheDocument();
+  });
+
+  it('disables the ops when nothing is selected, even while the bar stays open', async () => {
+    apiMocks.retryRequest.mockResolvedValue({ ok: true });
+    const onDone = vi.fn();
+    render(<Harness onDone={onDone} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByText(/2 of 2 done/);
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeDisabled();
   });
 });

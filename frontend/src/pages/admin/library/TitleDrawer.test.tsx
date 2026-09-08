@@ -33,6 +33,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
   playability: [{ content_key: 'tt1', status: 'degraded', last_ok_provider: null, last_ok_at: null, last_fail_reason: 'cdn 404', consecutive_failures: 2, updated_at: '2026-09-02 10:00:00' }],
   episodes: null, monitored: null, retry: { id: 3, attempt: 2, next_retry_at: '2026-09-03 00:00:00' }, wanted_movie: null,
   user_requests: [], seerr_request_id: null, override: null, hashes: [], activity: [], arr: { mirrored_at: null },
+  mirror_on: true,
   ...over,
 });
 
@@ -98,6 +99,19 @@ describe('TitleDrawer', () => {
     expect(onPurged).toHaveBeenCalledWith('tt1');
     expect(onChanged).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('shows the Arr mirror card when mirroring is on', async () => {
+    apiMocks.libraryDetail.mockResolvedValue(detail({ mirror_on: true }));
+    renderIt();
+    expect(await screen.findByText('Arr mirror')).toBeInTheDocument();
+  });
+
+  it('hides the Arr mirror card when mirroring is off', async () => {
+    apiMocks.libraryDetail.mockResolvedValue(detail({ mirror_on: false }));
+    renderIt();
+    await screen.findByRole('heading', { name: /Heat/ });
+    expect(screen.queryByText('Arr mirror')).not.toBeInTheDocument();
   });
 
   it('shows a friendly message when the title is not in the library yet', async () => {

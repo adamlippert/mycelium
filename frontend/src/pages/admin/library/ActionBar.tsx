@@ -37,14 +37,18 @@ export function ActionBar({ selected, view, onDone, onClear }: {
     }
     onDone(processed);
   };
+  // Nothing selected and no result to show from the last run: stay hidden,
+  // the same as before any selection was ever made.
+  if (selected.size === 0 && progress === null) return null;
   return (
     <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-bg/95 px-4 py-3 backdrop-blur md:left-auto">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 text-sm">
         <span className="mr-2">{selected.size} selected</span>
         {OPS.filter((o) => !o.queueOnly || view === 'queue').map((o) => (
-          <Button key={o.label} onClick={() => run(o)} disabled={progress !== null && progress.done + progress.failures.length < progress.total}>{o.label}</Button>
+          <Button key={o.label} onClick={() => run(o)}
+            disabled={selected.size === 0 || (progress !== null && progress.done + progress.failures.length < progress.total)}>{o.label}</Button>
         ))}
-        <Button variant="ghost" onClick={onClear}>Clear</Button>
+        <Button variant="ghost" onClick={() => { setProgress(null); onClear(); }}>Clear</Button>
         {progress && (
           <span className="ml-auto text-xs text-muted">
             {progress.label}: {progress.done} of {progress.total} done{progress.failures.length ? `, ${progress.failures.length} failed` : ''}

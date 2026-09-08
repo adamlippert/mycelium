@@ -210,6 +210,14 @@ def test_title_detail_gathers_every_record(seeded):
     assert la.title_detail("tt404") is None
 
 
+def test_title_detail_reports_mirror_on_from_arr_sync(seeded, monkeypatch):
+    import arr_sync
+    monkeypatch.setattr(arr_sync, "is_enabled", lambda: True)
+    assert la.title_detail("tt1")["mirror_on"] is True
+    monkeypatch.setattr(arr_sync, "is_enabled", lambda: False)
+    assert la.title_detail("tt1")["mirror_on"] is False
+
+
 def test_series_detail_summarises_seasons_and_lists_episodes(seeded):
     with db._connect() as conn:
         for ep in (1, 2):

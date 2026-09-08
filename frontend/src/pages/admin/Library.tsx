@@ -56,18 +56,20 @@ export default function Library() {
             <Button aria-label="Next page" disabled={last >= total} onClick={() => update({ page: state.page + 1 })}>Next</Button>
           </div>
         </div>
-        {selected.size > 0 && (
-          <ActionBar
-            selected={selected}
-            view={state.view}
-            onDone={(processed) => {
-              page.refetch();
-              counts.refetch();
-              setSelected((s) => { const n = new Map(s); processed.forEach((id) => n.delete(id)); return n; });
-            }}
-            onClear={() => setSelected(new Map())}
-          />
-        )}
+        {/* Always mounted: ActionBar itself decides whether it has anything
+            to show (a selection, or a just-finished run's result), since
+            only it knows about the in-flight progress. Unmounting it here
+            whenever the selection empties would erase that progress. */}
+        <ActionBar
+          selected={selected}
+          view={state.view}
+          onDone={(processed) => {
+            page.refetch();
+            counts.refetch();
+            setSelected((s) => { const n = new Map(s); processed.forEach((id) => n.delete(id)); return n; });
+          }}
+          onClear={() => setSelected(new Map())}
+        />
       </main>
       {state.open && (
         <TitleDrawer

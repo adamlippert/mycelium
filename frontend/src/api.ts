@@ -840,6 +840,7 @@ export interface LibraryDetail {
   hashes: { info_hash: string; blacklisted: boolean; fail_count: number; last_error: string | null; current: boolean }[];
   activity: { id: number; event: string; title: string | null; message: string | null; success: number; created_at: string }[];
   arr: { mirrored_at: string | null };
+  mirror_on: boolean;
 }
 export interface SeasonEpisode { season: number; episode: number; present: boolean; strm_path: string | null; token: string | null;
   wanted_status: string | null; attempt_count: number; air_date: string | null; last_attempted: string | null }

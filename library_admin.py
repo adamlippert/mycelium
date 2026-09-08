@@ -8,6 +8,7 @@ the rail counts and the table agree by construction.
 """
 from __future__ import annotations
 
+import arr_sync
 import db
 
 VIEWS = ("all", "attention", "wanted", "queue", "incomplete", "unmirrored")
@@ -226,6 +227,7 @@ def title_detail(imdb_id: str) -> dict | None:
         "hashes": db.get_hashes_for_title(imdb_id),
         "activity": db.get_activity_for_title(imdb_id, req.get("title")),
         "arr": {"mirrored_at": req.get("arr_mirrored_at")},
+        "mirror_on": arr_sync.is_enabled(),
     }
 
 

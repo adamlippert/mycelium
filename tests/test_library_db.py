@@ -140,14 +140,25 @@ def test_the_new_indexes_exist():
             "idx_requests_info_hash"} <= names
 
 
-def test_titles_for_hash():
+def test_titles_for_hashes_matches_via_requests_and_virtual_items_in_one_query():
     db.insert_request("Heat", "tt1", "movie")
-    _item("tt1", "tok", "c" * 40)
-    assert db.titles_for_hash("c" * 40) == [{"imdb_id": "tt1", "title": "Heat"}]
-    assert db.titles_for_hash("d" * 40) == []
+    db.insert_request("Alien", "tt2", "movie")
+    # tt1's request row carries the hash directly.
+    db.set_request_release(db.get_request_by_imdb("tt1")["id"], "1080p", "src", "a" * 40)
+    # tt2 only has the hash on its virtual_items row.
+    _item("tt2", "tok", "b" * 40)
+    out = db.titles_for_hashes(["a" * 40, "b" * 40, "c" * 40])
+    assert out["a" * 40] == [{"imdb_id": "tt1", "title": "Heat"}]
+    assert out["b" * 40] == [{"imdb_id": "tt2", "title": "Alien"}]
+    assert out["c" * 40] == []
 
 
-def test_blacklist_route_attaches_titles_for_each_hash():
+def test_titles_for_hashes_with_no_hashes_returns_empty():
+    assert db.titles_for_hashes([]) == {}
+
+
+def test_blacklist_route_attaches_titles_for_each_hash_in_one_call():
     src = _src("app.py")
     route = src.split('def ui_api_blacklist():', 1)[1][:300]
-    assert "titles_for_hash" in route
+    assert "titles_for_hashes" in route
+    assert "titles_for_hash(" not in route

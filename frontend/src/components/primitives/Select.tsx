@@ -23,6 +23,9 @@ export function Select({
       className={`rounded border border-border bg-bg px-2 py-1 text-xs ${className}`.trim()}
     >
       {placeholder !== undefined && <option value="">{placeholder}</option>}
+      {value !== '' && !options.some((o) => o.value === value) && (
+        <option disabled value={value}>{`${value} (not in list)`}</option>
+      )}
       {options.map((o) => (
         <option key={o.value} value={o.value}>{o.label}</option>
       ))}

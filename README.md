@@ -185,7 +185,7 @@ sequenceDiagram
 - **Delete webhooks** (`/webhook/arr`): a delete in Radarr, Sonarr or Jellyfin, by you or by Maintainerr, purges the title from Mycelium
 - **Targeted Jellyfin refresh**: Jellyfin is told which files changed instead of being asked for a full scan; Autopulse is not needed
 - **Seerr outcome reporting**: added titles show Available at once, failed ones are declined, removed ones are cleared, so requests never sit on Processing forever
-- Settings is organised in sections with a search box and a Simple/Advanced switch; every integration has a Test button, and Radarr/Sonarr root folders and quality profiles are picked from a list
+- Settings is organised in sections with a search box and a Simple/Advanced switch; most integrations have a Test button (TorBox, RealDebrid, TMDB, Zilean, Debridio, Jellyfin, Seerr, Radarr, Sonarr, Trakt, OpenSubtitles, Discord, Telegram, OIDC), and Radarr/Sonarr root folders and quality profiles are picked from a list
 - Setup steps: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) and the built-in manual
 
 </details>
@@ -345,7 +345,7 @@ cd mycelium
 docker compose up -d
 ```
 
-Open **`http://<your-host>:8088`** - the setup wizard walks you through everything. The wizard shows the same fields as Settings, pre-filled on a re-run, with Test buttons for every service and Load buttons for Radarr and Sonarr folders and profiles. Lite mode skips the Trakt, subtitle, Zilean and arr steps. The first account you create becomes admin.
+Open **`http://<your-host>:8088`** - the setup wizard walks you through everything. The wizard shows the same fields as Settings, pre-filled on a re-run, with Test buttons for most services and Load buttons for Radarr and Sonarr folders and profiles. Lite mode skips the Trakt, subtitle, Zilean and arr steps. The first account you create becomes admin.
 
 **Optional add-ons** (not needed to get started):
 - [Zilean](https://github.com/iPromKnight/zilean) - self-hosted hash index, faster and private. Two modes: **external**

@@ -3,6 +3,7 @@ import type { SettingsField, SettingsSection } from '../../../api';
 import { Button, MultiSelect, OrderedList, Select, Toggle } from '../../../components/primitives';
 import type { Endpoint } from './FieldList';
 import { Picker } from './Picker';
+import { SECRET_CLEARED } from './visibility';
 import type { FieldValue, Values } from './visibility';
 
 const INPUT = 'w-full max-w-md rounded border border-border bg-bg px-2 py-1 text-xs';
@@ -54,7 +55,8 @@ export function Control({
   endpoint?: Endpoint;
 }) {
   const [reveal, setReveal] = useState(false);
-  const str = typeof value === 'string' ? value : '';
+  const cleared = value === SECRET_CLEARED;
+  const str = cleared ? '' : typeof value === 'string' ? value : '';
   switch (field.kind) {
     case 'bool':
       return <Toggle checked={Boolean(value)} onChange={onChange} label={field.label} />;
@@ -77,8 +79,12 @@ export function Control({
       return (
         <span className="inline-flex w-full max-w-md items-center gap-2">
           <input type={reveal ? 'text' : 'password'} aria-label={field.label} value={str} autoComplete="new-password"
-            placeholder={field.value ? '(already set, type to replace)' : '(not set)'} onChange={(e) => onChange(e.target.value)} className={INPUT} />
+            placeholder={cleared ? '(cleared, will remove on save)' : field.value ? '(already set, type to replace)' : '(not set)'}
+            onChange={(e) => onChange(e.target.value)} className={INPUT} />
           <Button variant="ghost" aria-label={`${reveal ? 'Hide' : 'Show'} ${field.label}`} onClick={() => setReveal((r) => !r)}>{reveal ? 'Hide' : 'Show'}</Button>
+          {field.value === true && (
+            <Button variant="ghost" aria-label={`Clear ${field.label}`} onClick={() => onChange(SECRET_CLEARED)}>Clear</Button>
+          )}
         </span>
       );
     default: {

@@ -1919,8 +1919,9 @@ def ui_api_zilean_import():
 @app.get("/ui/api/blacklist")
 def ui_api_blacklist():
     items = db.get_all_failed_hashes()
+    titles = db.titles_for_hashes([item["info_hash"] for item in items])
     for item in items:
-        item["titles"] = db.titles_for_hash(item["info_hash"])
+        item["titles"] = titles.get(item["info_hash"], [])
     return jsonify(items=items)
 
 

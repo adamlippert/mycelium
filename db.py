@@ -1594,15 +1594,29 @@ def clear_failed_hash(info_hash: str) -> None:
         conn.commit()
 
 
-def titles_for_hash(info_hash: str) -> list[dict]:
-    """Requests that used this info_hash directly, or whose virtual_items
-    used it. Used by the Blacklist tab to show which titles a hash affected."""
+def titles_for_hashes(hashes: list[str]) -> dict[str, list[dict]]:
+    """Titles affected by each of these hashes: requests that used a hash
+    directly, or whose virtual_items used it. One grouped query instead of
+    one per hash. Used by the Blacklist tab to show which titles a hash
+    affected; every hash gets a list, empty when nothing matched."""
+    result: dict[str, list[dict]] = {h: [] for h in hashes}
+    if not hashes:
+        return result
+    placeholders = ",".join("?" for _ in hashes)
     with _connect() as conn:
         rows = conn.execute(
-            """SELECT DISTINCT r.imdb_id, r.title FROM requests r
-               WHERE r.info_hash = ? OR r.imdb_id IN (SELECT imdb_id FROM virtual_items WHERE info_hash = ?)
-               ORDER BY r.title""", (info_hash, info_hash)).fetchall()
-        return [dict(r) for r in rows]
+            f"""SELECT DISTINCT h.hash AS matched_hash, r.imdb_id, r.title
+                FROM (
+                    SELECT info_hash AS hash, imdb_id FROM requests WHERE info_hash IN ({placeholders})
+                    UNION
+                    SELECT info_hash AS hash, imdb_id FROM virtual_items WHERE info_hash IN ({placeholders})
+                ) h
+                JOIN requests r ON r.imdb_id = h.imdb_id
+                ORDER BY h.hash, r.title""",
+            (*hashes, *hashes)).fetchall()
+    for row in rows:
+        result[row["matched_hash"]].append({"imdb_id": row["imdb_id"], "title": row["title"]})
+    return result
 
 
 # ── webhook idempotency ───────────────────────────────────────────────────────

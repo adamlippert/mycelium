@@ -66,7 +66,7 @@ export function TitleDrawer({ imdb, onClose, onChanged, onPurged }: {
           <EpisodesCard d={d} onDone={refresh} />
           <RequestsCard d={d} onDone={refresh} />
           <PreferencesCard d={d} onDone={refresh} />
-          <ArrCard d={d} onDone={refresh} />
+          {d.mirror_on && <ArrCard d={d} onDone={refresh} />}
           <HashesCard d={d} onDone={refresh} />
           <ActivityCard d={d} />
         </div>

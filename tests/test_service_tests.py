@@ -121,6 +121,22 @@ def test_a_missing_credential_is_reported_without_a_request(http, monkeypatch):
     assert out["ok"] is False and "key" in out["message"].lower() and calls == []
 
 
+def test_a_missing_credential_names_the_schema_label_not_the_raw_key(monkeypatch):
+    """_need() must report the field's schema label ("TorBox API key"), not
+    the old key.replace("_", " ").lower() transform ("torbox api key")."""
+    import config
+    monkeypatch.setattr(config, "TORBOX_API_KEY", "")
+    settings.set("TORBOX_API_KEY", None)
+    out = service_tests.run("torbox", {})
+    label = settings.fields_by_key()["TORBOX_API_KEY"]["label"]
+    assert label == "TorBox API key"
+    assert label in out["message"]
+
+
+def test_an_unknown_key_falls_back_to_the_old_transform():
+    assert service_tests._need({}, "NOT_A_REAL_SETTING_KEY") == "not a real setting key"
+
+
 def test_a_timeout_reads_as_timed_out(http):
     routes, _ = http
     routes["/System/Info/Public"] = lambda: (_ for _ in ()).throw(requests.Timeout())

@@ -42,10 +42,13 @@ def _v(values: dict, key: str) -> str:
 
 
 def _need(values: dict, *keys: str) -> str | None:
-    """Name of the first blank required field, or None."""
+    """Label of the first blank required field, or None."""
     for k in keys:
         if not _v(values, k):
-            return k.replace("_", " ").lower()
+            try:
+                return _settings.fields_by_key()[k]["label"]
+            except KeyError:
+                return k.replace("_", " ").lower()
     return None
 
 

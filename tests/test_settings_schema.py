@@ -188,3 +188,28 @@ def test_oidc_settings_go_through_the_settings_overlay():
     _s(), which does not spell out a key name and so never matches this."""
     src = _src("oidc.py")
     assert re.findall(r"cfg\.OIDC_\w+", src) == []
+
+
+def test_clearing_a_secret_with_an_empty_value_removes_the_override():
+    """settings.set(key, "") must clear a secret's DB override the same way
+    it clears any other key, so posting setting_<KEY>="" from the admin
+    Settings page's Clear button actually removes a stored secret instead of
+    silently keeping it."""
+    assert settings.fields_by_key()["TRAKT_CLIENT_SECRET"]["kind"] == "secret"
+    settings.set("TRAKT_CLIENT_SECRET", "abc123")
+    assert settings.get("TRAKT_CLIENT_SECRET") == "abc123"
+    settings.set("TRAKT_CLIENT_SECRET", "")
+    assert settings.get("TRAKT_CLIENT_SECRET") in (None, "")
+    assert db.get_setting("TRAKT_CLIENT_SECRET") is None
+
+
+def test_settings_and_setup_save_routes_clear_any_empty_posted_value():
+    """Both save routes must treat an empty posted value as "clear this
+    key's override" without carving secrets out of that path, since the
+    Settings page's Clear button relies on it posting setting_<KEY>=""."""
+    for name, route in (("app.py", '@app.post("/ui/settings")'), ("app.py", '@app.post("/setup/save")')):
+        src = _src(name)
+        idx = src.index(route)
+        body = src[idx:idx + 1800]
+        assert 'value == ""' in body
+        assert "settings.set(key, None)" in body or "_settings.set(key, None)" in body
