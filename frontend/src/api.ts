@@ -282,6 +282,11 @@ export const api = {
     return http<LibraryPage>(`/ui/api/library?${qs.toString()}`);
   },
   libraryViews: () => http<{ counts: Record<string, number>; mirror_on: boolean }>('/ui/api/library/views'),
+  libraryDetail: (imdb: string) => http<LibraryDetail>(`/ui/api/library/${imdb}`),
+  librarySeason: (imdb: string, season: number) => http<{ episodes: SeasonEpisode[] }>(`/ui/api/library/${imdb}/season/${season}`),
+  libraryActivity: (imdb: string, before: number) => http<{ activity: LibraryDetail['activity'] }>(`/ui/api/library/${imdb}/activity?before=${before}`),
+  libraryAction: (path: string, method: 'POST' | 'DELETE' = 'POST', body?: unknown) =>
+    http<{ ok: boolean; message: string }>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) }),
   recent: () => http<{ items: any[] }>('/ui/api/activity'),
   myRequests: () => http<{ items: any[] }>('/ui/api/user-requests?mine=1'),
   myQuota: () => http<QuotaInfo>('/ui/api/me/quota'),
@@ -790,6 +795,26 @@ export interface RequestRow {
   created_at: string;
   updated_at: string;
 }
+
+export interface LibraryDetail {
+  request: RequestRow & { tmdb_id: number | null; arr_mirrored_at: string | null };
+  items: { token: string; info_hash: string; strm_path: string | null; torbox_id: number | null; last_played: string | null;
+    play_count: number; season: number | null; episode: number | null; debrid_provider: string | null; quality: string | null }[];
+  playability: { content_key: string; status: string; last_ok_provider: string | null; last_ok_at: string | null;
+    last_fail_reason: string | null; consecutive_failures: number; updated_at: string }[];
+  episodes: { season: number; present: number; wanted: number }[] | null;
+  monitored: { status: string; last_checked: string | null; seasons: string | null } | null;
+  retry: { id: number; attempt: number; next_retry_at: string } | null;
+  wanted_movie: { reason: string | null; attempts: number; last_checked: string | null } | null;
+  user_requests: { id: number; username: string; status: string; reviewer: string | null; note: string | null; created_at: string; reviewed_at: string | null }[];
+  seerr_request_id: number | null;
+  override: { quality_preference: string | null; allow_4k: number | null; prefer_hevc: number | null; notes: string | null } | null;
+  hashes: { info_hash: string; blacklisted: boolean; fail_count: number; last_error: string | null; current: boolean }[];
+  activity: { id: number; event: string; title: string | null; message: string | null; success: number; created_at: string }[];
+  arr: { mirrored_at: string | null };
+}
+export interface SeasonEpisode { season: number; episode: number; present: boolean; strm_path: string | null; token: string | null;
+  wanted_status: string | null; attempt_count: number; air_date: string | null; last_attempted: string | null }
 
 export interface GenreRule {
   media_type: 'movie' | 'tv';
