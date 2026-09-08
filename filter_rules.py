@@ -171,16 +171,15 @@ def warn_unsupported_requirements(rules: dict, sources: list[str]) -> list[str]:
     """
     messages = []
 
-    # Map each source name to its CAPABILITIES.
+    # Map each source name to its capabilities through the scraper registry
+    # (lazy import: scrapers imports streams, which imports this module).
+    import scrapers
     capabilities_by_source = {}
     for source in sources:
-        try:
-            # Import the module for this source dynamically.
-            module = __import__(source)
-            capabilities_by_source[source] = tuple(getattr(module, "CAPABILITIES", rt.CATEGORIES))
-        except ImportError:
-            # Unknown source name; silently skip it.
-            pass
+        caps = scrapers.capabilities_for(source)
+        if caps is not None:
+            capabilities_by_source[source] = tuple(caps)
+        # An unknown source name is skipped silently.
 
     # For each category with required values, check which sources support it.
     for category in rt.CATEGORIES:

@@ -4,6 +4,19 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Comet's own `language` and `resolution` Torznab attributes now feed the
+  candidate instead of a title parse alone: the resolution wins when it
+  names one of Mycelium's buckets, and the language codes (the same ISO
+  codes the language rules use) merge with what the title says.
+  MediaFusion sends neither, so nothing changes for it.
+- The "required rule on an unsupported source" warning looks up each
+  scraper's capabilities in the registry (`scrapers.CAPABILITIES_BY_SOURCE`)
+  instead of importing a module named after the source, which the two
+  Torznab scrapers never had; a guard test keeps every registered scraper
+  listed.
+
 ## [0.24.0] - 2026-09-08
 
 ### Added

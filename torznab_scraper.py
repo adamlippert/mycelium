@@ -16,7 +16,8 @@ import xml.etree.ElementTree as ET
 import requests
 
 import settings as _settings
-from streams import Stream, detect_languages, parse_quality
+import release_tags
+from streams import LANGUAGE_CODES, Stream, detect_languages, parse_quality
 from torrentio import _looks_like_season_pack
 
 log = logging.getLogger(__name__)
@@ -28,6 +29,11 @@ _APIKEY_QS_RE = re.compile(r"apikey=[^&\s'\"]*", re.IGNORECASE)
 # apikey= rule above cannot see it.
 _COMET_TOKEN_RE = re.compile(r"/s/[^/\s'\"]+/")
 _NS = "{http://torznab.com/schemas/2015/feed}"
+# Every category comes from the release title through the shared helpers,
+# so both Torznab scrapers can populate what Torrentio can; Comet adds its
+# own language and resolution attributes on top (comet/api/endpoints/torznab.py).
+CAPABILITIES = frozenset(("resolution", "source", "encode", "visual_tag", "audio_tag", "audio_channels", "language"))
+
 LIMIT = 100  # MediaFusion clamps to 100; Comet ignores the parameter
 
 # The two Torznab paths, owned here so scrapers.py, health_cache.py and
@@ -100,14 +106,32 @@ def _to_stream(name: str, item, season: int | None) -> Stream | None:
         name=title,
         title=title,
         info_hash=info_hash,
-        quality=parse_quality(title),
+        quality=_quality(attrs, title),
         seeders=seeders,
         size_gb=round(size_bytes / (1024 ** 3), 2),
         is_season_pack=_looks_like_season_pack(title, season),
-        languages=detect_languages(title),
+        languages=_languages(attrs, title),
         source=name,
         cached=False,
     )
+
+
+def _quality(attrs: dict[str, str], title: str) -> str:
+    """Comet's `resolution` attribute when it names one of our buckets
+    (its parser also emits 1440p, which is not one), else the title."""
+    tagged = release_tags.detect_resolution(attrs.get("resolution") or "")
+    if tagged != release_tags.UNKNOWN:
+        return tagged
+    return parse_quality(title)
+
+
+def _languages(attrs: dict[str, str], title: str) -> tuple[str, ...]:
+    """Codes from Comet's comma-joined `language` attribute (ISO 639-1, the
+    same codes the language rules use; unknown ones dropped) merged with
+    what the title says, sorted for a stable order."""
+    from_attr = {c.strip().lower() for c in (attrs.get("language") or "").split(",")}
+    known = {c for c in from_attr if c in LANGUAGE_CODES}
+    return tuple(sorted(known | set(detect_languages(title))))
 
 
 def parse_feed(name: str, text: str, season: int | None) -> tuple[list[Stream], int]:

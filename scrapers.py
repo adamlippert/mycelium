@@ -86,6 +86,24 @@ def _redact_exc(exc) -> str:
     return debridio.redact(torznab_scraper.redact(exc))
 
 
+# Which filter-rule categories each scraper can populate, by registry name.
+# filter_rules.warn_unsupported_requirements reads this instead of importing
+# a module named after the source, which the Torznab entries never had.
+CAPABILITIES_BY_SOURCE = {
+    "debridio": debridio.CAPABILITIES,
+    "zilean": zilean.CAPABILITIES,
+    "comet": torznab_scraper.CAPABILITIES,
+    "mediafusion": torznab_scraper.CAPABILITIES,
+    "torrentio": torrentio.CAPABILITIES,
+}
+
+
+def capabilities_for(source: str) -> frozenset | None:
+    """The categories `source` can populate, or None for a name that is not
+    a registered scraper (a release label, a test value)."""
+    return CAPABILITIES_BY_SOURCE.get(source)
+
+
 # (name, settings key or None if always on, fetch adapter)
 _SCRAPERS = [
     ("debridio", "DEBRIDIO_ENABLED", _fetch_debridio),

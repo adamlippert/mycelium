@@ -188,3 +188,34 @@ def test_torznab_paths_are_owned_here():
     # M6: the two paths live once and everything else imports them.
     assert tz.COMET_PATH == "/torznab/api"
     assert tz.MEDIAFUSION_PATH == "/torznab"
+
+
+# -- Comet's own language and resolution attributes ----------------------------
+
+def _item(title, **attrs):
+    body = "".join(f'<torznab:attr name="{k}" value="{v}"/>' for k, v in attrs.items())
+    return (f'<?xml version="1.0" encoding="UTF-8"?>'
+            f'<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel>'
+            f'<item><title>{title}</title><guid isPermaLink="false">{H1}</guid>'
+            f'<torznab:attr name="infohash" value="{H1}"/>{body}</item></channel></rss>')
+
+
+def test_comet_attributes_win_over_the_title():
+    streams, _ = tz.parse_feed("comet", _item("Some.Release.x264", resolution="2160p", language="en,ru"), season=None)
+    assert streams[0].quality == "2160p"
+    assert streams[0].languages == ("en", "ru")
+
+
+def test_attribute_languages_merge_with_the_title_and_drop_unknown_codes():
+    streams, _ = tz.parse_feed("comet", _item("Some.Release.Dutch.x264", language="en,la,xx"), season=None)
+    assert streams[0].languages == ("en", "nl")
+
+
+def test_a_resolution_outside_our_buckets_falls_back_to_the_title():
+    streams, _ = tz.parse_feed("comet", _item("Some.Release.1080p.x264", resolution="1440p"), season=None)
+    assert streams[0].quality == "1080p"
+
+
+def test_without_attributes_the_title_decides():
+    streams, _ = tz.parse_feed("mediafusion", _item("Some.Release.720p.English.x264"), season=None)
+    assert streams[0].quality == "720p" and streams[0].languages == ("en",)

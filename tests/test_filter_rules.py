@@ -384,6 +384,21 @@ def test_no_warning_when_every_source_supports_the_category():
     assert warnings == []
 
 
+def test_capabilities_come_from_the_scraper_registry_not_a_module_import():
+    import scrapers
+    for name, _key, _fn in scrapers._SCRAPERS:
+        assert name in scrapers.CAPABILITIES_BY_SOURCE, f"{name} has no capabilities entry"
+    assert fr.warn_unsupported_requirements(
+        _rules(language={"required": ["en"]}), ["comet", "mediafusion", "torrentio"]) == []
+    assert "language" in scrapers.capabilities_for("comet")
+    assert scrapers.capabilities_for("WEB-DL") is None
+
+
+def test_an_unknown_source_name_is_skipped_silently():
+    assert fr.warn_unsupported_requirements(
+        _rules(language={"required": ["en"]}), ["WEB-DL", "not-a-scraper"]) == []
+
+
 def test_no_warning_without_a_required_rule():
     """preferred and excluded rules degrade gracefully on a source that cannot
     supply the category, because unknown always survives them. Only required
