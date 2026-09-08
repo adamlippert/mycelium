@@ -31,7 +31,9 @@ export function RequestTable({ rows, sort, order, onSort, onOpen, renderActions,
             <tr key={r.id} className="border-b border-border last:border-0 hover:bg-white/[0.03]">
               <td className="px-3 py-2">
                 <button type="button" onClick={() => onOpen(r.imdb_id)} className="text-left font-medium hover:underline">
-                  {r.media_type === 'movie' ? '\u{1F3AC}' : '\u{1F4FA}'} <span>{r.title}</span>
+                  <span aria-hidden="true">{r.media_type === 'movie' ? '\u{1F3AC}' : '\u{1F4FA}'}</span>
+                  <span className="sr-only">{r.media_type === 'movie' ? 'movie' : 'series'}</span>
+                  {' '}<span>{r.title}</span>
                 </button>
                 <div className="font-mono text-[10px] text-muted">{r.imdb_id}</div>
               </td>

@@ -41,7 +41,6 @@ export default function Requests() {
 
   return (
     <div className="grid gap-6 md:grid-cols-[14rem_1fr]">
-      <span data-testid="requests-hash" hidden>{toHash(state)}</span>
       <Rail state={state} counts={counts.data?.counts || {}} users={users.data?.users || []} onChange={update} />
       <main className="space-y-3">
         <RequestTable rows={rows} sort={state.sort} order={state.order} onSort={onSort} loading={page.isFetching}

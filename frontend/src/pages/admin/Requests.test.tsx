@@ -1,10 +1,15 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Requests from './Requests';
 import { row } from './requests/fixtures';
+
+function HashProbe() {
+  const location = useLocation();
+  return <div data-testid="hash-probe">{location.hash}</div>;
+}
 
 const apiMocks = vi.hoisted(() => ({
   adminRequests: vi.fn(), adminRequestViews: vi.fn(), users: vi.fn(), adminQuotas: vi.fn(),
@@ -21,6 +26,7 @@ function renderIt(hash = '#requests') {
   return render(
     <MemoryRouter initialEntries={[`/admin${hash}`]}>
       <QueryClientProvider client={qc}><Requests /></QueryClientProvider>
+      <HashProbe />
     </MemoryRouter>,
   );
 }
@@ -52,11 +58,24 @@ describe('Requests tab', () => {
     expect(apiMocks.adminRequests).toHaveBeenCalledWith(expect.objectContaining({ view: 'pending', page: '1' }));
   });
 
+  it('hides the type icon from screen readers and gives it a text alternative', async () => {
+    renderIt();
+    const heatRow = (await screen.findByText('Heat')).closest('tr')!;
+    const heatIcon = heatRow.querySelector('[aria-hidden="true"]')!;
+    expect(heatIcon).toHaveTextContent('\u{1F3AC}');
+    expect(within(heatRow).getByText('movie', { selector: '.sr-only' })).toBeInTheDocument();
+
+    const lokiRow = screen.getByText('Loki').closest('tr')!;
+    const lokiIcon = lokiRow.querySelector('[aria-hidden="true"]')!;
+    expect(lokiIcon).toHaveTextContent('\u{1F4FA}');
+    expect(within(lokiRow).getByText('series', { selector: '.sr-only' })).toBeInTheDocument();
+  });
+
   it('a view click and a filter re-query and update the hash', async () => {
     renderIt();
     await userEvent.click(await screen.findByRole('button', { name: /Denied/ }));
     await waitFor(() => expect(apiMocks.adminRequests).toHaveBeenLastCalledWith(expect.objectContaining({ view: 'denied' })));
-    expect(screen.getByTestId('requests-hash').textContent).toContain('view=denied');
+    expect(screen.getByTestId('hash-probe')).toHaveTextContent('view=denied');
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'User' }), '4');
     await waitFor(() => expect(apiMocks.adminRequests).toHaveBeenLastCalledWith(expect.objectContaining({ user: '4', page: '1' })));
   });
@@ -99,7 +118,7 @@ describe('Requests tab', () => {
     renderIt();
     await userEvent.click(await screen.findByText('Heat'));
     expect(await screen.findByRole('dialog', { name: 'Title details' })).toBeInTheDocument();
-    expect(screen.getByTestId('requests-hash').textContent).toContain('open=tt1');
+    expect(screen.getByTestId('hash-probe')).toHaveTextContent('open=tt1');
   });
 
   it('opening a pending row with no library row yet shows the friendly not-in-library message', async () => {

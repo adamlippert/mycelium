@@ -34,7 +34,6 @@ export default function Library() {
 
   return (
     <div className="grid gap-6 pb-24 md:grid-cols-[14rem_1fr]">
-      <span data-testid="library-hash" hidden>{toHash(state)}</span>
       <Rail state={state} counts={counts.data?.counts || {}} users={users.data?.users || []} mirrorOn={counts.data?.mirror_on ?? false} onChange={update} />
       <main className="space-y-3">
         <TitleTable rows={rows} sort={state.sort} order={state.order} onSort={onSort} selected={selectedIds} loading={page.isFetching}

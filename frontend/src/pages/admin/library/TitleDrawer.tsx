@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../api';
 import { Button, Pill, statusLabel, statusToPillState } from '../../../components/primitives';
@@ -13,12 +13,15 @@ import { PreferencesCard } from './cards/PreferencesCard';
 import { ArrCard } from './cards/ArrCard';
 import { HashesCard } from './cards/HashesCard';
 import { ActivityCard } from './cards/ActivityCard';
+import { useFocusTrap } from './useFocusTrap';
 
 export function TitleDrawer({ imdb, onClose, onChanged, onPurged }: {
   imdb: string; onClose: () => void; onChanged: () => void; onPurged?: (imdb: string) => void;
 }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['library-detail', imdb], queryFn: () => api.libraryDetail(imdb) });
+  const panelRef = useRef<HTMLElement>(null);
+  useFocusTrap(panelRef);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -29,7 +32,7 @@ export function TitleDrawer({ imdb, onClose, onChanged, onPurged }: {
   const errorMessage = q.error ? (q.error as Error).message : null;
   const notFound = errorMessage != null && errorMessage.startsWith('404');
   return (
-    <aside role="dialog" aria-label="Title details" className="fixed inset-y-0 right-0 z-20 w-full max-w-[560px] overflow-y-auto border-l border-border bg-bg p-5 shadow-2xl">
+    <aside ref={panelRef} role="dialog" aria-modal="true" aria-label="Title details" tabIndex={-1} className="fixed inset-y-0 right-0 z-20 w-full max-w-[560px] overflow-y-auto border-l border-border bg-bg p-5 shadow-2xl">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold">{d ? d.request.title : errorMessage ? 'Not in the library' : 'Loading...'}</h2>

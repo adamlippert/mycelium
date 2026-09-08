@@ -1,8 +1,24 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TitleDrawer } from './TitleDrawer';
+
+function focusablesIn(el: HTMLElement): HTMLElement[] {
+  return Array.from(el.querySelectorAll<HTMLElement>('a[href], button, input, select, textarea, [tabindex]'))
+    .filter((e) => !(e as HTMLButtonElement).disabled && e.getAttribute('tabindex') !== '-1');
+}
+
+function Harness({ onClose }: { onClose: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button onClick={() => setOpen(true)}>Opener</button>
+      {open && <TitleDrawer imdb="tt1" onClose={() => { setOpen(false); onClose(); }} onChanged={() => {}} onPurged={() => {}} />}
+    </>
+  );
+}
 
 const apiMocks = vi.hoisted(() => ({ libraryDetail: vi.fn(), libraryAction: vi.fn(), retryRequest: vi.fn(), purgeRequest: vi.fn(), reResolve: vi.fn(), deleteRequest: vi.fn() }));
 vi.mock('../../../api', async () => {
@@ -89,5 +105,33 @@ describe('TitleDrawer', () => {
     renderIt();
     expect(await screen.findByRole('heading', { name: 'Not in the library' })).toBeInTheDocument();
     expect(await screen.findByText('This title is not in the library yet, so there is nothing to act on here.')).toBeInTheDocument();
+  });
+
+  it('is an aria-modal dialog, traps Tab/Shift+Tab focus inside it, and restores focus to the opener on close', async () => {
+    const onClose = vi.fn();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={qc}><Harness onClose={onClose} /></QueryClientProvider>);
+    const opener = screen.getByRole('button', { name: 'Opener' });
+    await userEvent.click(opener);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Title details' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    await screen.findByRole('heading', { name: /Heat/ });
+
+    const closeButton = within(dialog).getByRole('button', { name: 'Close' });
+    expect(document.activeElement).toBe(closeButton);
+
+    const focusable = focusablesIn(dialog);
+    const last = focusable[focusable.length - 1];
+    await userEvent.tab({ shift: true });
+    expect(document.activeElement).toBe(last);
+
+    await userEvent.tab();
+    expect(document.activeElement).toBe(closeButton);
+
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(onClose).toHaveBeenCalled();
+    expect(document.activeElement).toBe(opener);
   });
 });

@@ -1,10 +1,15 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LibraryRow } from '../../api';
 import Library from './Library';
+
+function HashProbe() {
+  const location = useLocation();
+  return <div data-testid="hash-probe">{location.hash}</div>;
+}
 
 const apiMocks = vi.hoisted(() => ({
   library: vi.fn(), libraryViews: vi.fn(), users: vi.fn(), libraryDetail: vi.fn(),
@@ -28,6 +33,7 @@ function renderIt(hash = '#library') {
   return render(
     <MemoryRouter initialEntries={[`/admin${hash}`]}>
       <QueryClientProvider client={qc}><Library /></QueryClientProvider>
+      <HashProbe />
     </MemoryRouter>,
   );
 }
@@ -65,7 +71,7 @@ describe('Library tab', () => {
     renderIt();
     await userEvent.click(await screen.findByRole('button', { name: /Needs attention/ }));
     await waitFor(() => expect(apiMocks.library).toHaveBeenLastCalledWith(expect.objectContaining({ view: 'attention' })));
-    expect(window.location.hash || screen.getByTestId('library-hash').textContent).toContain('view=attention');
+    expect(screen.getByTestId('hash-probe')).toHaveTextContent('view=attention');
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'series');
     await waitFor(() => expect(apiMocks.library).toHaveBeenLastCalledWith(expect.objectContaining({ view: 'attention', type: 'series', page: '1' })));
   });
@@ -115,6 +121,23 @@ describe('Library tab', () => {
     expect(screen.getByText('3 selected')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }));
     expect(screen.getByText('1 selected')).toBeInTheDocument();
+  });
+
+  it('hides the type icon from screen readers and gives it a text alternative', async () => {
+    apiMocks.library.mockResolvedValue({
+      rows: [row({}), row({ id: 2, imdb_id: 'tt2', title: 'Alien', media_type: 'series' })],
+      total: 2, page: 1, per_page: 50,
+    });
+    renderIt();
+    const heatRow = (await screen.findByText('Heat')).closest('tr')!;
+    const heatIcon = heatRow.querySelector('[aria-hidden="true"]')!;
+    expect(heatIcon).toHaveTextContent('\u{1F3AC}');
+    expect(within(heatRow).getByText('movie', { selector: '.sr-only' })).toBeInTheDocument();
+
+    const alienRow = screen.getByText('Alien').closest('tr')!;
+    const alienIcon = alienRow.querySelector('[aria-hidden="true"]')!;
+    expect(alienIcon).toHaveTextContent('\u{1F4FA}');
+    expect(within(alienRow).getByText('series', { selector: '.sr-only' })).toBeInTheDocument();
   });
 
   it('gates the Unmirrored view on the mirror setting', async () => {

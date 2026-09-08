@@ -40,7 +40,11 @@ export function TitleTable({ rows, sort, order, onSort, selected, onSelect, onSe
                 <input type="checkbox" aria-label={`Select ${r.title}`} checked={selected.has(r.imdb_id)} onChange={(e) => onSelect(r, e.target.checked)} />
               </td>
               <td className="px-3 py-2">
-                <div className="font-medium">{r.media_type === 'movie' ? '\u{1F3AC}' : '\u{1F4FA}'} <span>{r.title}</span></div>
+                <div className="font-medium">
+                  <span aria-hidden="true">{r.media_type === 'movie' ? '\u{1F3AC}' : '\u{1F4FA}'}</span>
+                  <span className="sr-only">{r.media_type === 'movie' ? 'movie' : 'series'}</span>
+                  {' '}<span>{r.title}</span>
+                </div>
                 <div className="font-mono text-[10px] text-muted">{r.imdb_id}</div>
               </td>
               <td className="px-3 py-2">
