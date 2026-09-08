@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.21.2] - 2026-09-08
+
 ### Fixed
 
 - Arr stubs carry the source in their name again (`WEBDL-1080p`,

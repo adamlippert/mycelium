@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.21.2",
+    "date": "2026-09-08",
+    "notes": [
+      "Arr stubs carry the source in their name again (WEBDL-1080p, Bluray-2160p). The tag was derived from the magnet's dn= name, which the scrapers never set, so every stub was named with the bare resolution; the stored release label now feeds the detection. Titles processed before 0.21.1 keep the bare name until they are processed or swapped again"
+    ]
+  },
+  {
     "version": "0.21.1",
     "date": "2026-09-08",
     "notes": [
