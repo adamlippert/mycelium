@@ -229,3 +229,27 @@ from 45. When it does, or when the log shows `createtorrent` rate limits:
   waits for TorBox instead of starting instantly.
 - Requests that hit the limit are not lost: they wait in the retry queue
   and are processed when the hour rolls over.
+
+## Comet and MediaFusion
+
+Two more candidate sources, both read through their Torznab feed
+(`/torznab/api` on Comet, `/torznab` on MediaFusion). They sit between
+Zilean and Torrentio in priority: a release found by several scrapers is
+kept once, credited to the highest one, with the others listed under
+"also seen in".
+
+**MediaFusion** works out of the box: Settings > Scrapers > Use
+MediaFusion, with the public ElfHosted instance as the default URL. A
+private instance takes its API password in the MediaFusion API key
+field.
+
+**Comet** is self-hosted only. The public instance refuses the Torznab
+path, so the Test button reports "this instance does not expose
+Torznab" for it. Point Comet URL at your own instance
+(`http://comet:8000` on the same Docker network); a protected instance
+carries its access token in the path (`https://comet.example/s/<token>`).
+
+Neither feed says whether TorBox has a release cached. Mycelium checks
+TorBox itself, exactly as it does for Torrentio results, so the cache
+badge and the add budget behave the same. The Scrapers page shows each
+one with its latency and state; a wrong URL shows as "down".

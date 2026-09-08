@@ -4,6 +4,16 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Comet and MediaFusion as scrapers, read through their Torznab feeds by
+  one shared adapter. Each has an enable toggle, a URL and a Test button
+  in Settings > Scrapers; MediaFusion defaults to the public ElfHosted
+  instance, Comet needs your own instance. They rank between Zilean and
+  Torrentio, share the dedupe, outage guard and latency metrics, and show
+  on the Scrapers page. Neither reports cache status; TorBox's own check
+  decides, as before.
+
 ## [0.23.1] - 2026-09-08
 
 ### Fixed

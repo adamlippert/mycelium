@@ -121,7 +121,7 @@ The existing debrid-to-media-server toolchain kept breaking: RealDebrid purged c
 <summary><b>Core pipeline</b></summary>
 
 - **Two request paths**: built-in TMDB browser OR Seerr/Jellyseerr webhook
-- **Zilean + Torrentio** combined search with deduplication and health-aware skipping
+- **Zilean, Comet, MediaFusion and Torrentio** combined search with deduplication and health-aware skipping
 - **TorBox + RealDebrid** cache-first strategy with 429 retry and per-hash blacklist
 - **Jellyfin-friendly naming**: `Movie (Year)/Movie (Year).strm`, `Series/Season XX/S01E01.strm`
 - **Automatic library refresh** after every add
