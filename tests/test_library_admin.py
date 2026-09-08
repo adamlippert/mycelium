@@ -73,7 +73,7 @@ def _ids(rows):
 
 
 def test_default_listing_is_every_title_newest_first_with_the_computed_columns(seeded):
-    rows, total = la.list_titles({})
+    rows, total, _ = la.list_titles({})
     assert total == 6 and len(rows) == 6
     by = {r["imdb_id"]: r for r in rows}
     assert by["tt1"]["requester"] == "adam" and by["tt1"]["arr_mirrored"] is True and by["tt1"]["in_torbox"] is True
@@ -93,7 +93,7 @@ def test_default_listing_is_every_title_newest_first_with_the_computed_columns(s
     ("all", {"tt1", "tt2", "tt3", "tt4", "tt5", "tt6"}),
 ])
 def test_views_select_exactly_their_titles(seeded, view, expected):
-    rows, total = la.list_titles({"view": view})
+    rows, total, _ = la.list_titles({"view": view})
     assert set(_ids(rows)) == expected and total == len(expected)
 
 
@@ -110,7 +110,7 @@ def test_playability_prefers_degraded_across_two_keys_for_the_same_title():
     _req("Severance", "tt7", media_type="series")
     db.update_playability_fail("tt7:S01E01", "cdn 404")
     db.update_playability_ok("tt7:S01E02", "torbox")
-    rows, _ = la.list_titles({})
+    rows, _, _ = la.list_titles({})
     by = {r["imdb_id"]: r for r in rows}
     assert by["tt7"]["playability"] == {"status": "degraded", "last_fail_reason": "cdn 404"}
 
@@ -123,7 +123,7 @@ def test_attention_view_includes_high_retry_attempts_on_their_own():
     _req("Movie B", "tta2")
     db.enqueue_retry("tta1", "Movie A", "movie", None, attempt=3, delay_seconds=3600)
     db.enqueue_retry("tta2", "Movie B", "movie", None, attempt=2, delay_seconds=3600)
-    rows, total = la.list_titles({"view": "attention"})
+    rows, total, _ = la.list_titles({"view": "attention"})
     assert _ids(rows) == ["tta1"] and total == 1
     assert la.view_counts()["attention"] == 1
 
@@ -143,7 +143,7 @@ def test_attention_view_includes_high_retry_attempts_on_their_own():
     ({"added": "30d"}, {"tt1", "tt3", "tt4", "tt5", "tt6"}),
 ])
 def test_filters(seeded, filters, expected):
-    rows, _ = la.list_titles(filters)
+    rows, _, _ = la.list_titles(filters)
     assert set(_ids(rows)) == expected
 
 
@@ -153,34 +153,51 @@ def test_search_escapes_like_wildcards():
     characters unless escaped."""
     _req("Silo_S1", "tts1")
     _req("SiloXS1", "tts2")
-    rows, _ = la.list_titles({"q": "Silo_"})
+    rows, _, _ = la.list_titles({"q": "Silo_"})
     assert _ids(rows) == ["tts1"]
 
     _req("Movie 100% Done", "tts3")
     _req("Movie 1000 Done", "tts4")
-    rows, _ = la.list_titles({"q": "100%"})
+    rows, _, _ = la.list_titles({"q": "100%"})
     assert _ids(rows) == ["tts3"]
 
 
 def test_requester_filter_by_user_id(seeded):
-    rows, _ = la.list_titles({"requester": str(seeded)})
+    rows, _, _ = la.list_titles({"requester": str(seeded)})
     assert _ids(rows) == ["tt1"]
 
 
 def test_sorting_and_paging(seeded):
-    rows, total = la.list_titles({"sort": "title", "order": "asc", "per_page": 2, "page": 2})
+    rows, total, _ = la.list_titles({"sort": "title", "order": "asc", "per_page": 2, "page": 2})
     assert total == 6 and _ids(rows) == ["tt5", "tt1"], "Alien, Dune | Fargo, Heat | Loki, Tenet"
-    rows, _ = la.list_titles({"sort": "title", "order": "desc", "per_page": 4})
+    rows, _, _ = la.list_titles({"sort": "title", "order": "desc", "per_page": 4})
     assert _ids(rows) == ["tt6", "tt4", "tt1", "tt5"]
-    rows, _ = la.list_titles({"per_page": 1000})
+    rows, _, _ = la.list_titles({"per_page": 1000})
     assert len(rows) == 6, "per_page is capped, not rejected"
 
 
 def test_unknown_values_are_ignored_not_errors(seeded):
-    rows, total = la.list_titles({"view": "bogus", "sort": "DROP TABLE", "status": ["nope"], "page": "x"})
+    rows, total, _ = la.list_titles({"view": "bogus", "sort": "DROP TABLE", "status": ["nope"], "page": "x"})
     assert total == 0 and rows == []
-    rows, total = la.list_titles({"view": "bogus"})
+    rows, total, _ = la.list_titles({"view": "bogus"})
     assert total == 0
+
+
+def test_page_past_the_end_clamps_to_the_last_page():
+    """A page number past the end of the result set (a stale hash, a link
+    from a since-shrunk view) must not just return an empty page: it should
+    serve the last real page and say so, so the pager and the payload agree."""
+    _req("A", "ttp1")
+    _req("B", "ttp2")
+    _req("C", "ttp3")
+    rows, total, page = la.list_titles({"per_page": 2, "page": 99, "sort": "title", "order": "asc"})
+    assert total == 3 and page == 2
+    assert _ids(rows) == ["ttp3"]
+
+
+def test_page_clamps_to_1_when_the_filtered_set_is_empty():
+    rows, total, page = la.list_titles({"q": "nonexistent-title-xyz"})
+    assert total == 0 and rows == [] and page == 1
 
 
 def test_the_routes_exist_and_are_admin_only():

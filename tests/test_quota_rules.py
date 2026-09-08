@@ -67,10 +67,12 @@ def test_a_capped_user_is_refused_at_the_cap_with_the_numbers():
 
 
 def test_the_add_route_refuses_with_409_and_downgrades_auto_approve():
-    body = _src("app.py").split('@app.post("/ui/api/discover/add")', 1)[1].split("\n\n\n", 1)[0]
+    src = _src("app.py")
+    assert '_QUOTA_PAUSE_NOTE = "auto-approve paused: monthly quota reached"' in src
+    body = src.split('@app.post("/ui/api/discover/add")', 1)[1].split("\n\n\n", 1)[0]
     assert "quota.allows(user_rec)" in body
     assert "409" in body and '"quota reached"' in body
-    assert "auto-approve paused: monthly quota reached" in body
+    assert "_QUOTA_PAUSE_NOTE" in body
     assert body.index("quota.allows(user_rec)") < body.index("db.create_user_request(")
 
 
@@ -105,6 +107,38 @@ def test_reopen_helper_only_reopens_denied_rows():
     row = db.get_user_request(rid)
     assert row["status"] == "pending" and row["reviewed_by"] is None and row["reviewed_at"] is None and row["note"] is None
     assert db.reopen_user_request(999) is False
+
+
+def test_approve_route_clears_the_pause_note_on_source():
+    """Approving a request that was auto-created with the pause note must
+    clear it, so the row does not keep advertising a pause that is over,
+    while a deny note (a different code path, a different reason) is left
+    alone by update_user_request_status's own COALESCE."""
+    src = _src("app.py")
+    body = src.split('@app.post("/ui/api/user-requests/<int:req_id>/approve")', 1)[1].split("\n\n\n", 1)[0]
+    assert "db.clear_user_request_note(req_id)" in body
+    assert "_QUOTA_PAUSE_NOTE" in body
+
+
+def test_clear_user_request_note_wipes_the_note_without_touching_the_rest():
+    u = _user("adam")
+    root = _user("root", role="admin")
+    rid = db.create_user_request(u["id"], "tt1", 1, "movie", "A",
+                                  note="auto-approve paused: monthly quota reached")
+    db.update_user_request_status(rid, "approved", reviewed_by=root["id"])
+    db.clear_user_request_note(rid)
+    row = db.get_user_request(rid)
+    assert row["note"] is None
+    assert row["status"] == "approved" and row["reviewed_by"] == root["id"]
+
+
+def test_a_deny_note_is_unaffected_by_the_pause_note_clearing_path():
+    u = _user("adam")
+    root = _user("root", role="admin")
+    rid = db.create_user_request(u["id"], "tt1", 1, "movie", "A")
+    db.update_user_request_status(rid, "denied", reviewed_by=root["id"], note="too big")
+    row = db.get_user_request(rid)
+    assert row["note"] == "too big"
 
 
 def test_reopen_and_quota_routes_exist_and_the_orphan_is_gone():

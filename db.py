@@ -2089,6 +2089,16 @@ def update_user_request_status(req_id: int, status: str, reviewed_by: int | None
         )
 
 
+def clear_user_request_note(req_id: int) -> None:
+    """Wipe the note on one user_requests row. Used when an admin approves
+    a request that carries the auto-approve-paused note, since
+    update_user_request_status's note=COALESCE(?, note) exists precisely
+    to leave a note alone (a deny note must survive an unrelated update),
+    so clearing it needs its own explicit statement."""
+    with _connect() as conn:
+        conn.execute("UPDATE user_requests SET note=NULL WHERE id=?", (req_id,))
+
+
 def get_user_request(req_id: int) -> dict | None:
     with _connect() as conn:
         row = conn.execute("SELECT * FROM user_requests WHERE id=?", (req_id,)).fetchone()
@@ -2107,9 +2117,12 @@ def reopen_user_request(req_id: int) -> bool:
 
 
 def count_user_requests_this_month(user_id: int) -> int:
+    """Distinct titles, not rows: a re-request for the same imdb_id (a
+    denied-then-reopened request, or simply asking again) must not cost the
+    quota twice."""
     with _connect() as conn:
         row = conn.execute(
-            """SELECT COUNT(*) AS n FROM user_requests
+            """SELECT COUNT(DISTINCT imdb_id) AS n FROM user_requests
                WHERE user_id=? AND created_at >= strftime('%Y-%m-01 00:00:00','now')
                      AND status != 'denied'""",
             (user_id,),

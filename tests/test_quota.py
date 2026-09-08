@@ -59,6 +59,16 @@ def test_used_counts_only_this_users_rows_this_month():
     assert quota.get_quota(u)["used"] == 2
 
 
+def test_duplicate_requests_for_the_same_title_count_once():
+    """A repeat request for the same imdb_id (asking again, or a
+    denied-then-reopened row) must not spend the cap twice."""
+    u = _user(25)
+    db.create_user_request(u["id"], "tt0000001", None, "A", "movie")
+    db.create_user_request(u["id"], "tt0000001", None, "A", "movie")
+    db.create_user_request(u["id"], "tt0000002", None, "B", "movie")
+    assert quota.get_quota(u)["used"] == 2
+
+
 def test_zero_quota_means_unlimited_not_a_zero_cap():
     d = quota.get_quota(_user(0))
     assert d["unlimited"] is True

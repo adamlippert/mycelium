@@ -23,6 +23,11 @@ export default function Library() {
   const users = useQuery({ queryKey: ['users'], queryFn: api.users });
 
   useEffect(() => { navigate({ hash: toHash(state) }, { replace: true }); }, [state, navigate]);
+  useEffect(() => {
+    const effective = page.data?.page;
+    if (effective && effective !== state.page) setState((s) => ({ ...s, page: effective }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page.data?.page]);
   const update = (patch: Partial<LibraryState>) => setState((s) => ({ ...s, ...patch }));
   const onSort = (col: string) => update({ sort: col, order: state.sort === col && state.order === 'asc' ? 'desc' : 'asc', page: 1 });
   const closeDrawer = useCallback(() => update({ open: null }), []);

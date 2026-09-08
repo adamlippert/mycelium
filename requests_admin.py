@@ -7,6 +7,7 @@ same WHERE. Same shape as library_admin so the two rails behave alike.
 """
 from __future__ import annotations
 
+import admin_query
 import db
 
 VIEWS = ("pending", "approved", "denied", "all")
@@ -32,20 +33,6 @@ LEFT JOIN requests r ON r.imdb_id = ur.imdb_id
 _VIEW_WHERE = {"all": "1=1", "pending": "t.status = 'pending'",
                "approved": "t.status = 'approved'", "denied": "t.status = 'denied'"}
 _VIEW_ORDER = {"pending": "t.created_at ASC, t.id ASC"}
-_ADDED = {"24h": "-1 day", "7d": "-7 days", "30d": "-30 days"}
-
-
-def _like(q: str) -> str:
-    q = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{q}%"
-
-
-def _int(value, default: int, lo: int, hi: int) -> int:
-    try:
-        n = int(value)
-    except (TypeError, ValueError):
-        return default
-    return max(lo, min(hi, n))
 
 
 def _where(filters: dict) -> tuple[str, list]:
@@ -60,14 +47,15 @@ def _where(filters: dict) -> tuple[str, list]:
         clauses.append("t.media_type = 'movie'")
     elif kind == "series":
         clauses.append("t.media_type != 'movie'")
-    added = _ADDED.get(filters.get("added") or "")
+    added = admin_query.ADDED_WINDOWS.get(filters.get("added") or "")
     if added:
         clauses.append("t.created_at >= datetime('now', ?)")
         args.append(added)
     q = (filters.get("q") or "").strip()
     if q:
         clauses.append("(t.title LIKE ? ESCAPE '\\' OR t.imdb_id LIKE ? ESCAPE '\\')")
-        args += [_like(q), _like(q)]
+        like = admin_query.like_pattern(q)
+        args += [like, like]
     return " AND ".join(clauses), args
 
 
@@ -82,16 +70,20 @@ def _order(filters: dict) -> str:
     return _VIEW_ORDER.get(filters.get("view") or "all", "t.created_at DESC, t.id DESC")
 
 
-def list_requests(filters: dict) -> tuple[list[dict], int]:
+def list_requests(filters: dict) -> tuple[list[dict], int, int]:
+    """Rows, total, and the page actually served: a page past the last one
+    for the current filters clamps to the last page (page 1 when the total
+    is 0) rather than returning an empty page that disagrees with total."""
     where, args = _where(filters)
-    per_page = _int(filters.get("per_page"), DEFAULT_PER_PAGE, 1, MAX_PER_PAGE)
-    page = _int(filters.get("page"), 1, 1, 10_000_000)
+    per_page = admin_query.clamp_int(filters.get("per_page"), DEFAULT_PER_PAGE, 1, MAX_PER_PAGE)
+    page = admin_query.clamp_int(filters.get("page"), 1, 1, 10_000_000)
     with db._connect() as conn:
         total = conn.execute(f"SELECT COUNT(*) FROM ({_BASE}) t WHERE {where}", args).fetchone()[0]
+        page = admin_query.effective_page(page, per_page, total)
         rows = conn.execute(
             f"SELECT * FROM ({_BASE}) t WHERE {where} ORDER BY {_order(filters)} LIMIT ? OFFSET ?",
             args + [per_page, (page - 1) * per_page]).fetchall()
-    return [dict(r) for r in rows], total
+    return [dict(r) for r in rows], total, page
 
 
 def view_counts() -> dict[str, int]:
@@ -101,11 +93,14 @@ def view_counts() -> dict[str, int]:
 
 
 def quota_rows() -> list[dict]:
-    """One row per enabled non-admin user for the Quotas card."""
+    """One row per non-admin user for the Quotas card, enabled or not; a
+    disabled user still shows its accrued usage so an admin can see why a
+    quota looks the way it does before re-enabling them. Admins stay out:
+    they are never capped."""
     import quota
     out = []
     for u in sorted(db.list_users(), key=lambda x: (x["username"] or "").lower()):
-        if u.get("role") == "admin" or not u.get("enabled", 1):
+        if u.get("role") == "admin":
             continue
         q = quota.get_quota(u)
         auto = bool(u.get("auto_approve"))
@@ -113,5 +108,6 @@ def quota_rows() -> list[dict]:
         out.append({"user_id": u["id"], "username": u["username"], "used": q["used"], "limit": q["limit"],
                     "remaining": None if q["unlimited"] else max(0, q["limit"] - q["used"]),
                     "unlimited": q["unlimited"], "resets_at": q["resets_at"],
-                    "auto_approve": auto, "paused": auto and at_cap})
+                    "auto_approve": auto, "paused": auto and at_cap,
+                    "enabled": bool(u.get("enabled", 1))})
     return out

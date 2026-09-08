@@ -806,7 +806,7 @@ export interface AdminRequestPage { rows: AdminRequestRow[]; total: number; page
 /** GET /ui/api/admin/quotas row shape (Requests admin tab). */
 export interface QuotaRow {
   user_id: number; username: string; used: number; limit: number; remaining: number | null;
-  unlimited: boolean; resets_at: string; auto_approve: boolean; paused: boolean;
+  unlimited: boolean; resets_at: string; auto_approve: boolean; paused: boolean; enabled: boolean;
 }
 
 export interface RequestRow {

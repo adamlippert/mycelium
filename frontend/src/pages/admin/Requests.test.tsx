@@ -100,7 +100,7 @@ describe('Requests tab', () => {
   it('shows the quotas card with a paused user and the auto-approve card', async () => {
     apiMocks.adminQuotas.mockResolvedValue({
       rows: [{ user_id: 3, username: 'adam', used: 2, limit: 2, remaining: 0, unlimited: false,
-        resets_at: '2026-10-01T00:00:00Z', auto_approve: true, paused: true }],
+        resets_at: '2026-10-01T00:00:00Z', auto_approve: true, paused: true, enabled: true }],
     });
     renderIt();
     expect(await screen.findByText('auto-approve paused')).toBeInTheDocument();
@@ -127,5 +127,13 @@ describe('Requests tab', () => {
     await userEvent.click(await screen.findByText('Heat'));
     expect(await screen.findByRole('heading', { name: 'Not in the library' })).toBeInTheDocument();
     expect(await screen.findByText('This title is not in the library yet, so there is nothing to act on here.')).toBeInTheDocument();
+  });
+
+  it('adopts a lower effective page from the response and reflects it in the hash', async () => {
+    apiMocks.adminRequests.mockResolvedValue({ rows: [row({})], total: 3, page: 2, per_page: 50 });
+    renderIt('#requests?view=all&page=99');
+    await waitFor(() => expect(apiMocks.adminRequests).toHaveBeenCalledWith(expect.objectContaining({ page: '99' })));
+    await waitFor(() => expect(screen.getByTestId('hash-probe')).toHaveTextContent('page=2'));
+    await waitFor(() => expect(apiMocks.adminRequests).toHaveBeenLastCalledWith(expect.objectContaining({ page: '2' })));
   });
 });

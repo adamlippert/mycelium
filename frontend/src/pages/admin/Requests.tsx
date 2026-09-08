@@ -27,6 +27,11 @@ export default function Requests() {
   const users = useQuery({ queryKey: ['users'], queryFn: api.users });
   const quotas = useQuery({ queryKey: ['admin-quotas'], queryFn: api.adminQuotas });
   useEffect(() => { navigate({ hash: toHash(state) }, { replace: true }); }, [state, navigate]);
+  useEffect(() => {
+    const effective = page.data?.page;
+    if (effective && effective !== state.page) setState((s) => ({ ...s, page: effective }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page.data?.page]);
   const update = useCallback((patch: Partial<RequestsState>) => setState((s) => ({ ...s, ...patch })), []);
   const refetchAll = useCallback(() => { page.refetch(); counts.refetch(); quotas.refetch(); }, [page, counts, quotas]);
   const closeDrawer = useCallback(() => update({ open: null }), [update]);

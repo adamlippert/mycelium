@@ -85,6 +85,14 @@ describe('Library tab', () => {
     await waitFor(() => expect(apiMocks.library).toHaveBeenLastCalledWith(expect.objectContaining({ page: '3' })));
   });
 
+  it('adopts a lower effective page from the response and reflects it in the hash', async () => {
+    apiMocks.library.mockResolvedValue({ rows: [row({})], total: 3, page: 2, per_page: 50 });
+    renderIt('#library?page=99');
+    await waitFor(() => expect(apiMocks.library).toHaveBeenCalledWith(expect.objectContaining({ page: '99' })));
+    await waitFor(() => expect(screen.getByTestId('hash-probe')).toHaveTextContent('page=2'));
+    await waitFor(() => expect(apiMocks.library).toHaveBeenLastCalledWith(expect.objectContaining({ page: '2' })));
+  });
+
   it('sorts by clicking a header and selects rows', async () => {
     renderIt();
     await screen.findByText('Heat');

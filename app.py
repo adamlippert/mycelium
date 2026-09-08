@@ -1998,6 +1998,7 @@ def ui_api_library():
     """The Library tab's table: filters, views, sort and paging in SQL."""
     if not auth.is_admin():
         return jsonify(error="admin required"), 403
+    import admin_query
     import library_admin
     filters = {
         "view": request.args.get("view"), "q": request.args.get("q"),
@@ -2007,9 +2008,8 @@ def ui_api_library():
         "sort": request.args.get("sort"), "order": request.args.get("order"),
         "page": request.args.get("page"), "per_page": request.args.get("per_page"),
     }
-    rows, total = library_admin.list_titles(filters)
-    page = library_admin._int(request.args.get("page"), 1, 1, 10_000_000)
-    per_page = library_admin._int(request.args.get("per_page"), library_admin.DEFAULT_PER_PAGE, 1, library_admin.MAX_PER_PAGE)
+    rows, total, page = library_admin.list_titles(filters)
+    per_page = admin_query.clamp_int(request.args.get("per_page"), library_admin.DEFAULT_PER_PAGE, 1, library_admin.MAX_PER_PAGE)
     return jsonify(rows=rows, total=total, page=page, per_page=per_page)
 
 
@@ -2027,14 +2027,14 @@ def ui_api_admin_requests():
     """The Requests tab's table: views, filters, sort and paging in SQL."""
     if not auth.is_admin():
         return jsonify(error="admin required"), 403
+    import admin_query
     import requests_admin
     filters = {k: request.args.get(k) for k in
                ("view", "user", "type", "added", "q", "sort", "order", "page", "per_page")}
-    rows, total = requests_admin.list_requests(filters)
-    return jsonify(rows=rows, total=total,
-                   page=requests_admin._int(filters["page"], 1, 1, 10_000_000),
-                   per_page=requests_admin._int(filters["per_page"], requests_admin.DEFAULT_PER_PAGE, 1,
-                                                requests_admin.MAX_PER_PAGE))
+    rows, total, page = requests_admin.list_requests(filters)
+    per_page = admin_query.clamp_int(filters["per_page"], requests_admin.DEFAULT_PER_PAGE, 1,
+                                     requests_admin.MAX_PER_PAGE)
+    return jsonify(rows=rows, total=total, page=page, per_page=per_page)
 
 
 @app.get("/ui/api/admin/requests/views")
@@ -2674,6 +2674,9 @@ def ui_api_discover_details():
     return jsonify(detail)
 
 
+_QUOTA_PAUSE_NOTE = "auto-approve paused: monthly quota reached"
+
+
 @app.post("/ui/api/discover/add")
 def ui_api_discover_add():
     """One-click add: resolve TMDB→IMDB, queue for processing.
@@ -2701,7 +2704,7 @@ def ui_api_discover_add():
             return jsonify(error="quota reached", used=info["used"], limit=info["limit"],
                            resets_at=info["resets_at"]), 409
         status = "approved" if auto and ok else "pending"
-        note = None if ok else "auto-approve paused: monthly quota reached"
+        note = None if ok else _QUOTA_PAUSE_NOTE
         rid = db.create_user_request(user_rec["id"], imdb_id, tmdb_id, media_type,
                                        title, status=status, note=note)
         if status == "approved":
@@ -2847,6 +2850,8 @@ def ui_api_user_request_approve(req_id: int):
         return jsonify(error="not found"), 404
     db.update_user_request_status(req_id, "approved",
                                    reviewed_by=(rec or {}).get("id"))
+    if r.get("note") == _QUOTA_PAUSE_NOTE:
+        db.clear_user_request_note(req_id)
     _kick_off_processing(r["title"], r["imdb_id"], r["media_type"], r.get("tmdb_id"))
     return jsonify(ok=True)
 

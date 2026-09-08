@@ -8,6 +8,7 @@ the rail counts and the table agree by construction.
 """
 from __future__ import annotations
 
+import admin_query
 import arr_sync
 import db
 
@@ -86,16 +87,6 @@ _PROBLEM_WHERE = {
     "no_requester": "t.requester IS NULL",
     "not_mirrored": "(t.status = 'success' AND t.arr_mirrored_at IS NULL)",
 }
-_ADDED = {"24h": "-1 day", "7d": "-7 days", "30d": "-30 days"}
-
-
-def _like(q: str) -> str:
-    """Escape a search term for SQLite LIKE: backslash first (it is the
-    escape character itself), then the two LIKE wildcards, so a literal
-    `_` or `%` in a title or hash is matched literally rather than as a
-    wildcard."""
-    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
 
 
 def _where(filters: dict) -> tuple[str, list]:
@@ -105,7 +96,7 @@ def _where(filters: dict) -> tuple[str, list]:
     clauses.append(_VIEW_WHERE.get(view, "0=1"))
     q = (filters.get("q") or "").strip()
     if q:
-        like = _like(q)
+        like = admin_query.like_pattern(q)
         clauses.append("(t.title LIKE ? ESCAPE '\\' OR t.imdb_id LIKE ? ESCAPE '\\' OR t.info_hash LIKE ? ESCAPE '\\')")
         args += [like, like, like]
     statuses = [s for s in (filters.get("status") or []) if s in STATUSES]
@@ -129,7 +120,7 @@ def _where(filters: dict) -> tuple[str, list]:
     elif requester and str(requester).isdigit():
         clauses.append("t.requester_id = ?")
         args.append(int(requester))
-    added = _ADDED.get(filters.get("added") or "")
+    added = admin_query.ADDED_WINDOWS.get(filters.get("added") or "")
     if added:
         clauses.append("t.created_at >= datetime('now', ?)")
         args.append(added)
@@ -143,14 +134,6 @@ def _order(filters: dict) -> str:
         return f"{SORTS[sort]} {direction}, t.id DESC"
     view = filters.get("view") or "all"
     return _VIEW_ORDER.get(view, "t.updated_at DESC, t.id DESC")
-
-
-def _int(value, default: int, lo: int, hi: int) -> int:
-    try:
-        n = int(value)
-    except (TypeError, ValueError):
-        return default
-    return max(lo, min(hi, n))
 
 
 def _row(r: dict) -> dict:
@@ -172,17 +155,21 @@ def _row(r: dict) -> dict:
     }
 
 
-def list_titles(filters: dict) -> tuple[list[dict], int]:
+def list_titles(filters: dict) -> tuple[list[dict], int, int]:
+    """Rows, total, and the page actually served: a page past the last one
+    for the current filters clamps to the last page (page 1 when the total
+    is 0) rather than returning an empty page that disagrees with total."""
     where, args = _where(filters)
-    per_page = _int(filters.get("per_page"), DEFAULT_PER_PAGE, 1, MAX_PER_PAGE)
-    page = _int(filters.get("page"), 1, 1, 10_000_000)
+    per_page = admin_query.clamp_int(filters.get("per_page"), DEFAULT_PER_PAGE, 1, MAX_PER_PAGE)
+    page = admin_query.clamp_int(filters.get("page"), 1, 1, 10_000_000)
     order = _order(filters)
     with db._connect() as conn:
         total = conn.execute(f"SELECT COUNT(*) FROM ({_BASE}) t WHERE {where}", args).fetchone()[0]
+        page = admin_query.effective_page(page, per_page, total)
         rows = conn.execute(
             f"SELECT * FROM ({_BASE}) t WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?",
             args + [per_page, (page - 1) * per_page]).fetchall()
-    return [_row(dict(r)) for r in rows], total
+    return [_row(dict(r)) for r in rows], total, page
 
 
 def view_counts() -> dict[str, int]:

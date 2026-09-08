@@ -13,6 +13,9 @@ export function QuotasCard({ rows }: { rows: QuotaRow[] }) {
             return (
               <li key={r.user_id} className="flex flex-wrap items-center gap-2">
                 <span className="w-32 font-medium">{r.username}</span>
+                {!r.enabled && (
+                  <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-muted">disabled</span>
+                )}
                 {r.unlimited
                   ? <span className="text-muted">unlimited</span>
                   : <span className={atCap ? 'text-danger' : ''}>{r.used} of {r.limit}</span>}

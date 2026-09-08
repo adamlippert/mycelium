@@ -137,7 +137,8 @@ export default function Users() {
       </Card>
       <DataTable columns={columns} rows={rows} empty="No users yet" />
       <p className="text-xs text-muted">
-        Monthly cap: requests per calendar month; blank means no cap. Denied requests do not count.
+        Monthly cap: requests per calendar month; blank means no cap. Denied requests do not count,
+        and a repeat request for a title already requested this month counts once.
       </p>
     </div>
   );

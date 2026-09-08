@@ -64,7 +64,7 @@ def _ids(rows):
 
 
 def test_default_listing_is_every_request_newest_first_with_joined_columns(seeded):
-    rows, total = ra.list_requests({})
+    rows, total, _ = ra.list_requests({})
     assert total == 4 and _ids(rows) == [seeded["r4"], seeded["r2"], seeded["r1"], seeded["r3"]]
     by = {r["id"]: r for r in rows}
     assert by[seeded["r2"]]["username"] == "adam" and by[seeded["r2"]]["reviewer"] == "root"
@@ -78,12 +78,12 @@ def test_default_listing_is_every_request_newest_first_with_joined_columns(seede
 @pytest.mark.parametrize("view,key", [("pending", ["r1", "r4"]), ("approved", ["r2"]), ("denied", ["r3"]),
                                       ("all", ["r1", "r2", "r3", "r4"])])
 def test_views_select_exactly_their_rows(seeded, view, key):
-    rows, total = ra.list_requests({"view": view})
+    rows, total, _ = ra.list_requests({"view": view})
     assert set(_ids(rows)) == {seeded[k] for k in key} and total == len(key)
 
 
 def test_pending_view_sorts_oldest_first(seeded):
-    rows, _ = ra.list_requests({"view": "pending"})
+    rows, _, _ = ra.list_requests({"view": "pending"})
     assert _ids(rows) == [seeded["r1"], seeded["r4"]]
 
 
@@ -103,33 +103,50 @@ def test_view_counts_match(seeded):
 def test_filters(seeded, filters, key):
     if "user" in filters:
         filters = {**filters, "user": str(seeded[filters["user"]])}
-    rows, _ = ra.list_requests(filters)
+    rows, _, _ = ra.list_requests(filters)
     assert set(_ids(rows)) == {seeded[k] for k in key}
 
 
 def test_search_escapes_like_wildcards(seeded):
     db.create_user_request(seeded["bea"], "tt5", 5, "movie", "Silo_S1")
     db.create_user_request(seeded["bea"], "tt6", 6, "movie", "SiloXS1")
-    rows, _ = ra.list_requests({"q": "Silo_"})
+    rows, _, _ = ra.list_requests({"q": "Silo_"})
     assert [r["title"] for r in rows] == ["Silo_S1"]
 
 
 def test_sorting_and_paging(seeded):
-    rows, total = ra.list_requests({"sort": "title", "order": "asc", "per_page": 2, "page": 2})
+    rows, total, _ = ra.list_requests({"sort": "title", "order": "asc", "per_page": 2, "page": 2})
     assert total == 4 and [r["title"] for r in rows] == ["Heat", "Loki"], "Alien, Dune | Heat, Loki"
-    rows, _ = ra.list_requests({"sort": "user", "order": "desc"})
+    rows, _, _ = ra.list_requests({"sort": "user", "order": "desc"})
     assert [r["username"] for r in rows][:2] == ["bea", "bea"]
-    rows, _ = ra.list_requests({"sort": "reviewed", "order": "desc"})
+    rows, _, _ = ra.list_requests({"sort": "reviewed", "order": "desc"})
     assert rows[0]["id"] in (seeded["r2"], seeded["r3"]) and rows[-1]["reviewed_at"] is None
-    rows, _ = ra.list_requests({"per_page": 1000})
+    rows, _, _ = ra.list_requests({"per_page": 1000})
     assert len(rows) == 4
 
 
 def test_unknown_values_are_ignored_not_errors(seeded):
-    rows, total = ra.list_requests({"view": "bogus", "sort": "DROP", "user": "x", "page": "y", "type": "cartoon"})
+    rows, total, _ = ra.list_requests({"view": "bogus", "sort": "DROP", "user": "x", "page": "y", "type": "cartoon"})
     assert total == 0
-    rows, total = ra.list_requests({"sort": "DROP", "user": "x", "page": "y", "type": "cartoon"})
+    rows, total, _ = ra.list_requests({"sort": "DROP", "user": "x", "page": "y", "type": "cartoon"})
     assert total == 4
+
+
+def test_page_past_the_end_clamps_to_the_last_page():
+    """A page number past the end of the result set must serve the last
+    real page rather than an empty one, and say so in the returned page."""
+    z = db.create_user("zed", "scrypt$x$y", role="user")
+    db.create_user_request(z, "ttp1", 1, "movie", "A")
+    db.create_user_request(z, "ttp2", 2, "movie", "B")
+    db.create_user_request(z, "ttp3", 3, "movie", "C")
+    rows, total, page = ra.list_requests({"per_page": 2, "page": 99, "sort": "title", "order": "asc"})
+    assert total == 3 and page == 2
+    assert [r["title"] for r in rows] == ["C"]
+
+
+def test_page_clamps_to_1_when_the_filtered_set_is_empty():
+    rows, total, page = ra.list_requests({"q": "nonexistent-title-xyz"})
+    assert total == 0 and rows == [] and page == 1
 
 
 def test_the_status_index_exists():
@@ -146,19 +163,23 @@ def test_the_routes_exist_and_are_admin_only():
         assert "auth.is_admin()" in body and "requests_admin" in body
 
 
-def test_quota_rows_cover_enabled_non_admin_users(seeded):
+def test_quota_rows_cover_every_non_admin_user_including_disabled(seeded):
     db.update_user(seeded["adam"], auto_approve=1)
     db.create_user_request(seeded["adam"], "tt9", 9, "movie", "Third")
     carl = db.create_user("carl", "scrypt$x$y", role="user", quota_monthly=5)
     db.update_user(carl, enabled=0)
     rows = ra.quota_rows()
-    assert [r["username"] for r in rows] == ["adam", "bea"], "admins and disabled users are left out"
+    assert [r["username"] for r in rows] == ["adam", "bea", "carl"], "admins are left out, disabled users are not"
     adam = rows[0]
     # r1 sits two days back; on the 1st or 2nd of a month it falls into last month, so allow 2 or 3
     assert adam["used"] in (2, 3) and adam["limit"] == 2 and adam["remaining"] == 0
     assert adam["unlimited"] is False and adam["auto_approve"] is True and adam["paused"] is True
+    assert adam["enabled"] is True
     bea = rows[1]
     assert bea["unlimited"] is True and bea["remaining"] is None and bea["paused"] is False
+    assert bea["enabled"] is True
+    carl_row = rows[2]
+    assert carl_row["enabled"] is False and carl_row["used"] == 0 and carl_row["limit"] == 5
     assert adam["resets_at"].endswith("-01T00:00:00Z")
 
 
