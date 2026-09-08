@@ -53,7 +53,7 @@ export default function Library() {
         </div>
         {selected.size > 0 && <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-bg/95 px-4 py-3 text-sm backdrop-blur">{selected.size} selected</div>}
       </main>
-      {state.open && <TitleDrawer imdb={state.open} onClose={() => update({ open: null })} onChanged={() => { page.refetch(); counts.refetch(); }} />}
+      {state.open && <TitleDrawer key={state.open} imdb={state.open} onClose={() => update({ open: null })} onChanged={() => { page.refetch(); counts.refetch(); }} />}
     </div>
   );
 }

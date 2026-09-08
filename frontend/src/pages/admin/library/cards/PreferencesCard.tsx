@@ -1,12 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { LibraryDetail } from '../../../../api';
 import { Toggle } from '../../../../components/primitives';
 import { ACTIONS } from '../actions';
 import { ActionButton, DrawerCard, Row } from './DrawerCard';
 
+function formFromOverride(o: LibraryDetail['override']) {
+  return { quality_preference: o?.quality_preference || '', allow_4k: Boolean(o?.allow_4k), prefer_hevc: Boolean(o?.prefer_hevc), notes: o?.notes || '' };
+}
+
 export function PreferencesCard({ d, onDone }: { d: LibraryDetail; onDone: () => void }) {
   const o = d.override;
-  const [form, setForm] = useState({ quality_preference: o?.quality_preference || '', allow_4k: Boolean(o?.allow_4k), prefer_hevc: Boolean(o?.prefer_hevc), notes: o?.notes || '' });
+  const [form, setForm] = useState(() => formFromOverride(o));
+  useEffect(() => {
+    setForm(formFromOverride(o));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [o?.quality_preference, o?.allow_4k, o?.prefer_hevc, o?.notes]);
   return (
     <DrawerCard title="Preferences" description="Overrides for this title only; blank means the global rules apply.">
       <Row label="Resolution"><input aria-label="Preferred resolution" value={form.quality_preference} placeholder="e.g. 1080p" onChange={(e) => setForm({ ...form, quality_preference: e.target.value })} className="w-full max-w-xs rounded border border-border bg-bg px-2 py-1 text-xs" /></Row>

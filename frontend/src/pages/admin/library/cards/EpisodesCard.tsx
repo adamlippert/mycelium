@@ -22,7 +22,7 @@ function Season({ d, season, onDone }: { d: LibraryDetail; season: { season: num
             <li key={e.episode} className="flex flex-wrap items-center justify-between gap-2">
               <span className="flex items-center gap-2">
                 <span className="font-mono">E{pad(e.episode)}</span>
-                <span className="text-muted">{e.present ? '✓' : e.wanted_status || 'missing'}{e.air_date ? `, aired ${e.air_date}` : ''}{e.attempt_count ? `, ${e.attempt_count} attempts` : ''}</span>
+                <span className="text-muted">{e.present ? '✓' : e.wanted_status || 'missing'}{e.air_date ? `, aired ${e.air_date}` : ''}{e.attempt_count ? `, ${e.attempt_count} attempts` : ''}{e.last_attempted ? `, last try ${e.last_attempted.slice(0, 16)}` : ''}</span>
               </span>
               {!e.present && <ActionButton label={`Retry S${pad(season.season)}E${pad(e.episode)}`} run={() => ACTIONS.retryEpisode(d, season.season, e.episode)} onDone={onDone} />}
             </li>

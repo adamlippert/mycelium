@@ -43,6 +43,7 @@ describe('drawer cards', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Expand season 2' }));
     expect(await screen.findByText('E03')).toBeInTheDocument();
     expect(screen.getByText(/4 attempts/)).toBeInTheDocument();
+    expect(screen.getByText(/last try 2026-09-01 10:00/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Retry S02E03' }));
     await waitFor(() => expect(apiMocks.libraryAction).toHaveBeenCalledWith('/ui/api/library/tt4/episodes/2/3/retry'));
     expect(await screen.findByText('searching S02E03')).toBeInTheDocument();
@@ -66,6 +67,15 @@ describe('drawer cards', () => {
       { quality_preference: '1080p', allow_4k: true, prefer_hevc: true, notes: 'keep small' }));
     await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
     await waitFor(() => expect(apiMocks.libraryAction).toHaveBeenCalledWith('/ui/api/library/tt4/override', 'DELETE'));
+  });
+
+  it('Preferences resyncs the form when the saved override changes', () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { rerender } = render(<QueryClientProvider client={qc}><PreferencesCard d={base} onDone={() => {}} /></QueryClientProvider>);
+    expect(screen.getByRole('checkbox', { name: 'Prefer HEVC' })).toBeChecked();
+    rerender(<QueryClientProvider client={qc}><PreferencesCard d={{ ...base, override: null }} onDone={() => {}} /></QueryClientProvider>);
+    expect(screen.getByRole('textbox', { name: 'Preferred resolution' })).toHaveValue('');
+    expect(screen.getByRole('checkbox', { name: 'Prefer HEVC' })).not.toBeChecked();
   });
 
   it('Hashes shows the blacklist state with an Unblacklist button', async () => {
