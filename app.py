@@ -2661,10 +2661,9 @@ def ui_api_discover_add():
             return jsonify(error="quota reached", used=info["used"], limit=info["limit"],
                            resets_at=info["resets_at"]), 409
         status = "approved" if auto and ok else "pending"
+        note = None if ok else "auto-approve paused: monthly quota reached"
         rid = db.create_user_request(user_rec["id"], imdb_id, tmdb_id, media_type,
-                                       title, status=status)
-        if not ok:
-            db.update_user_request_status(rid, "pending", note="auto-approve paused: monthly quota reached")
+                                       title, status=status, note=note)
         if status == "approved":
             _kick_off_processing(title, imdb_id, media_type, tmdb_id, monitor_mode, seasons)
         return jsonify(status=status, request_id=rid, imdb_id=imdb_id)

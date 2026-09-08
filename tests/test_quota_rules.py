@@ -74,6 +74,27 @@ def test_the_add_route_refuses_with_409_and_downgrades_auto_approve():
     assert body.index("quota.allows(user_rec)") < body.index("db.create_user_request(")
 
 
+def test_the_pause_note_is_carried_from_creation_not_a_later_review():
+    u = _user("adam")
+    rid = db.create_user_request(u["id"], "tt1", 1, "movie", "A",
+                                  note="auto-approve paused: monthly quota reached")
+    row = db.get_user_request(rid)
+    assert row["note"] == "auto-approve paused: monthly quota reached"
+    assert row["reviewed_at"] is None and row["reviewed_by"] is None
+
+
+def test_a_denied_request_does_not_spend_quota():
+    u = _user("adam", cap=2)
+    root = _user("root", role="admin")
+    r1 = db.create_user_request(u["id"], "tt1", 1, "movie", "A")
+    db.create_user_request(u["id"], "tt2", 2, "movie", "B")
+    ok, info = quota.allows(u)
+    assert ok is False and info["used"] == 2
+    db.update_user_request_status(r1, "denied", reviewed_by=root["id"], note="no")
+    ok, info = quota.allows(u)
+    assert ok is True and info["used"] == 1
+
+
 def test_reopen_helper_only_reopens_denied_rows():
     u = _user("adam")
     root = _user("root", role="admin")

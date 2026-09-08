@@ -2018,13 +2018,13 @@ def get_watchlist(user_id: int) -> list[dict]:
 
 def create_user_request(user_id: int, imdb_id: str, tmdb_id: int | None,
                         media_type: str, title: str, seasons: list[int] | None = None,
-                        status: str = "pending") -> int:
+                        status: str = "pending", note: str | None = None) -> int:
     seasons_str = ",".join(str(s) for s in (seasons or [])) or None
     with _connect() as conn:
         cur = conn.execute(
-            """INSERT INTO user_requests (user_id, imdb_id, tmdb_id, media_type, title, seasons, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (user_id, imdb_id, tmdb_id, media_type, title, seasons_str, status),
+            """INSERT INTO user_requests (user_id, imdb_id, tmdb_id, media_type, title, seasons, status, note)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, imdb_id, tmdb_id, media_type, title, seasons_str, status, note),
         )
         return cur.lastrowid
 
@@ -2084,7 +2084,8 @@ def count_user_requests_this_month(user_id: int) -> int:
     with _connect() as conn:
         row = conn.execute(
             """SELECT COUNT(*) AS n FROM user_requests
-               WHERE user_id=? AND created_at >= strftime('%Y-%m-01 00:00:00','now')""",
+               WHERE user_id=? AND created_at >= strftime('%Y-%m-01 00:00:00','now')
+                     AND status != 'denied'""",
             (user_id,),
         ).fetchone()
         return row["n"] if row else 0
