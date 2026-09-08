@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.19.0",
+    "date": "2026-09-08",
+    "notes": [
+      "Admin Library tab: every title in one table with status, failure reason, release, requester, playability, missing-episode and retry badges; saved views (Needs attention, Wanted, Queue, Incomplete series, Unmirrored); filters by type, status, problem, requester and date; sortable columns; server-side paging; a bulk action bar with retry, re-resolve, mirror and remove, plus run now and drop from queue in the Queue view",
+      "Title drawer with everything Mycelium knows about a title and its actions: retry, re-resolve, purge, mirror to the arr, blacklist a hash, reset playability, per-episode retry and series recheck, a per-title quality override, request history and the activity log",
+      "The admin Requests tab keeps pending approvals and the auto-approve rules; its request list moved to the Library tab. Maintenance lost its per-token playability panel, the Blacklist tab shows which titles used each hash, and the Overview's queue count links to the Queue view",
+      "Retrying a request keeps its quality, source and hash; the admin Retry and Remove routes find any request, not only the 1,000 newest; bulk retries run at most three pipelines at a time; playability is looked up through one grouped join",
+      "Migration: activity_log gains a nullable imdb_id column plus indexes on activity_log, user_requests, wanted_episodes and requests(info_hash)"
+    ]
+  },
+  {
     "version": "0.18.0",
     "date": "2026-09-07",
     "notes": [

@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-09-08
+
 ### Added
 
 - Admin Library tab: every title in one table with status and failure
@@ -26,6 +28,14 @@ All notable changes to Mycelium are documented in this file.
   per-token playability panel (the drawer replaces it); the Blacklist tab
   shows which titles used each hash; the Overview's retry-queue count links
   to the Queue view.
+
+### Fixed
+
+- Retrying a request no longer blanks its quality, source and hash; the
+  admin Retry and Remove routes find any request, not only the 1,000 newest;
+  bulk retries run at most three pipelines at a time so one click cannot
+  spend the TorBox hourly add budget; the Library listing looks playability
+  up through one grouped join instead of a scan per title.
 
 ## [0.18.0] - 2026-09-07
 
