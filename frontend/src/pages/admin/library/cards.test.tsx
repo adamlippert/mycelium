@@ -36,10 +36,15 @@ describe('drawer cards', () => {
   it('Episodes shows seasons and loads a season on expand, with per-episode retry', async () => {
     apiMocks.librarySeason.mockResolvedValue({ episodes: [
       { season: 2, episode: 1, present: true, strm_path: '/s/e1.strm', token: 'e1', wanted_status: null, attempt_count: 0, air_date: null, last_attempted: null },
+      { season: 2, episode: 2, present: true, strm_path: '/s/e2.strm', token: 'e2', wanted_status: null, attempt_count: 0, air_date: null, last_attempted: null },
       { season: 2, episode: 3, present: false, strm_path: null, token: null, wanted_status: 'wanted', attempt_count: 4, air_date: '2024-01-01', last_attempted: '2026-09-01 10:00:00' },
     ] });
     apiMocks.libraryAction.mockResolvedValue({ ok: true, message: 'searching S02E03' });
-    apiMocks.libraryCandidates.mockResolvedValue({ current: null, candidates: [] });
+    apiMocks.libraryCandidates.mockResolvedValue({ current: null, candidates: [
+      { info_hash: 'f'.repeat(40), name: 'Loki.S02E01.2160p.REMUX', quality: '2160p', source: 'REMUX', size_gb: 12, seeders: 5,
+        languages: ['en'], cached: true, scrapers: ['torrentio'], kept: true, rule: null, value: null, current: false },
+    ] });
+    apiMocks.librarySwap.mockResolvedValue({ ok: true, message: 'next play uses 2160p REMUX' });
     wrap(<EpisodesCard d={base} onDone={() => {}} />);
     expect(screen.getByText(/Season 2/)).toHaveTextContent('2 present, 1 wanted');
     await userEvent.click(screen.getByRole('button', { name: 'Expand season 2' }));
@@ -51,9 +56,27 @@ describe('drawer cards', () => {
     expect(await screen.findByText('searching S02E03')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Swap S02E01' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Swap S02E03' })).not.toBeInTheDocument();
+
     await userEvent.click(screen.getByRole('button', { name: 'Swap S02E01' }));
     expect(await screen.findByText('Releases')).toBeInTheDocument();
     await waitFor(() => expect(apiMocks.libraryCandidates).toHaveBeenCalledWith('tt4', 2, 1));
+    await userEvent.click(screen.getByRole('button', { name: 'Use' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(await screen.findByText('next play uses 2160p REMUX')).toBeInTheDocument();
+    expect(screen.queryByText('Releases')).not.toBeInTheDocument();
+
+    // Reopening the panel for E01 and switching to E02 without confirming
+    // must not carry over the picked candidate or blacklist checkbox.
+    await userEvent.click(screen.getByRole('button', { name: 'Swap S02E01' }));
+    expect(await screen.findByText('Releases')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Use' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Blacklist the current release' }));
+    expect(screen.getByRole('checkbox', { name: 'Blacklist the current release' })).toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: 'Swap S02E02' }));
+    await waitFor(() => expect(apiMocks.libraryCandidates).toHaveBeenCalledWith('tt4', 2, 2));
+    expect(screen.queryByRole('checkbox', { name: 'Blacklist the current release' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Use' }));
+    expect(screen.getByRole('checkbox', { name: 'Blacklist the current release' })).not.toBeChecked();
   });
 
   it('Requests lists every user request with reviewer and note', () => {
