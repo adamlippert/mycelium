@@ -163,8 +163,9 @@ def test_the_series_title_repair_is_reachable_from_the_ui():
 def test_every_spa_url_calls_an_endpoint_that_exists():
     """A renamed route leaves a button that fails only when someone clicks it.
     Scans every string literal starting with /ui/ across the SPA source
-    (skipping template strings that interpolate ids) and requires app.py to
-    define each path."""
+    (skipping template strings that interpolate ids, and skipping *.test.*
+    fixture files, which hardcode literal ids like tt1 for mock assertions
+    rather than calling a real route) and requires app.py to define each path."""
     import pathlib
     import re
     root = pathlib.Path(__file__).resolve().parent.parent
@@ -176,6 +177,8 @@ def test_every_spa_url_calls_an_endpoint_that_exists():
 
     called = set()
     for f in (root / "frontend" / "src").rglob("*.ts*"):
+        if ".test." in f.name:
+            continue
         text = f.read_text()
         for u in re.findall(r"['\"`](/ui/[^'\"`?]+)['\"`]", text):
             if "${" in u or u.endswith("/"):
