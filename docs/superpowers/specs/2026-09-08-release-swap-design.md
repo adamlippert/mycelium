@@ -107,8 +107,9 @@ button.
 
 A swap resets the item's playability record, invalidates the URL cache
 and the fast-start cache for the token, and leaves the arr mirror, Seerr
-and the files untouched. A stream already playing keeps its old URL
-until it ends. The old hash stays usable unless blacklisted.
+and the files untouched. A stream already playing may switch to the new
+file on its next range request, because the Go front resolves every
+request. The old hash stays usable unless blacklisted.
 
 ## 4. Testing
 

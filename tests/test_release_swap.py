@@ -204,6 +204,74 @@ def test_swap_movie_replaces_the_release_behind_the_token(monkeypatch):
     assert act["event"] == "swapped" and "1080p" in act["message"] and "2160p" in act["message"]
 
 
+def test_swap_clears_the_realdebrid_id_but_keeps_the_provider(monkeypatch):
+    import catbox
+    rid = db.insert_request("Heat", "tt1", "movie")
+    db.update_request(rid, "success", quality="1080p", source="WEB-DL", info_hash=H4)
+    _item("tt1", "tok", H4)
+    db.update_virtual_rd_id("tok", "RD123")
+    db.update_virtual_debrid_provider("tok", "realdebrid")
+    monkeypatch.setattr(catbox, "invalidate_url_cache", lambda token=None: None)
+    out = rs.swap(rs.find_item("tt1"), _candidate(H3))
+    assert out["ok"] is True
+    item = db.get_virtual_item("tok")
+    assert item["rd_id"] is None
+    assert item["debrid_provider"] == "realdebrid"
+
+
+def test_swap_drops_the_faststart_cache_file(monkeypatch, tmp_path):
+    import catbox
+    import mp4_faststart
+    monkeypatch.setattr(mp4_faststart, "_CACHE_DIR", tmp_path)
+    monkeypatch.setattr(catbox, "invalidate_url_cache", lambda token=None: None)
+    rid = db.insert_request("Heat", "tt1", "movie")
+    db.update_request(rid, "success", quality="1080p", source="WEB-DL", info_hash=H4)
+    _item("tt1", "tok", H4)
+    cache_file = tmp_path / "tok.fsh"
+    cache_file.write_bytes(b"stale")
+    out = rs.swap(rs.find_item("tt1"), _candidate(H3))
+    assert out["ok"] is True
+    assert not cache_file.exists()
+
+
+def test_swap_with_no_faststart_cache_dir_is_quiet(monkeypatch):
+    import catbox
+    import mp4_faststart
+    monkeypatch.setattr(mp4_faststart, "_CACHE_DIR", None)
+    monkeypatch.setattr(catbox, "invalidate_url_cache", lambda token=None: None)
+    rid = db.insert_request("Heat", "tt1", "movie")
+    db.update_request(rid, "success", quality="1080p", source="WEB-DL", info_hash=H4)
+    _item("tt1", "tok", H4)
+    out = rs.swap(rs.find_item("tt1"), _candidate(H3))
+    assert out["ok"] is True
+
+
+def test_swap_warns_when_the_faststart_cache_file_cannot_be_dropped(monkeypatch, tmp_path, caplog):
+    import catbox
+    import mp4_faststart
+    from pathlib import Path
+    monkeypatch.setattr(mp4_faststart, "_CACHE_DIR", tmp_path)
+    monkeypatch.setattr(catbox, "invalidate_url_cache", lambda token=None: None)
+    cache_file = tmp_path / "tok.fsh"
+    cache_file.write_bytes(b"stale")
+
+    real_unlink = Path.unlink
+
+    def _boom(self, *a, **k):
+        if self == cache_file:
+            raise OSError("permission denied")
+        return real_unlink(self, *a, **k)
+    monkeypatch.setattr(Path, "unlink", _boom)
+
+    rid = db.insert_request("Heat", "tt1", "movie")
+    db.update_request(rid, "success", quality="1080p", source="WEB-DL", info_hash=H4)
+    _item("tt1", "tok", H4)
+    with caplog.at_level("WARNING"):
+        out = rs.swap(rs.find_item("tt1"), _candidate(H3))
+    assert out["ok"] is True
+    assert any(r.levelname == "WARNING" and "tok" in r.message for r in caplog.records)
+
+
 def test_swap_episode_leaves_the_request_row_alone(monkeypatch):
     import catbox
     monkeypatch.setattr(catbox, "invalidate_url_cache", lambda token=None: None)

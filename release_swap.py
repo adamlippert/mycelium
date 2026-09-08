@@ -133,13 +133,23 @@ def candidates(imdb_id: str, media_type: str, season: int | None = None, episode
 
 
 def _drop_faststart_cache(token: str) -> None:
+    """Remove the .fsh fast-start cache for token, if any. The .fsh file is
+    keyed only by token, so a stale one after a swap would serve the old
+    release's rewritten moov header on top of the new file's mdat bytes:
+    garbage or a hard playback failure. init() not having run (startup
+    failure, or simply not called in tests) is expected and quiet; a file
+    that exists but resists deletion is not, and is worth a warning."""
+    import mp4_faststart
+    if mp4_faststart._CACHE_DIR is None:
+        log.debug("No fast-start cache dir for %s: mp4_faststart.init() not called", token)
+        return
+    path = mp4_faststart._cache_path(token)
+    if not path.exists():
+        return
     try:
-        import mp4_faststart
-        path = mp4_faststart._cache_path(token)
-        if path.exists():
-            path.unlink()
-    except Exception as exc:
-        log.debug("No fast-start cache to drop for %s: %s", token, exc)
+        path.unlink()
+    except OSError as exc:
+        log.warning("Could not drop fast-start cache for %s: %s", token, exc)
 
 
 def parse_episode_ref(season, episode) -> tuple[int | None, int | None] | None:
@@ -176,6 +186,7 @@ def swap(item: dict, candidate: dict, blacklist_old: bool = False) -> dict:
     magnet = f"magnet:?xt=urn:btih:{new_hash}"
     with catbox._token_lock(item["token"]):
         db.update_virtual_item_upgrade(item["token"], new_hash, magnet, candidate.get("quality"), candidate.get("source"))
+        db.update_virtual_rd_id(item["token"], None)
         catbox.invalidate_url_cache(item["token"])
         _drop_faststart_cache(item["token"])
         key = catbox._content_key(item)
