@@ -28,10 +28,12 @@ export default function Requests() {
   const quotas = useQuery({ queryKey: ['admin-quotas'], queryFn: api.adminQuotas });
   useEffect(() => { navigate({ hash: toHash(state) }, { replace: true }); }, [state, navigate]);
   useEffect(() => {
+    // Adopt the server's effective page (an out-of-range page clamps to the
+    // last one). Placeholder data belongs to the previous key, so it must not
+    // overwrite a page change that is still loading.
     const effective = page.data?.page;
-    if (effective && effective !== state.page) setState((s) => ({ ...s, page: effective }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page.data?.page]);
+    if (!page.isPlaceholderData && effective && effective !== state.page) setState((s) => ({ ...s, page: effective }));
+  }, [page.data?.page, page.isPlaceholderData, state.page]);
   const update = useCallback((patch: Partial<RequestsState>) => setState((s) => ({ ...s, ...patch })), []);
   const refetchAll = useCallback(() => { page.refetch(); counts.refetch(); quotas.refetch(); }, [page, counts, quotas]);
   const closeDrawer = useCallback(() => update({ open: null }), [update]);

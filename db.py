@@ -1594,14 +1594,36 @@ def clear_failed_hash(info_hash: str) -> None:
         conn.commit()
 
 
+_HASH_CHUNK = 400
+
+
 def titles_for_hashes(hashes: list[str]) -> dict[str, list[dict]]:
     """Titles affected by each of these hashes: requests that used a hash
-    directly, or whose virtual_items used it. One grouped query instead of
-    one per hash. Used by the Blacklist tab to show which titles a hash
-    affected; every hash gets a list, empty when nothing matched."""
+    directly, or whose virtual_items used it. One grouped query per chunk of
+    _HASH_CHUNK hashes instead of one per hash (each hash binds twice, and
+    older SQLite builds cap a statement at 999 variables). Used by the
+    Blacklist tab to show which titles a hash affected; every hash gets a
+    list, empty when nothing matched."""
     result: dict[str, list[dict]] = {h: [] for h in hashes}
     if not hashes:
         return result
+    with _connect() as conn:
+        for start in range(0, len(hashes), _HASH_CHUNK):
+            chunk = hashes[start:start + _HASH_CHUNK]
+            placeholders = ",".join("?" for _ in chunk)
+            rows = conn.execute(
+                f"""SELECT DISTINCT h.hash AS matched_hash, r.imdb_id, r.title
+                    FROM (
+                        SELECT info_hash AS hash, imdb_id FROM requests WHERE info_hash IN ({placeholders})
+                        UNION
+                        SELECT info_hash AS hash, imdb_id FROM virtual_items WHERE info_hash IN ({placeholders})
+                    ) h
+                    JOIN requests r ON r.imdb_id = h.imdb_id
+                    ORDER BY h.hash, r.title""",
+                (*chunk, *chunk)).fetchall()
+            for row in rows:
+                result[row["matched_hash"]].append({"imdb_id": row["imdb_id"], "title": row["title"]})
+    return result
     placeholders = ",".join("?" for _ in hashes)
     with _connect() as conn:
         rows = conn.execute(

@@ -117,7 +117,8 @@ def test_approve_route_clears_the_pause_note_on_source():
     src = _src("app.py")
     body = src.split('@app.post("/ui/api/user-requests/<int:req_id>/approve")', 1)[1].split("\n\n\n", 1)[0]
     assert "db.clear_user_request_note(req_id)" in body
-    assert "_QUOTA_PAUSE_NOTE" in body
+    # The clear is gated on the exact pause note, so a deny note is never wiped.
+    assert 'if r.get("note") == _QUOTA_PAUSE_NOTE:' in body
 
 
 def test_clear_user_request_note_wipes_the_note_without_touching_the_rest():

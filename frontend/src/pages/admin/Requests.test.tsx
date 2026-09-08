@@ -81,7 +81,8 @@ describe('Requests tab', () => {
   });
 
   it('restores from the hash, pages and sorts', async () => {
-    apiMocks.adminRequests.mockResolvedValue({ rows: [row({})], total: 120, page: 2, per_page: 50 });
+    // Echo the requested page, as the server does when it is in range.
+    apiMocks.adminRequests.mockImplementation((params: Record<string, string | string[]>) => Promise.resolve({ rows: [row({})], total: 120, page: Number(params.page ?? 1), per_page: 50 }));
     renderIt('#requests?view=all&page=2');
     await waitFor(() => expect(apiMocks.adminRequests).toHaveBeenCalledWith(expect.objectContaining({ view: 'all', page: '2' })));
     expect(await screen.findByText(/51 to 100 of 120/)).toBeInTheDocument();

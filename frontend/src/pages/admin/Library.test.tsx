@@ -77,7 +77,8 @@ describe('Library tab', () => {
   });
 
   it('restores state from the hash and pages', async () => {
-    apiMocks.library.mockResolvedValue({ rows: [row({})], total: 120, page: 2, per_page: 50 });
+    // Echo the requested page, as the server does when it is in range.
+    apiMocks.library.mockImplementation((params: Record<string, string | string[]>) => Promise.resolve({ rows: [row({})], total: 120, page: Number(params.page ?? 1), per_page: 50 }));
     renderIt('#library?view=wanted&page=2');
     await waitFor(() => expect(apiMocks.library).toHaveBeenCalledWith(expect.objectContaining({ view: 'wanted', page: '2' })));
     expect(await screen.findByText(/51 to 100 of 120/)).toBeInTheDocument();

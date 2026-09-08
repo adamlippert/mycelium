@@ -24,10 +24,12 @@ export default function Library() {
 
   useEffect(() => { navigate({ hash: toHash(state) }, { replace: true }); }, [state, navigate]);
   useEffect(() => {
+    // Adopt the server's effective page (an out-of-range page clamps to the
+    // last one). Placeholder data belongs to the previous key, so it must not
+    // overwrite a page change that is still loading.
     const effective = page.data?.page;
-    if (effective && effective !== state.page) setState((s) => ({ ...s, page: effective }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page.data?.page]);
+    if (!page.isPlaceholderData && effective && effective !== state.page) setState((s) => ({ ...s, page: effective }));
+  }, [page.data?.page, page.isPlaceholderData, state.page]);
   const update = (patch: Partial<LibraryState>) => setState((s) => ({ ...s, ...patch }));
   const onSort = (col: string) => update({ sort: col, order: state.sort === col && state.order === 'asc' ? 'desc' : 'asc', page: 1 });
   const closeDrawer = useCallback(() => update({ open: null }), []);

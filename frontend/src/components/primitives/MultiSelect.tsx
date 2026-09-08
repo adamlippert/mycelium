@@ -53,7 +53,7 @@ export function MultiSelect({
             } else if (e.key === 'ArrowUp') {
               if (!listVisible) return;
               e.preventDefault();
-              setHighlight((h) => (h === null ? candidates.length - 1 : Math.max(h - 1, 0)));
+              setHighlight((h) => (h === null ? candidates.length - 1 : Math.max(Math.min(h - 1, candidates.length - 1), 0)));
             } else if (e.key === 'Enter') {
               const target = listVisible ? (highlight !== null ? candidates[highlight] : candidates[0]) : undefined;
               if (target) {

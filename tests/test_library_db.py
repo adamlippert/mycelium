@@ -157,6 +157,19 @@ def test_titles_for_hashes_with_no_hashes_returns_empty():
     assert db.titles_for_hashes([]) == {}
 
 
+def test_titles_for_hashes_spans_chunks():
+    """A hash list longer than one chunk still returns matches from every chunk."""
+    db.insert_request("Heat", "tt1", "movie")
+    db.insert_request("Alien", "tt2", "movie")
+    hashes = [f"{i:040x}" for i in range(db._HASH_CHUNK * 2 + 5)]
+    db.set_request_release(db.get_request_by_imdb("tt1")["id"], "1080p", "src", hashes[0])
+    _item("tt2", "tok", hashes[-1])
+    out = db.titles_for_hashes(hashes)
+    assert out[hashes[0]] == [{"imdb_id": "tt1", "title": "Heat"}]
+    assert out[hashes[-1]] == [{"imdb_id": "tt2", "title": "Alien"}]
+    assert sum(1 for v in out.values() if v) == 2
+
+
 def test_blacklist_route_attaches_titles_for_each_hash_in_one_call():
     src = _src("app.py")
     route = src.split('def ui_api_blacklist():', 1)[1][:300]
