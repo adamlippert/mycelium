@@ -6,6 +6,7 @@ import { Button, Select } from '../../components/primitives';
 import { Rail } from './library/Rail';
 import { TitleTable } from './library/TitleTable';
 import { TitleDrawer } from './library/TitleDrawer';
+import { ActionBar } from './library/ActionBar';
 import { parseHash, toHash, toQuery } from './library/state';
 import type { LibraryState } from './library/state';
 
@@ -51,7 +52,7 @@ export default function Library() {
             <Button aria-label="Next page" disabled={last >= total} onClick={() => update({ page: state.page + 1 })}>Next</Button>
           </div>
         </div>
-        {selected.size > 0 && <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-bg/95 px-4 py-3 text-sm backdrop-blur">{selected.size} selected</div>}
+        {selected.size > 0 && <ActionBar rows={rows} selected={selected} view={state.view} onDone={() => { page.refetch(); counts.refetch(); }} onClear={() => setSelected(new Set())} />}
       </main>
       {state.open && <TitleDrawer key={state.open} imdb={state.open} onClose={() => update({ open: null })} onChanged={() => { page.refetch(); counts.refetch(); }} />}
     </div>

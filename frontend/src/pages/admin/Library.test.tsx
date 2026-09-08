@@ -8,6 +8,7 @@ import Library from './Library';
 
 const apiMocks = vi.hoisted(() => ({
   library: vi.fn(), libraryViews: vi.fn(), users: vi.fn(), libraryDetail: vi.fn(),
+  retryRequest: vi.fn(), purgeRequest: vi.fn(), libraryAction: vi.fn(), reResolve: vi.fn(),
 }));
 vi.mock('../../api', async () => {
   const actual = await vi.importActual<typeof import('../../api')>('../../api');
@@ -89,6 +90,14 @@ describe('Library tab', () => {
     expect(screen.getByText('1 selected')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }));
     expect(screen.getByText('2 selected')).toBeInTheDocument();
+  });
+
+  it('selecting a row shows the action bar with Retry and Remove from library', async () => {
+    renderIt();
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Select Heat' }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove from library' })).toBeInTheDocument();
   });
 
   it('select all merges with other pages selections instead of discarding them', async () => {
