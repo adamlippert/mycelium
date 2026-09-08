@@ -12,6 +12,7 @@ from flask import Flask, Response, abort, jsonify, redirect, request, stream_wit
 import auto_approve
 import backup
 import catbox
+import webhook_secret
 import nfo_generator
 import catchup
 import cleanup
@@ -580,12 +581,11 @@ _delayed(45.0, _backfill_tmdb_ids, "tmdb-id-backfill")
 
 def _effective_webhook_secret() -> str:
     """Return the active webhook secret: env var takes priority, else auto-generated."""
-    return WEBHOOK_SECRET or _settings_mod.get("WEBHOOK_SECRET_AUTO", "")
+    return webhook_secret.effective()
 
 
 def _check_auth() -> None:
-    secret = _effective_webhook_secret()
-    if not secret:
+    if not webhook_secret.effective():
         return
     header_secret = request.headers.get("X-Webhook-Secret")
     query_secret  = request.args.get("secret")
@@ -595,9 +595,15 @@ def _check_auth() -> None:
         # Migrate to the X-Webhook-Secret header.
         log.warning("Webhook secret passed via ?secret= query param from %s"
                     " - migrate to X-Webhook-Secret header", request.remote_addr)
-    if not provided or not hmac.compare_digest(provided, secret):
+    matched = webhook_secret.accepts(provided)
+    if matched is None:
         log.warning("Rejected webhook with bad/missing secret from %s", request.remote_addr)
         abort(401)
+    if matched == "previous":
+        # Still inside the rotation grace window: this sender has not been
+        # updated yet. Name it so the admin knows what to fix.
+        log.warning("Webhook from %s (%s) still uses the previous secret; update it before the grace window ends",
+                    request.remote_addr, request.headers.get("User-Agent", "?"))
 
 
 # ── Webhook ───────────────────────────────────────────────────────────────────
@@ -1085,9 +1091,19 @@ def ui_api_webhook_secret():
     """Return the effective webhook secret for display in the admin UI. Admin only."""
     if not auth.is_admin():
         return jsonify(error="unauthorized"), 401
-    secret = _effective_webhook_secret()
-    source = "env" if WEBHOOK_SECRET else "auto"
-    return jsonify(secret=secret, source=source)
+    return jsonify(**webhook_secret.status())
+
+
+@app.post("/ui/api/webhook-secret/rotate")
+def ui_api_webhook_secret_rotate():
+    """Issue a new webhook secret; the previous one keeps working for the
+    grace window so Seerr and the arrs can be updated one by one."""
+    if not auth.is_admin():
+        return jsonify(error="unauthorized"), 401
+    try:
+        return jsonify(**webhook_secret.rotate())
+    except RuntimeError as exc:
+        return jsonify(error=str(exc)), 409
 
 
 @app.get("/ui/api/stats")

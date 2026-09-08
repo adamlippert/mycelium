@@ -117,6 +117,10 @@ Point these at `POST https://<mycelium>/webhook/arr`. It uses the same
 secret as the Seerr webhook: send it as the `X-Webhook-Secret` header
 (preferred) or as `?secret=` in the URL.
 
+Rotating the secret (Settings > Webhooks > Rotate) keeps the previous
+value valid for 24 hours; a webhook that still sends it is logged with its
+address and user agent so you can see which integration is left to update.
+
 **Radarr** Settings > Connect > Webhook: URL as above, method POST, tick
 **On Movie Delete**. Add the secret under Headers. Tick **On Movie File
 Delete** as well if you use the stub files (see above): a manual file

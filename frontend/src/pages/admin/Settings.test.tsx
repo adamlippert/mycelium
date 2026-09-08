@@ -34,7 +34,7 @@ function schemaFixture() {
 const apiMocks = vi.hoisted(() => ({
   settingsSchema: vi.fn(), saveSettings: vi.fn(), settingsTest: vi.fn(), settingsPicker: vi.fn(),
   genreTabsConfig: vi.fn(), genres: vi.fn(), setGenreTabsConfig: vi.fn(), autoAddNow: vi.fn(),
-  setLegacyPassword: vi.fn(), webhookSecret: vi.fn(),
+  setLegacyPassword: vi.fn(), webhookSecret: vi.fn(), rotateWebhookSecret: vi.fn(),
 }));
 vi.mock('../../api', async () => {
   const actual = await vi.importActual<typeof import('../../api')>('../../api');

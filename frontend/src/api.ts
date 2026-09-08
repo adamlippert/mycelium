@@ -27,6 +27,9 @@ export interface LoginFlags {
   needsFirstAdmin: boolean;
 }
 
+/** GET /ui/api/webhook-secret; previous_valid_until is set during the rotation grace window. */
+export type WebhookSecretStatus = { secret: string; source: 'env' | 'auto'; previous_valid_until: string | null };
+
 /** GET /ui/api/stats, built by stats.py's _build_overview(). */
 export type StatsOverview = {
   library: { movie_count: number; episode_count: number; series_count: number };
@@ -330,7 +333,8 @@ export const api = {
   // Admin: Overview tab
   health: () => http<{ services: HealthService[]; stream_front?: boolean }>('/ui/api/health'),
   activity: () => http<{ events: ActivityEvent[] }>('/ui/api/activity'),
-  webhookSecret: () => http<{ secret: string; source: string }>('/ui/api/webhook-secret'),
+  webhookSecret: () => http<WebhookSecretStatus>('/ui/api/webhook-secret'),
+  rotateWebhookSecret: () => http<WebhookSecretStatus>('/ui/api/webhook-secret/rotate', { method: 'POST' }),
   torboxList: () => http<{ torrents: TorboxTorrent[] }>('/ui/api/torbox-list'),
   retryQueue: () => http<{ items: unknown[] }>('/ui/api/retry-queue'),
   releases: () => http<{ releases: Release[] }>('/ui/api/releases'),

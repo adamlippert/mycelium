@@ -407,7 +407,7 @@ flowchart LR
 ## 🔒 Security
 
 - All UI and API routes require login. CSRF protection on all forms.
-- **Webhook secret** auto-generated on first start, shown in Admin > Integration Endpoints. Preferred: header `X-Webhook-Secret`. Seerr/Jellyseerr don't support custom headers in their webhook config, so append it to the URL instead: `http://<mycelium-url>/webhook?secret=<secret>`. Override the secret with `WEBHOOK_SECRET` in `.env`.
+- **Webhook secret** auto-generated on first start, shown in Admin > Integration Endpoints. Preferred: header `X-Webhook-Secret`. Seerr/Jellyseerr don't support custom headers in their webhook config, so append it to the URL instead: `http://<mycelium-url>/webhook?secret=<secret>`. Override the secret with `WEBHOOK_SECRET` in `.env`. The Settings card has a **Rotate** button that issues a new secret; the previous one keeps working for 24 hours so Seerr, the arrs and the Jellyfin plugin can be updated one by one.
 - `/setup` locked after first run - admin only via Settings > Re-run wizard.
 - `/metrics` requires admin session or `X-Metrics-Token` header (`METRICS_TOKEN` in `.env`).
 - WebDAV (`/dav`) uses HTTP Basic Auth against the Mycelium user database.

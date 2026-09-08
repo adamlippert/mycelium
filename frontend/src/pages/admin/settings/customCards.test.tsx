@@ -6,7 +6,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { FilterRulesLink, LegacyPassword, WebhookSecret } from './customCards';
 
 const apiMocks = vi.hoisted(() => ({
-  setLegacyPassword: vi.fn(), webhookSecret: vi.fn(),
+  setLegacyPassword: vi.fn(), webhookSecret: vi.fn(), rotateWebhookSecret: vi.fn(),
 }));
 vi.mock('../../../api', async () => {
   const actual = await vi.importActual<typeof import('../../../api')>('../../../api');
@@ -55,6 +55,41 @@ describe('WebhookSecret', () => {
     const input = screen.getByLabelText('Webhook secret');
     await waitFor(() => expect(input).toHaveValue('abc'));
     expect(input).toHaveAttribute('readonly');
+  });
+
+  it('rotates after an inline confirm and shows the new secret with the grace window', async () => {
+    apiMocks.webhookSecret.mockResolvedValue({ secret: 'abc', source: 'auto', previous_valid_until: null });
+    apiMocks.rotateWebhookSecret.mockImplementation(() => {
+      apiMocks.webhookSecret.mockResolvedValue({ secret: 'xyz', source: 'auto', previous_valid_until: '2026-09-09T12:00:00Z' });
+      return Promise.resolve({ secret: 'xyz', source: 'auto', previous_valid_until: '2026-09-09T12:00:00Z' });
+    });
+    renderWithClient(<WebhookSecret {...noop} />);
+    await waitFor(() => expect(screen.getByLabelText('Webhook secret')).toHaveValue('abc'));
+    await userEvent.click(screen.getByRole('button', { name: 'Rotate' }));
+    expect(screen.getByText(/keeps working for 24 hours/)).toBeInTheDocument();
+    expect(apiMocks.rotateWebhookSecret).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(screen.getByLabelText('Webhook secret')).toHaveValue('xyz'));
+    expect(apiMocks.rotateWebhookSecret).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/Previous secret valid until/)).toBeInTheDocument();
+    expect(screen.getByText(/^Rotated\./)).toBeInTheDocument();
+    expect(screen.queryByText(/keeps working for 24 hours/)).not.toBeInTheDocument();
+  });
+
+  it('cancel closes the confirm without rotating', async () => {
+    apiMocks.webhookSecret.mockResolvedValue({ secret: 'abc', source: 'auto', previous_valid_until: null });
+    renderWithClient(<WebhookSecret {...noop} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Rotate' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByText(/keeps working for 24 hours/)).not.toBeInTheDocument();
+    expect(apiMocks.rotateWebhookSecret).not.toHaveBeenCalled();
+  });
+
+  it('disables Rotate when the secret comes from the environment', async () => {
+    apiMocks.webhookSecret.mockResolvedValue({ secret: 'env-1', source: 'env', previous_valid_until: null });
+    renderWithClient(<WebhookSecret {...noop} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Rotate' })).toBeDisabled());
+    expect(screen.getByText(/change WEBHOOK_SECRET there and restart/)).toBeInTheDocument();
   });
 });
 

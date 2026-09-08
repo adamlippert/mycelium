@@ -4,6 +4,17 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- The webhook secret can be rotated from Settings. Rotate issues a new
+  auto-generated secret and keeps the previous one valid for 24 hours, so
+  Seerr, Radarr, Sonarr and the Jellyfin webhook plugin can be updated one
+  by one; a webhook that still sends the old value is logged with its
+  address and user agent. `GET /ui/api/webhook-secret` reports
+  `previous_valid_until` during that window, `POST
+  /ui/api/webhook-secret/rotate` does the rotation, and both refuse when
+  the secret comes from the `WEBHOOK_SECRET` environment variable.
+
 ## [0.22.1] - 2026-09-08
 
 ### Fixed
