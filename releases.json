@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.24.1",
+    "date": "2026-09-08",
+    "notes": [
+      "Comet's own language and resolution Torznab attributes feed the candidate instead of a title parse alone: the resolution wins when it names one of Mycelium's buckets, and the language codes merge with what the title says. MediaFusion sends neither, so nothing changes for it",
+      "The required-rule warning looks up each scraper's capabilities in the registry instead of importing a module named after the source, which the two Torznab scrapers never had; a guard test keeps every registered scraper listed"
+    ]
+  },
+  {
     "version": "0.24.0",
     "date": "2026-09-08",
     "notes": [

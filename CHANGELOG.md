@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-09-08
+
 ### Changed
 
 - Comet's own `language` and `resolution` Torznab attributes now feed the
