@@ -87,11 +87,32 @@ describe('drawer cards', () => {
   });
 
   it('Activity lists entries and loads more', async () => {
+    // "Load more" only shows once the initial page could plausibly be full
+    // (20 rows); a fixture with a single row must not offer it.
+    const activity20 = Array.from({ length: 20 }, (_, i) => ({
+      id: 24 - i, event: i === 0 ? 'added' : 'other', title: 'Loki', message: 'x', success: 1, created_at: '2026-09-01 10:00:00',
+    }));
     apiMocks.libraryActivity.mockResolvedValue({ activity: [{ id: 4, event: 'wanted', title: 'Loki', message: 'x', success: 0, created_at: '2026-08-31 10:00:00' }] });
-    wrap(<ActivityCard d={base} />);
+    wrap(<ActivityCard d={{ ...base, activity: activity20 }} />);
     expect(screen.getByText('added')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
     await waitFor(() => expect(apiMocks.libraryActivity).toHaveBeenCalledWith('tt4', 5));
     expect(await screen.findByText('wanted')).toBeInTheDocument();
+  });
+
+  it('Activity hides Load more when the first page is short, and shows a message if a later fetch fails', async () => {
+    wrap(<ActivityCard d={base} />);
+    expect(screen.getByText('added')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+  });
+
+  it('Activity reports a failed Load more instead of rejecting silently', async () => {
+    const activity20 = Array.from({ length: 20 }, (_, i) => ({
+      id: 24 - i, event: i === 0 ? 'added' : 'other', title: 'Loki', message: 'x', success: 1, created_at: '2026-09-01 10:00:00',
+    }));
+    apiMocks.libraryActivity.mockRejectedValue(new Error('network down'));
+    wrap(<ActivityCard d={{ ...base, activity: activity20 }} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(await screen.findByText('network down')).toBeInTheDocument();
   });
 });

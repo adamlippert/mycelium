@@ -412,6 +412,8 @@ def _migrate() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_imdb ON activity_log(imdb_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_user_requests_imdb ON user_requests(imdb_id, created_at DESC)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_wanted_episodes_imdb_status ON wanted_episodes(imdb_id, status)")
+        if "info_hash" in req_cols:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_requests_info_hash ON requests(info_hash)")
 
         user_cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
         if "region" not in user_cols:
@@ -598,6 +600,19 @@ def update_request(row_id: int, status: str, quality: str | None = None,
         conn.commit()
 
 
+def set_request_status(row_id: int, status: str) -> None:
+    """Set status and updated_at only, leaving quality, source, info_hash
+    and error untouched. Use for a retry: update_request's unconditional
+    write would blank the recorded release before the processor has run,
+    losing it for good if the retry then fails."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE requests SET status=?, updated_at=strftime('%Y-%m-%d %H:%M:%S','now') WHERE id=?",
+            (status, row_id),
+        )
+        conn.commit()
+
+
 def mark_arr_mirrored(imdb_id: str) -> None:
     """Record that Radarr/Sonarr holds this title (added by us, or found
     present). Read by arr_sync.reconcile to tell "deleted in the arr" from
@@ -626,6 +641,12 @@ def imdb_for_tmdb(tmdb_id: int | None) -> str | None:
             if row and row["imdb_id"]:
                 return row["imdb_id"]
     return None
+
+
+def get_request(row_id: int) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM requests WHERE id=?", (row_id,)).fetchone()
+        return dict(row) if row else None
 
 
 def get_request_by_imdb(imdb_id: str) -> dict | None:

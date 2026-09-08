@@ -22,9 +22,9 @@ const detail = (over: Record<string, unknown> = {}) => ({
 
 function renderIt() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const onClose = vi.fn(); const onChanged = vi.fn();
-  render(<QueryClientProvider client={qc}><TitleDrawer imdb="tt1" onClose={onClose} onChanged={onChanged} /></QueryClientProvider>);
-  return { onClose, onChanged };
+  const onClose = vi.fn(); const onChanged = vi.fn(); const onPurged = vi.fn();
+  render(<QueryClientProvider client={qc}><TitleDrawer imdb="tt1" onClose={onClose} onChanged={onChanged} onPurged={onPurged} /></QueryClientProvider>);
+  return { onClose, onChanged, onPurged };
 }
 
 describe('TitleDrawer', () => {
@@ -59,6 +59,17 @@ describe('TitleDrawer', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Purge' }));
     expect(apiMocks.purgeRequest).not.toHaveBeenCalled();
     await userEvent.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('Purge prunes the title from the bulk selection before closing', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    apiMocks.purgeRequest.mockResolvedValue({ ok: true });
+    const { onPurged, onChanged, onClose } = renderIt();
+    await userEvent.click(await screen.findByRole('button', { name: 'Purge' }));
+    await waitFor(() => expect(apiMocks.purgeRequest).toHaveBeenCalledWith(1));
+    expect(onPurged).toHaveBeenCalledWith('tt1');
+    expect(onChanged).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
 });

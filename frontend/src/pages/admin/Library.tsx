@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api';
@@ -25,6 +25,7 @@ export default function Library() {
   useEffect(() => { navigate({ hash: toHash(state) }, { replace: true }); }, [state, navigate]);
   const update = (patch: Partial<LibraryState>) => setState((s) => ({ ...s, ...patch }));
   const onSort = (col: string) => update({ sort: col, order: state.sort === col && state.order === 'asc' ? 'desc' : 'asc', page: 1 });
+  const closeDrawer = useCallback(() => update({ open: null }), []);
 
   const rows = page.data?.rows || [];
   const total = page.data?.total || 0;
@@ -69,7 +70,15 @@ export default function Library() {
           />
         )}
       </main>
-      {state.open && <TitleDrawer key={state.open} imdb={state.open} onClose={() => update({ open: null })} onChanged={() => { page.refetch(); counts.refetch(); }} />}
+      {state.open && (
+        <TitleDrawer
+          key={state.open}
+          imdb={state.open}
+          onClose={closeDrawer}
+          onChanged={() => { page.refetch(); counts.refetch(); }}
+          onPurged={(imdb) => setSelected((s) => { const n = new Map(s); n.delete(imdb); return n; })}
+        />
+      )}
     </div>
   );
 }

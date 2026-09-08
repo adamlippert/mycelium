@@ -136,7 +136,8 @@ def test_series_reads_by_imdb():
 def test_the_new_indexes_exist():
     with db._connect() as conn:
         names = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
-    assert {"idx_activity_imdb", "idx_user_requests_imdb", "idx_wanted_episodes_imdb_status"} <= names
+    assert {"idx_activity_imdb", "idx_user_requests_imdb", "idx_wanted_episodes_imdb_status",
+            "idx_requests_info_hash"} <= names
 
 
 def test_titles_for_hash():

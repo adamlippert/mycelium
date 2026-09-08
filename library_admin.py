@@ -23,7 +23,15 @@ SORTS = {
 MAX_PER_PAGE = 200
 DEFAULT_PER_PAGE = 50
 
-_BASE = """
+# content_key on playability_state is either a bare imdb id ("tt1") or an
+# episode key ("tt1:S01E02"); this expression recovers the imdb id from
+# either shape so it can be grouped and joined once instead of scanned with
+# a correlated OR/LIKE per requests row.
+_PLAY_IMDB = ("CASE WHEN instr(content_key, ':') > 0 "
+              "THEN substr(content_key, 1, instr(content_key, ':') - 1) "
+              "ELSE content_key END")
+
+_BASE = f"""
 SELECT r.id, r.imdb_id, r.tmdb_id, r.title, r.media_type, r.status, r.error, r.quality, r.source,
        r.info_hash, r.seasons, r.created_at, r.updated_at, r.arr_mirrored_at,
        (SELECT u.username FROM user_requests ur JOIN users u ON u.id = ur.user_id
@@ -32,18 +40,28 @@ SELECT r.id, r.imdb_id, r.tmdb_id, r.title, r.media_type, r.status, r.error, r.q
          ORDER BY ur.created_at DESC, ur.id DESC LIMIT 1) AS requester_id,
        (SELECT ur.created_at FROM user_requests ur WHERE ur.imdb_id = r.imdb_id
          ORDER BY ur.created_at DESC, ur.id DESC LIMIT 1) AS requested_at,
-       (SELECT p.status FROM playability_state p
-         WHERE p.content_key = r.imdb_id OR p.content_key LIKE r.imdb_id || ':%'
-         ORDER BY CASE p.status WHEN 'degraded' THEN 0 WHEN 'unknown' THEN 1 ELSE 2 END LIMIT 1) AS play_status,
-       (SELECT p.last_fail_reason FROM playability_state p
-         WHERE (p.content_key = r.imdb_id OR p.content_key LIKE r.imdb_id || ':%') AND p.status = 'degraded'
-         ORDER BY p.updated_at DESC LIMIT 1) AS play_reason,
+       CASE ps.rank WHEN 0 THEN 'degraded' WHEN 1 THEN 'unknown' WHEN 2 THEN 'playable' END AS play_status,
+       pr.last_fail_reason AS play_reason,
        (SELECT COUNT(*) FROM wanted_episodes w WHERE w.imdb_id = r.imdb_id AND w.status = 'wanted') AS missing_episodes,
        (SELECT q.attempt FROM retry_queue q WHERE q.imdb_id = r.imdb_id) AS retry_attempt,
        (SELECT q.next_retry_at FROM retry_queue q WHERE q.imdb_id = r.imdb_id) AS retry_next,
        (SELECT 1 FROM wanted_movies wm WHERE wm.imdb_id = r.imdb_id) AS in_wanted_movies,
        (SELECT 1 FROM virtual_items v WHERE v.imdb_id = r.imdb_id AND v.torbox_id IS NOT NULL LIMIT 1) AS in_torbox
 FROM requests r
+LEFT JOIN (
+    SELECT {_PLAY_IMDB} AS imdb,
+           MIN(CASE status WHEN 'degraded' THEN 0 WHEN 'unknown' THEN 1 ELSE 2 END) AS rank
+    FROM playability_state
+    GROUP BY 1
+) ps ON ps.imdb = r.imdb_id
+LEFT JOIN (
+    SELECT imdb, last_fail_reason FROM (
+        SELECT {_PLAY_IMDB} AS imdb, last_fail_reason,
+               ROW_NUMBER() OVER (PARTITION BY {_PLAY_IMDB} ORDER BY updated_at DESC) AS rn
+        FROM playability_state
+        WHERE status = 'degraded'
+    ) WHERE rn = 1
+) pr ON pr.imdb = r.imdb_id
 """
 
 _VIEW_WHERE = {

@@ -2231,15 +2231,14 @@ def ui_api_failed_requests():
 def ui_api_retry_request(row_id: int):
     if not auth.is_admin():
         return jsonify(error="admin required"), 403
-    rows = [r for r in db.get_recent(1000) if r["id"] == row_id]
-    if not rows:
+    r = db.get_request(row_id)
+    if not r:
         return jsonify(error="not found"), 404
-    r = rows[0]
     seasons = [int(s) for s in (r.get("seasons") or "").split(",") if s.strip().isdigit()]
     media_request = MediaRequest(
         title=r["title"], media_type=r["media_type"], imdb_id=r["imdb_id"], seasons=seasons,
     )
-    db.update_request(row_id, "pending")
+    db.set_request_status(row_id, "pending")
     threading.Thread(target=processor.process, args=(media_request,),
                      name=f"retry-{r['imdb_id']}", daemon=True).start()
     return jsonify(ok=True, title=r["title"])
@@ -2264,14 +2263,14 @@ def ui_api_purge_request(row_id: int):
     monitoring rows that would regenerate them, and the request itself."""
     if not auth.is_admin():
         return jsonify(error="admin required"), 403
-    rows = [r for r in db.get_recent(1000) if r["id"] == row_id]
-    if not rows:
+    r = db.get_request(row_id)
+    if not r:
         return jsonify(error="not found"), 404
-    imdb_id = rows[0]["imdb_id"]
+    imdb_id = r["imdb_id"]
     import cleanup
     result = cleanup.purge_title(imdb_id, row_id=row_id)
     invalidate_series_episodes_cache()
-    db.log_activity("purged", rows[0]["title"],
+    db.log_activity("purged", r["title"],
                     f"{result['strms']} strm(s) removed ({imdb_id})", True, imdb_id=imdb_id)
     return jsonify(ok=True, **result)
 

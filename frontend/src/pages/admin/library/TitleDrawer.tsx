@@ -14,7 +14,9 @@ import { ArrCard } from './cards/ArrCard';
 import { HashesCard } from './cards/HashesCard';
 import { ActivityCard } from './cards/ActivityCard';
 
-export function TitleDrawer({ imdb, onClose, onChanged }: { imdb: string; onClose: () => void; onChanged: () => void }) {
+export function TitleDrawer({ imdb, onClose, onChanged, onPurged }: {
+  imdb: string; onClose: () => void; onChanged: () => void; onPurged?: (imdb: string) => void;
+}) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['library-detail', imdb], queryFn: () => api.libraryDetail(imdb) });
   useEffect(() => {
@@ -44,7 +46,7 @@ export function TitleDrawer({ imdb, onClose, onChanged }: { imdb: string; onClos
             <ActionButton label="Re-resolve" run={() => ACTIONS.reresolve(d)} onDone={refresh} />
             <ActionButton label="Mirror to arr" run={() => ACTIONS.mirror(d)} onDone={refresh} />
             <ActionButton label="Blacklist current hash" run={() => ACTIONS.blacklistCurrent(d)} onDone={refresh} />
-            <ActionButton label="Purge" run={() => ACTIONS.purge(d)} onDone={() => { onChanged(); onClose(); }}
+            <ActionButton label="Purge" run={() => ACTIONS.purge(d)} onDone={() => { onPurged?.(d.request.imdb_id); onChanged(); onClose(); }}
               confirm={`Remove "${d.request.title}" from the library? Its files, monitoring and request go too.`} />
           </div>
           <StatusCard d={d} onDone={refresh} />

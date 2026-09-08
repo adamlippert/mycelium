@@ -102,6 +102,19 @@ def test_view_counts_match_the_views(seeded):
     assert counts == {"all": 6, "attention": 2, "wanted": 1, "queue": 3, "incomplete": 1, "unmirrored": 2}
 
 
+def test_playability_prefers_degraded_across_two_keys_for_the_same_title():
+    """A title can carry more than one playability_state row (one per
+    episode key, or a bare movie key alongside a stray episode key). The
+    derived playability join must group them back to one imdb id and report
+    the worst status, not the first row it happens to see."""
+    _req("Severance", "tt7", media_type="series")
+    db.update_playability_fail("tt7:S01E01", "cdn 404")
+    db.update_playability_ok("tt7:S01E02", "torbox")
+    rows, _ = la.list_titles({})
+    by = {r["imdb_id"]: r for r in rows}
+    assert by["tt7"]["playability"] == {"status": "degraded", "last_fail_reason": "cdn 404"}
+
+
 def test_attention_view_includes_high_retry_attempts_on_their_own():
     """Two success movies with no playability record: only the one with
     three retry attempts belongs in attention, isolating that branch of

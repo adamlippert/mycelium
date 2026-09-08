@@ -34,6 +34,18 @@ describe('ActionBar', () => {
     expect(onDone).toHaveBeenCalledWith(['tt1']);
   });
 
+  it('Re-resolve reports a failure when every item fails to resolve', async () => {
+    apiMocks.libraryDetail.mockResolvedValue({ items: [{ token: 'tok1' }] });
+    apiMocks.reResolve.mockResolvedValue({ ok: true, resolved: false });
+    const onDone = vi.fn();
+    render(<ActionBar selected={selMap(row(1, 'tt1', 'Heat'))} view="all" onDone={onDone} onClear={() => {}} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Re-resolve' }));
+    await waitFor(() => expect(apiMocks.reResolve).toHaveBeenCalledWith('tok1'));
+    expect(await screen.findByText(/0 of 1 done, 1 failed/)).toBeInTheDocument();
+    expect(screen.getByText(/Heat: 0 of 1 resolved/)).toBeInTheDocument();
+    expect(onDone).toHaveBeenCalledWith([]);
+  });
+
   it('Remove asks once with the count and the queue view adds Run now and Drop', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(<ActionBar selected={selMap(row(1, 'tt1', 'Heat'))} view="queue" onDone={() => {}} onClear={() => {}} />);

@@ -13,9 +13,21 @@ import db
 log = logging.getLogger(__name__)
 _HASH = re.compile(r"^[0-9a-fA-F]{40}$")
 
+# Caps how many library-action jobs (retry, recheck, episode search) run at
+# once. A bulk action can select up to MAX_PER_PAGE (200) rows; without a
+# ceiling every one of them would start its own scrape/add pipeline at the
+# same moment and could exhaust TorBox's hourly add budget in one click.
+# The thread starts immediately so the caller returns at once; the slot is
+# only held while the thread body actually runs the job, so callers queue
+# rather than block on _spawn itself.
+_SLOTS = threading.BoundedSemaphore(3)
+
 
 def _spawn(target, name: str) -> None:
-    threading.Thread(target=target, name=name, daemon=True).start()
+    def _run():
+        with _SLOTS:
+            target()
+    threading.Thread(target=_run, name=name, daemon=True).start()
 
 
 def _req(imdb_id: str) -> dict | None:
@@ -75,7 +87,7 @@ def retry_now(imdb_id: str) -> dict:
     seasons = [int(s) for s in (r.get("seasons") or "").split(",") if s.strip().isdigit()]
     req = MediaRequest(title=r["title"], media_type=r["media_type"], imdb_id=imdb_id, seasons=seasons,
                        tmdb_id=r.get("tmdb_id"))
-    db.update_request(r["id"], "pending")
+    db.set_request_status(r["id"], "pending")
     _spawn(lambda: processor.process(req), f"retry-{imdb_id}")
     return {"ok": True, "message": "retry started"}
 

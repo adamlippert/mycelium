@@ -6,6 +6,9 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import threading
+import time
+
 import pytest
 
 import db
@@ -60,14 +63,16 @@ def test_mirror_and_unmirror_go_through_arr_sync(monkeypatch):
 
 def test_drop_retry_and_retry_now(spawned):
     rid = db.insert_request("Tenet", "tt6", "movie")
-    db.update_request(rid, "failed", error="x")
+    db.update_request(rid, "failed", quality="1080p", source="torrentio", info_hash="a" * 40, error="x")
     db.enqueue_retry("tt6", "Tenet", "movie", None, attempt=2, delay_seconds=3600)
     assert act.drop_retry("tt6")["ok"] is True and db.get_retry_by_imdb("tt6") is None
     assert act.drop_retry("tt6")["ok"] is False
     db.enqueue_retry("tt6", "Tenet", "movie", None, attempt=2, delay_seconds=3600)
     out = act.retry_now("tt6")
     assert out["ok"] is True and db.get_retry_by_imdb("tt6") is None
-    assert db.get_request_by_imdb("tt6")["status"] == "pending"
+    row = db.get_request_by_imdb("tt6")
+    assert row["status"] == "pending"
+    assert row["info_hash"] == "a" * 40, "retry_now must not blank the recorded release"
     assert spawned and spawned[0][1] == "retry-tt6"
 
 
@@ -105,3 +110,46 @@ def test_the_routes_exist_and_delegate():
         assert "_lib_action(" in body, route
     helper = src.split("def _lib_action", 1)[1][:400]
     assert "auth.is_admin()" in helper and "library_actions" in helper
+
+
+def test_retry_and_purge_routes_resolve_the_row_directly():
+    """Both routes used to look the row up via db.get_recent(1000), which
+    silently 404s for any title outside the 1,000 most recently created
+    requests. They must resolve the row by id instead."""
+    src = _src("app.py")
+    for route in ('@app.post("/ui/api/requests/<int:row_id>/retry")', '@app.post("/ui/api/requests/<int:row_id>/purge")'):
+        body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
+        assert "get_recent(" not in body, route
+        assert "db.get_request(row_id)" in body, route
+
+
+def test_spawn_caps_concurrency(monkeypatch):
+    """_spawn must not let more jobs run at once than the module's slot
+    ceiling: the thread starts immediately, but the job body waits its turn
+    on the semaphore."""
+    monkeypatch.setattr(act, "_SLOTS", threading.BoundedSemaphore(1))
+    started = []
+    release = threading.Event()
+
+    def job(tag):
+        started.append(tag)
+        release.wait(2)
+
+    act._spawn(lambda: job("first"), "first")
+    # Give the first job time to acquire the slot and block on release.
+    for _ in range(200):
+        if started:
+            break
+        time.sleep(0.01)
+    assert started == ["first"]
+
+    act._spawn(lambda: job("second"), "second")
+    time.sleep(0.2)
+    assert started == ["first"], "second job must wait for the first slot to free up"
+
+    release.set()
+    for _ in range(200):
+        if started == ["first", "second"]:
+            break
+        time.sleep(0.01)
+    assert started == ["first", "second"]

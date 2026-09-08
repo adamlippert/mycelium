@@ -6,13 +6,19 @@ import { DrawerCard } from './DrawerCard';
 
 export function ActivityCard({ d }: { d: LibraryDetail }) {
   const [extra, setExtra] = useState<LibraryDetail['activity']>([]);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState(d.activity.length < 20);
+  const [error, setError] = useState<string | null>(null);
   const rows = [...d.activity, ...extra];
   if (!rows.length) return null;
   const more = async () => {
-    const r = await api.libraryActivity(d.request.imdb_id, rows[rows.length - 1].id);
-    setExtra((x) => [...x, ...r.activity]);
-    if (r.activity.length < 20) setDone(true);
+    setError(null);
+    try {
+      const r = await api.libraryActivity(d.request.imdb_id, rows[rows.length - 1].id);
+      setExtra((x) => [...x, ...r.activity]);
+      if (r.activity.length < 20) setDone(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'failed to load more activity');
+    }
   };
   return (
     <DrawerCard title="Activity" description="What Mycelium did with this title, newest first.">
@@ -22,6 +28,7 @@ export function ActivityCard({ d }: { d: LibraryDetail }) {
         ))}
       </ul>
       {!done && <Button variant="ghost" onClick={more}>Load more</Button>}
+      {error && <p className="text-xs text-danger">{error}</p>}
     </DrawerCard>
   );
 }

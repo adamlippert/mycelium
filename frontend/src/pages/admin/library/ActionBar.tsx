@@ -7,7 +7,13 @@ type Op = { label: string; confirm?: (n: number) => string; run: (r: LibraryRow)
 
 const OPS: Op[] = [
   { label: 'Retry', run: (r) => api.retryRequest(r.id) },
-  { label: 'Re-resolve', run: async (r) => { const d = await api.libraryDetail(r.imdb_id); await Promise.all(d.items.map((i) => api.reResolve(i.token))); } },
+  { label: 'Re-resolve', run: async (r) => {
+    const d = await api.libraryDetail(r.imdb_id);
+    if (!d.items.length) throw new Error('no stream to re-resolve');
+    const results = await Promise.all(d.items.map((i) => api.reResolve(i.token)));
+    const n = results.filter((x) => x.resolved).length;
+    if (n === 0) throw new Error(`0 of ${results.length} resolved`);
+  } },
   { label: 'Mirror to arr', run: (r) => api.libraryAction(`/ui/api/library/${r.imdb_id}/mirror`).then((x) => { if (!x.ok) throw new Error(x.message); }) },
   { label: 'Run now', queueOnly: true, run: (r) => api.libraryAction(`/ui/api/library/${r.imdb_id}/retry-now`).then((x) => { if (!x.ok) throw new Error(x.message); }) },
   { label: 'Drop from queue', queueOnly: true, run: (r) => api.libraryAction(`/ui/api/library/${r.imdb_id}/drop-retry`).then((x) => { if (!x.ok) throw new Error(x.message); }) },
