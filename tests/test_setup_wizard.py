@@ -78,9 +78,9 @@ def test_rule_fields_are_declared_with_vocabularies_without_unknown():
     assert all(f["key"] not in {f2["key"] for s in settings.SECTIONS for f2 in s["fields"]} for f in settings.RULE_FIELDS)
 
 
-def test_required_is_only_the_torbox_key():
+def test_required_is_only_the_torbox_key_and_comet_url():
     req = [k for k, f in settings.fields_by_key().items() if f["required"]]
-    assert req == ["TORBOX_API_KEY"]
+    assert req == ["TORBOX_API_KEY", "COMET_URL"]
 
 
 def test_wizard_schema_is_prefilled_from_current_values():

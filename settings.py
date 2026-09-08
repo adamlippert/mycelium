@@ -49,6 +49,8 @@ _BOOL_KEYS = {
     "TRUSTED_PROXY_AUTH",
     "LITE_MODE",
     "DEBRIDIO_ENABLED",
+    "COMET_ENABLED",
+    "MEDIAFUSION_ENABLED",
     "ARR_SYNC_ENABLED",
     "ARR_SYNC_PURGE_ENABLED",
     "DISK_SYNC_ENABLED",
@@ -226,6 +228,8 @@ HOT_RELOAD = {
     "MDBLIST_AUTO_REQUEST_CAP",
     "DEBRIDIO_ENABLED", "DEBRIDIO_API_KEY", "DEBRIDIO_BASE_URL",
     "DEBRIDIO_MAX_RESULTS", "DEBRIDIO_CONFIG_TOKEN",
+    "COMET_ENABLED", "COMET_URL",
+    "MEDIAFUSION_ENABLED", "MEDIAFUSION_URL", "MEDIAFUSION_API_KEY",
 }
 
 # The 35 rule keys from Task 4 (_RULE_LIST_KEYS' 28 + _RULE_STRICT_KEYS' 7)
@@ -352,6 +356,14 @@ SECTIONS = [
                min=1, max=500, advanced=True, depends_on="DEBRIDIO_ENABLED"),
             _f("DEBRIDIO_CONFIG_TOKEN", "Debridio config token", "Only if you built a config token in the addon yourself; blank lets Mycelium build one.",
                "secret", advanced=True, depends_on="DEBRIDIO_ENABLED"),
+            _f("COMET_ENABLED", "Use Comet", "Search a Comet instance's Torznab feed. Self-hosted only: the public instance refuses this path."),
+            _f("COMET_URL", "Comet URL", "Address of your Comet instance, with its access token path if protected.", "url",
+               placeholder="http://comet:8000", depends_on="COMET_ENABLED", test="comet", required=True),
+            _f("MEDIAFUSION_ENABLED", "Use MediaFusion", "Search MediaFusion's Torznab feed. The public ElfHosted instance works without a key."),
+            _f("MEDIAFUSION_URL", "MediaFusion URL", "Leave the default for the public instance or point at your own.", "url",
+               placeholder="https://mediafusion.elfhosted.com", depends_on="MEDIAFUSION_ENABLED", test="mediafusion"),
+            _f("MEDIAFUSION_API_KEY", "MediaFusion API key", "Only for a private instance: its API password.", "secret",
+               advanced=True, depends_on="MEDIAFUSION_ENABLED", test="mediafusion"),
         ],
     },
     {

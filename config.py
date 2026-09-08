@@ -54,6 +54,14 @@ DEBRIDIO_SEND_TORBOX_KEY = _env("DEBRIDIO_SEND_TORBOX_KEY", "false").lower() in 
 # changes it, this keeps users running without waiting for a release.
 DEBRIDIO_CONFIG_TOKEN = _env("DEBRIDIO_CONFIG_TOKEN", "")
 
+# Torznab feeds. Comet's public instance refuses /torznab/api, so Comet is
+# self-hosted only; MediaFusion's public ElfHosted feed works without a key.
+COMET_ENABLED = _env("COMET_ENABLED", "false").lower() in ("1", "true", "yes")
+COMET_URL = _env("COMET_URL", "")
+MEDIAFUSION_ENABLED = _env("MEDIAFUSION_ENABLED", "false").lower() in ("1", "true", "yes")
+MEDIAFUSION_URL = _env("MEDIAFUSION_URL", "https://mediafusion.elfhosted.com")
+MEDIAFUSION_API_KEY = _env("MEDIAFUSION_API_KEY", "")
+
 JELLYFIN_URL = _env("JELLYFIN_URL", "")
 JELLYFIN_API_KEY = _env("JELLYFIN_API_KEY", "")
 # The path at which the Jellyfin container sees MEDIA_PATH. Blank means the

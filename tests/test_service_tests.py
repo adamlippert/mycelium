@@ -277,3 +277,30 @@ def test_the_routes_exist_and_the_wizard_and_arr_import_use_the_registry():
     assert "def _arr_test" not in src
     assert '_settings_mod.get("ARR_SYNC_INTERVAL_MINUTES"' in src
     assert '_settings_mod.get("DISK_SYNC_INTERVAL_MINUTES"' in src
+
+
+_CAPS = ('<?xml version="1.0" encoding="UTF-8"?><caps><server version="6.1.5" '
+         'title="MediaFusion | ElfHosted" url="https://mf.test"/></caps>')
+
+
+def test_mediafusion_reports_the_caps_server(http, monkeypatch):
+    routes, calls = http
+    routes["/torznab?t=caps"] = FakeResp(200, _CAPS, ctype="text/xml")
+    out = service_tests.run("mediafusion", {"MEDIAFUSION_URL": "https://mf.test", "MEDIAFUSION_API_KEY": "pw"})
+    assert out["ok"] and out["message"] == "MediaFusion | ElfHosted 6.1.5"
+    assert calls[-1][1] == "https://mf.test/torznab?t=caps&apikey=pw"
+    assert "pw" not in out["message"]
+
+
+def test_comet_explains_a_refused_torznab_path(http, monkeypatch):
+    routes, calls = http
+    routes["/torznab/api?t=caps"] = FakeResp(403, "Forbidden", ctype="text/html")
+    out = service_tests.run("comet", {"COMET_URL": "https://comet.elfhosted.com"})
+    assert out["ok"] is False
+    assert out["message"] == "this instance does not expose Torznab; use your own Comet URL"
+
+
+def test_comet_blank_url_uses_the_schema_label(http, monkeypatch):
+    monkeypatch.setattr(service_tests._settings, "get", lambda k, d=None: d)
+    out = service_tests.run("comet", {})
+    assert out == {"ok": False, "message": "Comet URL is empty"}

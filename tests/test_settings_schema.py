@@ -245,3 +245,22 @@ def test_settings_and_setup_save_routes_clear_any_empty_posted_value():
         body = src[idx:idx + 1800]
         assert 'value == ""' in body
         assert "settings.set(key, None)" in body or "_settings.set(key, None)" in body
+
+
+def test_the_torznab_scraper_keys_are_typed_placed_and_hot():
+    import config
+    fields = settings.fields_by_key()
+    for key in ("COMET_ENABLED", "MEDIAFUSION_ENABLED"):
+        assert key in settings._BOOL_KEYS and fields[key]["kind"] == "bool"
+    assert fields["COMET_URL"]["kind"] == "url" and fields["COMET_URL"]["depends_on"] == "COMET_ENABLED"
+    assert fields["COMET_URL"]["test"] == "comet" and fields["COMET_URL"]["required"] is True
+    assert fields["MEDIAFUSION_URL"]["kind"] == "url" and fields["MEDIAFUSION_URL"]["test"] == "mediafusion"
+    assert fields["MEDIAFUSION_API_KEY"]["kind"] == "secret" and fields["MEDIAFUSION_API_KEY"]["depends_on"] == "MEDIAFUSION_ENABLED"
+    section = next(s for s in settings.SECTIONS if s["id"] == "scrapers")
+    keys = [f["key"] for f in section["fields"]]
+    assert keys.index("DEBRIDIO_CONFIG_TOKEN") < keys.index("COMET_ENABLED") < keys.index("MEDIAFUSION_ENABLED")
+    for key in ("COMET_ENABLED", "COMET_URL", "MEDIAFUSION_ENABLED", "MEDIAFUSION_URL", "MEDIAFUSION_API_KEY"):
+        assert key in settings.HOT_RELOAD
+    assert config.COMET_ENABLED is False and config.COMET_URL == ""
+    assert config.MEDIAFUSION_ENABLED is False and config.MEDIAFUSION_URL == "https://mediafusion.elfhosted.com"
+    assert config.MEDIAFUSION_API_KEY == ""

@@ -226,12 +226,48 @@ def test_oidc(v: dict) -> dict:
     return {"ok": True, "message": f"issuer {d.get('issuer', '')}, authorization and token endpoints found"}
 
 
+def _test_torznab(v: dict, url_key: str, path: str, api_key: str, label: str,
+                  refused: str) -> dict:
+    if (m := _need(v, url_key)):
+        return {"ok": False, "message": f"{m} is empty"}
+    base = _v(v, url_key).rstrip("/")
+    url = f"{base}{path}?t=caps"
+    if api_key:
+        url += f"&apikey={api_key}"
+    r = _http("GET", url)
+    if r.status_code == 403:
+        return {"ok": False, "message": refused}
+    if r.status_code >= 400:
+        return {"ok": False, "message": f"{label} refused the request ({_status(r)})"}
+    import xml.etree.ElementTree as ET
+    try:
+        server = ET.fromstring(r.text).find("server")
+    except ET.ParseError:
+        server = None
+    if server is None:
+        return {"ok": False, "message": f"{label} answered, but not with a Torznab caps document"}
+    title = server.get("title") or label
+    version = server.get("version") or ""
+    return {"ok": True, "message": f"{title} {version}".strip()}
+
+
+def test_comet(v: dict) -> dict:
+    return _test_torznab(v, "COMET_URL", "/torznab/api", "", "Comet",
+                         "this instance does not expose Torznab; use your own Comet URL")
+
+
+def test_mediafusion(v: dict) -> dict:
+    return _test_torznab(v, "MEDIAFUSION_URL", "/torznab", _v(v, "MEDIAFUSION_API_KEY"), "MediaFusion",
+                         "MediaFusion refused the request (HTTP 403); a private instance needs its API password")
+
+
 TESTS = {
     "torbox": test_torbox, "realdebrid": test_realdebrid, "tmdb": test_tmdb,
     "zilean": test_zilean, "zilean_pg": test_zilean_pg, "debridio": test_debridio,
     "jellyfin": test_jellyfin, "seerr": test_seerr, "radarr": test_radarr, "sonarr": test_sonarr,
     "trakt": test_trakt, "opensubtitles": test_opensubtitles,
     "discord": test_discord, "telegram": test_telegram, "oidc": test_oidc,
+    "comet": test_comet, "mediafusion": test_mediafusion,
 }
 
 
