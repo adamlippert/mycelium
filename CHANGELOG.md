@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-08
+
 ### Added
 
 - Admin Requests tab rebuilt on the Library kit: views Pending, Approved,
@@ -18,6 +20,12 @@ All notable changes to Mycelium are documented in this file.
 - The title drawer gains "Forget request", which drops the title from the
   Library table but keeps its files and its request history on the
   Requests tab.
+
+### Changed
+
+- A denied request no longer counts toward the monthly quota; pending and
+  approved ones do. A paused request carries its note from creation, so it
+  shows no review until an admin acts.
 
 ### Removed
 
