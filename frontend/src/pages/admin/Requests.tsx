@@ -6,6 +6,8 @@ import { Button, Select } from '../../components/primitives';
 import { Rail } from './requests/Rail';
 import { RequestTable } from './requests/RequestTable';
 import { RowActions } from './requests/RowActions';
+import { QuotasCard } from './requests/QuotasCard';
+import { AutoApproveCard } from './requests/AutoApproveCard';
 import { parseHash, toHash, toQuery } from './requests/state';
 import type { RequestsState } from './requests/state';
 import { TitleDrawer } from './library/TitleDrawer';
@@ -55,6 +57,8 @@ export default function Requests() {
             <Button aria-label="Next page" disabled={last >= total} onClick={() => update({ page: state.page + 1 })}>Next</Button>
           </div>
         </div>
+        <QuotasCard rows={quotas.data?.rows || []} />
+        <AutoApproveCard />
       </main>
       {state.open && <TitleDrawer key={state.open} imdb={state.open} onClose={closeDrawer} onChanged={refetchAll} />}
     </div>

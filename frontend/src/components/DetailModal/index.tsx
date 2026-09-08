@@ -134,7 +134,9 @@ export default function DetailModal({
     },
     onError: (err: Error) => {
       setAddStatus('error');
-      toast('Request failed', err.message, 'err');
+      const m = /^409: quota reached/.test(err.message);
+      toast(m ? 'Monthly quota reached' : 'Request failed',
+            m ? 'You have used this month’s requests. Ask an admin, or try again after the reset.' : err.message, 'err');
     },
   });
 

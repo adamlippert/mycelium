@@ -51,11 +51,6 @@ export function AutoApproveCard() {
       <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted">Auto-approve</h3>
       <p className="mt-0.5 text-xs text-muted">Rules that request titles on their own, up to the daily caps in Settings.</p>
       <Card className="space-y-4">
-        <p className="text-sm text-muted">
-          Automatically request titles matching enabled genre rules (year-ranged) and any
-          user&apos;s followed actors, up to the daily caps in Settings &gt; Auto-approve.
-        </p>
-
         <GenreRuleRows
           rules={effectiveRules}
           movieGenres={movieGenres?.genres || []}

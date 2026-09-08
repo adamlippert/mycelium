@@ -78,6 +78,17 @@ describe('Requests tab', () => {
     expect(await screen.findByText('No requests waiting for review')).toBeInTheDocument();
   });
 
+  it('shows the quotas card with a paused user and the auto-approve card', async () => {
+    apiMocks.adminQuotas.mockResolvedValue({
+      rows: [{ user_id: 3, username: 'adam', used: 2, limit: 2, remaining: 0, unlimited: false,
+        resets_at: '2026-10-01T00:00:00Z', auto_approve: true, paused: true }],
+    });
+    renderIt();
+    expect(await screen.findByText('auto-approve paused')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Auto-approve' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Run now' })).toBeInTheDocument();
+  });
+
   it('clicking a title opens the drawer and updates the hash', async () => {
     apiMocks.libraryDetail.mockResolvedValue({
       request: { id: 1, imdb_id: 'tt1', title: 'Heat', media_type: 'movie', status: 'failed', error: 'no release', quality: null, source: null,
