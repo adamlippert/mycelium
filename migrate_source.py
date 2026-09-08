@@ -37,24 +37,31 @@ def migrate(dry_run: bool = False, force: bool = False) -> dict:
     episode), so a series row is left alone unless its own title happens to
     carry a source tag.
 
-    A row that yields no label keeps whatever source value it already had;
-    this migration never blanks a column, only replaces a scraper name with
-    a label when one can actually be derived.
+    A row that yields no label keeps whatever source value it already had,
+    UNLESS that value is itself one of the scraper names this column used to
+    hold (torrentio, zilean, ...; from scrapers._SCRAPERS): a scraper name
+    left in a column that now means a release-source label is a wrong value,
+    not a harmless old one, so that row's source is blanked to NULL instead.
+    Anything else already there (a label, empty, NULL, some other string) is
+    left untouched.
     """
     import db
     import release_tags
+    import scrapers
     import settings as _settings
 
     if not force and _settings.get(MIGRATION_MARKER, False):
         log.debug("Source labels already migrated; skipping")
         return {}
 
-    vi_updated = vi_unchanged = 0
-    req_updated = req_unchanged = 0
+    scraper_names = {name.lower() for name, _key, _fn in scrapers._SCRAPERS}
+
+    vi_updated = vi_unchanged = vi_blanked = 0
+    req_updated = req_unchanged = req_blanked = 0
 
     with db._connect() as conn:
         vi_rows = conn.execute(
-            "SELECT token, imdb_id, media_type, title FROM virtual_items"
+            "SELECT token, imdb_id, media_type, title, source FROM virtual_items"
         ).fetchall()
 
         # A movie virtual_item's derived label, by imdb_id, used below as the
@@ -65,24 +72,32 @@ def migrate(dry_run: bool = False, force: bool = False) -> dict:
 
         for row in vi_rows:
             label = release_tags.source_label(row["title"] or "")
-            if not label:
+            if label:
+                if not dry_run:
+                    conn.execute("UPDATE virtual_items SET source=? WHERE token=?", (label, row["token"]))
+                vi_updated += 1
+                if row["media_type"] == "movie" and row["imdb_id"] and row["imdb_id"] not in movie_label_by_imdb:
+                    movie_label_by_imdb[row["imdb_id"]] = label
+            elif (row["source"] or "").lower() in scraper_names:
+                if not dry_run:
+                    conn.execute("UPDATE virtual_items SET source=NULL WHERE token=?", (row["token"],))
+                vi_blanked += 1
+            else:
                 vi_unchanged += 1
-                continue
-            if not dry_run:
-                conn.execute("UPDATE virtual_items SET source=? WHERE token=?", (label, row["token"]))
-            vi_updated += 1
-            if row["media_type"] == "movie" and row["imdb_id"] and row["imdb_id"] not in movie_label_by_imdb:
-                movie_label_by_imdb[row["imdb_id"]] = label
 
-        req_rows = conn.execute("SELECT id, imdb_id, title FROM requests").fetchall()
+        req_rows = conn.execute("SELECT id, imdb_id, title, source FROM requests").fetchall()
         for row in req_rows:
             label = release_tags.source_label(row["title"] or "") or movie_label_by_imdb.get(row["imdb_id"])
-            if not label:
+            if label:
+                if not dry_run:
+                    conn.execute("UPDATE requests SET source=? WHERE id=?", (label, row["id"]))
+                req_updated += 1
+            elif (row["source"] or "").lower() in scraper_names:
+                if not dry_run:
+                    conn.execute("UPDATE requests SET source=NULL WHERE id=?", (row["id"],))
+                req_blanked += 1
+            else:
                 req_unchanged += 1
-                continue
-            if not dry_run:
-                conn.execute("UPDATE requests SET source=? WHERE id=?", (label, row["id"]))
-            req_updated += 1
 
         if not dry_run:
             conn.commit()
@@ -91,11 +106,13 @@ def migrate(dry_run: bool = False, force: bool = False) -> dict:
         _settings.set(MIGRATION_MARKER, True)
 
     log.info(
-        "Source label migration: virtual_items %d labelled / %d unchanged, "
-        "requests %d labelled / %d unchanged",
-        vi_updated, vi_unchanged, req_updated, req_unchanged,
+        "Source label migration: virtual_items %d labelled / %d blanked / %d unchanged, "
+        "requests %d labelled / %d blanked / %d unchanged",
+        vi_updated, vi_blanked, vi_unchanged, req_updated, req_blanked, req_unchanged,
     )
     return {
-        "virtual_items_updated": vi_updated, "virtual_items_unchanged": vi_unchanged,
-        "requests_updated": req_updated, "requests_unchanged": req_unchanged,
+        "virtual_items_updated": vi_updated, "virtual_items_blanked": vi_blanked,
+        "virtual_items_unchanged": vi_unchanged,
+        "requests_updated": req_updated, "requests_blanked": req_blanked,
+        "requests_unchanged": req_unchanged,
     }

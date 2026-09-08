@@ -58,15 +58,29 @@ def test_virtual_item_with_a_source_tag_in_its_title_gets_labelled():
     assert db.get_virtual_item("tok1")["source"] == "BluRay"
 
 
-def test_virtual_item_with_no_detectable_source_is_left_unchanged():
+def test_virtual_item_with_no_detectable_source_and_an_already_correct_source_is_left_unchanged():
     """virtual_items.title is normally the sanitised display folder name
-    (e.g. "Heat (1995)"), which carries no source tag at all; this is the
-    common case the migration must leave alone rather than blank."""
-    _virtual_item("tok1", "Heat (1995)", imdb_id="tt1")
+    (e.g. "Heat (1995)"), which carries no source tag at all; when the
+    stored source is already a release-source label (not a leftover scraper
+    name) the migration must leave it alone rather than touch it."""
+    _virtual_item("tok1", "Heat (1995)", imdb_id="tt1", source="WEB-DL")
     out = migrate_source.migrate()
     assert out["virtual_items_updated"] == 0
+    assert out["virtual_items_blanked"] == 0
     assert out["virtual_items_unchanged"] == 1
-    assert db.get_virtual_item("tok1")["source"] == "torrentio"
+    assert db.get_virtual_item("tok1")["source"] == "WEB-DL"
+
+
+def test_virtual_item_with_a_leftover_scraper_name_and_no_detectable_title_is_blanked():
+    """A row whose source is still a scraper name (torrentio, zilean, ...)
+    and whose title carries no source tag to re-derive a label from must not
+    keep that scraper name in a column that now means release source."""
+    _virtual_item("tok1", "Heat (1995)", imdb_id="tt1", source="torrentio")
+    out = migrate_source.migrate()
+    assert out["virtual_items_updated"] == 0
+    assert out["virtual_items_blanked"] == 1
+    assert out["virtual_items_unchanged"] == 0
+    assert db.get_virtual_item("tok1")["source"] is None
 
 
 def test_request_falls_back_to_its_movie_virtual_items_label():
@@ -79,12 +93,22 @@ def test_request_falls_back_to_its_movie_virtual_items_label():
     assert db.get_request_by_imdb("tt1")["source"] == "BluRay"
 
 
-def test_request_with_no_matching_virtual_item_is_left_unchanged():
-    _request("tt9", "Nothing Here")
+def test_request_with_no_matching_virtual_item_and_an_already_correct_source_is_left_unchanged():
+    _request("tt9", "Nothing Here", source="WEB-DL")
     out = migrate_source.migrate()
     assert out["requests_updated"] == 0
+    assert out["requests_blanked"] == 0
     assert out["requests_unchanged"] == 1
-    assert db.get_request_by_imdb("tt9")["source"] == "torrentio"
+    assert db.get_request_by_imdb("tt9")["source"] == "WEB-DL"
+
+
+def test_request_with_a_leftover_scraper_name_and_no_fallback_label_is_blanked():
+    _request("tt9", "Nothing Here", source="torrentio")
+    out = migrate_source.migrate()
+    assert out["requests_updated"] == 0
+    assert out["requests_blanked"] == 1
+    assert out["requests_unchanged"] == 0
+    assert db.get_request_by_imdb("tt9")["source"] is None
 
 
 def test_second_run_is_a_noop_once_migrated():
