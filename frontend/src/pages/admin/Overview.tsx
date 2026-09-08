@@ -141,9 +141,11 @@ export default function Overview() {
           glow={requests && requests.failed_7d > 0 ? 'danger' : undefined}
         />
         <StatTile
-          value={stats ? `${(stats.egress_bytes_month / 1e12).toFixed(2)} TB` : '-'}
-          label="Proxied egress this month"
-          sub="MP4 proxy traffic only: MKV plays redirect to the CDN and are not counted here"
+          value={stats ? `${((stats.egress_bytes_month + stats.egress_estimated_bytes_month) / 1e12).toFixed(2)} TB` : '-'}
+          label="Egress this month"
+          sub={stats
+            ? `${(stats.egress_bytes_month / 1e12).toFixed(2)} TB proxied, ${(stats.egress_estimated_bytes_month / 1e12).toFixed(2)} TB estimated from MKV plays at full file size`
+            : 'proxied MP4 traffic plus an estimate for MKV plays'}
         />
       </div>
 

@@ -382,6 +382,11 @@ def _migrate() -> None:
             conn.execute("ALTER TABLE wanted_movies ADD COLUMN seerr_reported INTEGER NOT NULL DEFAULT 0")
             log.info("Migration: added wanted_movies.seerr_reported")
 
+        egress_cols = {r["name"] for r in conn.execute("PRAGMA table_info(egress_log)")}
+        if "estimated" not in egress_cols:
+            conn.execute("ALTER TABLE egress_log ADD COLUMN estimated INTEGER NOT NULL DEFAULT 0")
+            log.info("Migration: added egress_log.estimated")
+
         req_cols = {r["name"] for r in conn.execute("PRAGMA table_info(requests)")}
         if "tmdb_id" not in req_cols:
             conn.execute("ALTER TABLE requests ADD COLUMN tmdb_id INTEGER")
@@ -746,9 +751,33 @@ def record_egress(token: str, byte_count: int) -> None:
         conn.commit()
 
 
+def record_egress_estimate(token: str, byte_count: int) -> None:
+    """Record an estimated transfer for one play of a redirected (MKV)
+    stream: the whole file size, once per play, flagged so the proxied
+    figure stays exact. See egress_estimate.py for the play rule."""
+    if byte_count <= 0:
+        return
+    with _connect() as conn:
+        conn.execute("INSERT INTO egress_log (token, bytes, estimated) VALUES (?, ?, 1)",
+                     (token, int(byte_count)))
+        conn.commit()
+
+
+def egress_estimated_this_month() -> int:
+    """Estimated bytes for redirected plays since the start of the month;
+    the counterpart of egress_this_month(), which only sums proxied rows."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(bytes), 0) AS n FROM egress_log "
+            "WHERE estimated = 1 AND created_at >= strftime('%Y-%m-01 00:00:00', 'now')"
+        ).fetchone()
+        return int(row["n"])
+
+
 def egress_this_month() -> int:
-    """Bytes served since the start of the current calendar month. TorBox's
-    bandwidth floors are monthly, so the window matches the policy.
+    """Proxied bytes served since the start of the current calendar month
+    (estimated rows for redirected plays are excluded). TorBox's bandwidth
+    floors are monthly, so the window matches the policy.
 
     This sums every row in the window. That is fine while the proxy is rarely
     in the byte path, which is the normal case: MKV titles redirect to the CDN
@@ -759,7 +788,7 @@ def egress_this_month() -> int:
     with _connect() as conn:
         row = conn.execute(
             "SELECT COALESCE(SUM(bytes), 0) AS n FROM egress_log "
-            "WHERE created_at >= strftime('%Y-%m-01 00:00:00', 'now')"
+            "WHERE estimated = 0 AND created_at >= strftime('%Y-%m-01 00:00:00', 'now')"
         ).fetchone()
         return int(row["n"])
 

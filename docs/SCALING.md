@@ -74,12 +74,18 @@ census during this work found ten MKV sentinels and zero proxied MP4s.
 
 ### The consequence for the Overview tile
 
-The tile is labelled **"Proxied egress this month"** rather than total
-egress, and the sub-line says MKV plays are not counted. That is honest, but
-on an MKV library it means the figure reads near zero while real TorBox
-bandwidth is far higher. Do not read it as "we are nowhere near the plan
-floor". Closing that gap means recording the item's size on the redirect
-branch as an estimate; it is an open item.
+The tile shows **proxied plus estimated** egress, with the split in its
+sub-line. Proxied bytes are exact (the Go front reports them). The estimate
+covers the redirect path: `egress_estimate.note_redirect()` records the
+file size from the `.fsh` sentinel once per play, flagged `estimated = 1`
+in `egress_log`, and a play is a redirect for a token that has not been
+resolved for two hours (`PLAY_GAP_SEC`). The rule errs in known directions:
+a viewer who stops early still counts the whole file, two viewers on one
+title at once count as one, and a gunicorn restart can count a play that
+straddles it twice. It is an upper bound per play and far closer to the
+TorBox meter than the proxied figure alone on an MKV library. Estimated
+rows are one per play, so they never approach the proxied row volumes
+discussed below.
 
 ---
 

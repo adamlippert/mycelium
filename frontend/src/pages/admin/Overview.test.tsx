@@ -17,6 +17,7 @@ vi.mock('../../api', async () => {
         wanted: { active: 9, found: 2, give_up: 1 },
         movies_pending: 3,
         egress_bytes_month: 1_500_000_000_000,
+        egress_estimated_bytes_month: 2_250_000_000_000,
         qualities: { '1080p': 10, '2160p': 5, '4k': 1 },
       }),
       health: () => Promise.resolve({
@@ -104,9 +105,10 @@ describe('Overview tab', () => {
       expect(screen.getByText('6.0 GiB')).toBeInTheDocument();
       // Failures 7d
       expect(screen.getByText('7')).toBeInTheDocument();
-      // Proxied egress this month: bytes_month / 1e12, two decimals
-      expect(screen.getByText('Proxied egress this month')).toBeInTheDocument();
-      expect(screen.getByText('1.50 TB')).toBeInTheDocument();
+      // Egress this month: proxied plus estimated, with the split in the sub-line
+      expect(screen.getByText('Egress this month')).toBeInTheDocument();
+      expect(screen.getByText('3.75 TB')).toBeInTheDocument();
+      expect(screen.getByText('1.50 TB proxied, 2.25 TB estimated from MKV plays at full file size')).toBeInTheDocument();
     });
   });
 

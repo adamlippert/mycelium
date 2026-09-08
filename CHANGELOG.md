@@ -4,6 +4,16 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- The Overview egress tile counts MKV plays. Those plays are a redirect
+  to the TorBox CDN, so nothing passed through Mycelium and the tile read
+  near zero on an MKV library. The redirect branch now records the file
+  size once per play as an estimate (a play is a redirect for a title
+  not resolved in the last two hours), stored as flagged rows in
+  `egress_log`; the tile shows proxied plus estimated, with the split in
+  its sub-line, and the stats payload gains `egress_estimated_bytes_month`.
+
 ## [0.21.2] - 2026-09-08
 
 ### Fixed

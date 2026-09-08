@@ -34,6 +34,7 @@ export type StatsOverview = {
   wanted: { active: number; found: number; give_up: number };
   movies_pending: number;
   egress_bytes_month: number;
+  egress_estimated_bytes_month: number;
   qualities: Record<string, number>;
 };
 

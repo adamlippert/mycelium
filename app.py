@@ -18,6 +18,7 @@ import cleanup
 import config as cfg
 import continue_watching
 import db
+import egress_estimate
 import health
 import jellyfin
 import library_sync
@@ -1619,6 +1620,9 @@ def _resolve_stream_mode(token: str) -> dict:
                     return {"error": 502, "reason": "re-resolve failed"}
                 cdn_url = fresh
             _spore_cold_sizes.pop(token, None)
+            # No bytes pass through us on this branch, so count the file once
+            # per play as an estimate (see egress_estimate.py).
+            egress_estimate.note_redirect(token, info["cdn_size"])
             return {"mode": "redirect", "url": cdn_url}
         # Already fast-start MP4: proxy bytes; Plex stores our URL not the CDN URL.
         log.info("spore-stream: token=%s already fast-start MP4, proxying bytes", token)

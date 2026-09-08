@@ -48,6 +48,7 @@ def _build_overview() -> dict:
         },
         "movies_pending": db.count_media_items_pending("movie"),
         "egress_bytes_month": db.egress_this_month(),
+        "egress_estimated_bytes_month": db.egress_estimated_this_month(),
         "qualities": req["qualities"],
     }
 
