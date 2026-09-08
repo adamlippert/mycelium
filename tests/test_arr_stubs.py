@@ -68,7 +68,7 @@ def stubs_env(tmp_path, monkeypatch):
     return values, media, stubs
 
 
-def _movie(media, imdb="tt0113277", quality="1080p", dn="Heat.1995.1080p.WEB-DL.x264"):
+def _movie(media, imdb="tt0113277", quality="1080p", dn="Heat.1995.1080p.WEB-DL.x264", source=None):
     folder = media / "movies" / "Heat (1995)"
     folder.mkdir(parents=True, exist_ok=True)
     strm = folder / "Heat (1995).strm"
@@ -77,9 +77,10 @@ def _movie(media, imdb="tt0113277", quality="1080p", dn="Heat.1995.1080p.WEB-DL.
     db.update_request(db.get_request_by_imdb(imdb)["id"], "success", quality=quality)
     with db._connect() as conn:
         conn.execute(
-            "INSERT INTO virtual_items (token, info_hash, magnet, title, media_type, strm_path, imdb_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            ("tok1", "h" * 40, f"magnet:?xt=urn:btih:{'h' * 40}&dn={dn}", "Heat", "movie", str(strm), imdb),
+            "INSERT INTO virtual_items (token, info_hash, magnet, title, media_type, strm_path, imdb_id, source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("tok1", "h" * 40, f"magnet:?xt=urn:btih:{'h' * 40}&dn={dn}" if dn else f"magnet:?xt=urn:btih:{'h' * 40}",
+             "Heat", "movie", str(strm), imdb, source),
         )
         conn.commit()
     return strm
@@ -159,6 +160,24 @@ def test_write_title_writes_a_stub_and_a_marker_into_the_arr_folder(stubs_env):
     assert mkv.read_bytes()[:4] == b"\x1a\x45\xdf\xa3", "EBML magic"
     assert (folder / ".mycelium").read_text().strip() == "tt0113277"
     assert (stubs / ".ignore").exists(), "a Jellyfin library pointed here skips it"
+
+
+def test_write_title_tags_the_stub_from_the_source_column(stubs_env):
+    """Scraper magnets never carry a dn= name, so the release label stored in
+    virtual_items.source is what names the stub."""
+    import arr_stubs
+    values, media, stubs = stubs_env
+    _movie(media, dn="", source="BluRay")
+    assert arr_stubs.write_title("tt0113277", "movie", "/mnt/arr/movies/Heat (1995)") == 1
+    assert (stubs / "movies" / "Heat (1995)" / "Heat (1995) - Bluray-1080p.mkv").exists()
+
+
+def test_write_title_falls_back_to_the_magnet_name_without_a_source(stubs_env):
+    import arr_stubs
+    values, media, stubs = stubs_env
+    _movie(media, dn="Heat.1995.1080p.WEBRip.x264", source=None)
+    assert arr_stubs.write_title("tt0113277", "movie", "/mnt/arr/movies/Heat (1995)") == 1
+    assert (stubs / "movies" / "Heat (1995)" / "Heat (1995) - WEBRip-1080p.mkv").exists()
 
 
 def test_write_title_replaces_a_stale_stub_after_an_upgrade(stubs_env):

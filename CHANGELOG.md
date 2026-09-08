@@ -4,6 +4,15 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Arr stubs carry the source in their name again (`WEBDL-1080p`,
+  `Bluray-2160p`). The tag was derived from the magnet's `dn=` name, which
+  the scrapers never set, so every stub was named with the bare
+  resolution; the stored release label now feeds the same detection, with
+  the magnet name as the fallback. Titles processed before 0.21.1 keep the
+  bare name until they are processed or swapped again.
+
 ## [0.21.1] - 2026-09-08
 
 ### Changed

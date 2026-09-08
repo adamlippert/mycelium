@@ -237,7 +237,10 @@ def write_title(imdb_id: str, media_type: str, arr_path: str) -> int:
         # request row's as the fallback. Used for both the file name and
         # the stub's own embedded quality so they never disagree.
         quality = item.get("quality") or req.get("quality")
-        tag = quality_tag(quality, _release_name(item.get("magnet") or ""))
+        # The source column holds a release label (WEB-DL, BluRay) since
+        # 0.21.1; the label is itself a release word, so it feeds the same
+        # detection. The magnet's dn= is the fallback for rows that carry one.
+        tag = quality_tag(quality, item.get("source") or _release_name(item.get("magnet") or ""))
         target_dir = folder
         if kind == "series" and strm.parent.name.lower().startswith("season"):
             target_dir = folder / strm.parent.name
