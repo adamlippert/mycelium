@@ -1631,7 +1631,10 @@ def delete_request(row_id: int) -> bool:
     """Delete a request row and the webhook dedup keys that belong to it.
 
     Returns False if there was no such row. Leaves .strm files and
-    virtual_items alone - that is purge_request()'s job."""
+    virtual_items alone - that is purge_request()'s job. Also leaves the
+    per-user request history alone: "Forget" is meant to keep the request
+    and its history on the Requests tab, only dropping the title from the
+    Library table. purge_title() clears user_requests itself, on purpose."""
     with _connect() as conn:
         row = conn.execute("SELECT imdb_id FROM requests WHERE id=?", (row_id,)).fetchone()
         if row is None:
@@ -1642,7 +1645,6 @@ def delete_request(row_id: int) -> bool:
     if imdb_id:
         clear_webhook_events(imdb_id)
         clear_retries(imdb_id)
-        clear_user_requests(imdb_id)
     return True
 
 

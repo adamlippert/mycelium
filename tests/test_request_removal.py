@@ -1,9 +1,10 @@
 """What the two removal buttons leave behind.
 
-Delete forgets the request and keeps the files; Remove from library purges.
-Neither cleared the per-user request rows that feed the poster badges, and
-purge never told Seerr, so a removed title stayed "Available" there until
-Seerr's own sync noticed hours later.
+Delete (Forget) forgets the request row and keeps the files; the per-user
+request history stays too, so the Requests tab and quota accounting are
+untouched. Remove from library purges: it also clears the per-user request
+rows, and it never told Seerr, so a removed title stayed "Available" there
+until Seerr's own sync noticed hours later.
 """
 import os
 import sys
@@ -106,20 +107,33 @@ def test_clear_user_requests_removes_every_row_for_the_title():
     assert left == ["tt0078748"]
 
 
-def test_delete_button_clears_the_per_user_rows_too():
-    """Delete drops the request row; the user_requests row it left behind
-    kept feeding the poster badge and the detail-modal button."""
+def test_delete_button_keeps_the_per_user_request_history():
+    """Forget only drops the requests row. The per-user history feeds the
+    Requests tab and the monthly quota count, so a Forget must not silently
+    wipe it or refund quota for a request that was actually served."""
     uid = _user_id()
     row_id = db.insert_request("Heat", "tt0113277", "movie", tmdb_id=949)
     db.create_user_request(uid, "tt0113277", 949, "movie", "Heat", status="pending")
     assert db.delete_request(row_id) is True
-    assert db.get_user_requests(user_id=uid) == []
+    assert [r["imdb_id"] for r in db.get_user_requests(user_id=uid)] == ["tt0113277"]
 
 
 def test_purge_clears_the_per_user_rows_even_without_a_request_row():
     src = _src("cleanup.py")
     body = src.split("def purge_title(", 1)[1]
     assert "db.clear_user_requests(imdb_id)" in body
+
+
+def test_purge_still_clears_the_per_user_rows_that_delete_now_keeps():
+    """Delete (Forget) stopped clearing user_requests so the Requests tab
+    keeps its history; purge must still remove every trace of a title,
+    per-user rows included."""
+    import cleanup
+    uid = _user_id()
+    row_id = db.insert_request("Heat", "tt0113277", "movie", tmdb_id=949)
+    db.create_user_request(uid, "tt0113277", 949, "movie", "Heat", status="pending")
+    cleanup.purge_title("tt0113277", row_id=row_id)
+    assert db.get_user_requests(user_id=uid) == []
 
 
 # -- telling Seerr about a purge -------------------------------------------------

@@ -101,4 +101,12 @@ describe('Requests tab', () => {
     expect(await screen.findByRole('dialog', { name: 'Title details' })).toBeInTheDocument();
     expect(screen.getByTestId('requests-hash').textContent).toContain('open=tt1');
   });
+
+  it('opening a pending row with no library row yet shows the friendly not-in-library message', async () => {
+    apiMocks.libraryDetail.mockRejectedValue(new Error('404: not found'));
+    renderIt();
+    await userEvent.click(await screen.findByText('Heat'));
+    expect(await screen.findByRole('heading', { name: 'Not in the library' })).toBeInTheDocument();
+    expect(await screen.findByText('This title is not in the library yet, so there is nothing to act on here.')).toBeInTheDocument();
+  });
 });

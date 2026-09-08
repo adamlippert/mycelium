@@ -15,8 +15,9 @@ All notable changes to Mycelium are documented in this file.
 - Monthly request quotas are enforced: a user at the cap is refused with a
   clear message, and an auto-approve user at the cap has new requests
   wait for review until the month resets. Admins are never limited.
-- The title drawer gains "Forget request", which drops the request but
-  keeps the files.
+- The title drawer gains "Forget request", which drops the title from the
+  Library table but keeps its files and its request history on the
+  Requests tab.
 
 ### Removed
 

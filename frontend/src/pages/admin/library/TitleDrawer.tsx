@@ -26,11 +26,13 @@ export function TitleDrawer({ imdb, onClose, onChanged, onPurged }: {
   }, [onClose]);
   const refresh = () => { qc.invalidateQueries({ queryKey: ['library-detail', imdb] }); onChanged(); };
   const d = q.data;
+  const errorMessage = q.error ? (q.error as Error).message : null;
+  const notFound = errorMessage != null && errorMessage.startsWith('404');
   return (
     <aside role="dialog" aria-label="Title details" className="fixed inset-y-0 right-0 z-20 w-full max-w-[560px] overflow-y-auto border-l border-border bg-bg p-5 shadow-2xl">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold">{d ? d.request.title : 'Loading...'}</h2>
+          <h2 className="text-lg font-bold">{d ? d.request.title : errorMessage ? 'Not in the library' : 'Loading...'}</h2>
           {d && <div className="mt-1 flex items-center gap-2 text-xs text-muted">
             <span>{d.request.media_type === 'movie' ? 'Movie' : 'Series'}</span><span className="font-mono">{d.request.imdb_id}</span>
             <Pill state={statusToPillState(d.request.status)}>{statusLabel(d.request.status)}</Pill>
@@ -38,7 +40,11 @@ export function TitleDrawer({ imdb, onClose, onChanged, onPurged }: {
         </div>
         <Button variant="ghost" aria-label="Close" onClick={onClose}>&times;</Button>
       </div>
-      {q.error && <p className="mt-4 text-sm text-danger">{(q.error as Error).message}</p>}
+      {errorMessage && (
+        <p className="mt-4 text-sm text-danger">
+          {notFound ? 'This title is not in the library yet, so there is nothing to act on here.' : errorMessage}
+        </p>
+      )}
       {d && (
         <div className="mt-4 space-y-4">
           <div className="flex flex-wrap gap-2">
@@ -49,7 +55,7 @@ export function TitleDrawer({ imdb, onClose, onChanged, onPurged }: {
             <ActionButton label="Purge" run={() => ACTIONS.purge(d)} onDone={() => { onPurged?.(d.request.imdb_id); onChanged(); onClose(); }}
               confirm={`Remove "${d.request.title}" from the library? Its files, monitoring and request go too.`} />
             <ActionButton label="Forget request" run={() => ACTIONS.forget(d)} onDone={() => { onPurged?.(d.request.imdb_id); onChanged(); onClose(); }}
-              confirm={`Forget the request for "${d.request.title}" but keep its files? It disappears from the Library table; the files stay in Jellyfin.`} />
+              confirm={`Forget the request for "${d.request.title}" but keep its files? It leaves the Library table; the files stay in Jellyfin and the request history on the Requests tab stays too.`} />
           </div>
           <StatusCard d={d} onDone={refresh} />
           <ReleaseCard d={d} />

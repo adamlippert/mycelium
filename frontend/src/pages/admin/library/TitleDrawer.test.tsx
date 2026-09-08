@@ -83,4 +83,11 @@ describe('TitleDrawer', () => {
     expect(onChanged).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('shows a friendly message when the title is not in the library yet', async () => {
+    apiMocks.libraryDetail.mockRejectedValue(new Error('404: not found'));
+    renderIt();
+    expect(await screen.findByRole('heading', { name: 'Not in the library' })).toBeInTheDocument();
+    expect(await screen.findByText('This title is not in the library yet, so there is nothing to act on here.')).toBeInTheDocument();
+  });
 });
