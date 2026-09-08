@@ -8,8 +8,10 @@ import threading
 import time
 
 import requests
+from urllib.parse import quote
 
 import settings as _settings
+import torznab_scraper
 from config import (
     HEALTH_CACHE_SECONDS,
     TORRENTIO_BASE_URL,
@@ -60,14 +62,27 @@ def _probe(name: str) -> bool:
             base = str(_settings.get(key, default) or "").rstrip("/")
             if not base:
                 return False
-            path = "/torznab/api" if name == "comet" else "/torznab"
-            r = requests.get(f"{base}{path}?t=caps", timeout=3)
+            path = torznab_scraper.COMET_PATH if name == "comet" else torznab_scraper.MEDIAFUSION_PATH
+            url = f"{base}{path}?t=caps"
+            if name == "mediafusion":
+                # I3: the probe must mirror the tester (service_tests.py's
+                # test_mediafusion), or a correctly configured private
+                # instance answers 401/403 to a keyless caps request forever
+                # and _active() drops it from every search permanently. The
+                # public instance ignores apikey, so this is safe by default.
+                api_key = str(_settings.get("MEDIAFUSION_API_KEY", "") or "")
+                if api_key:
+                    url += f"&apikey={quote(api_key)}"
+            r = requests.get(url, timeout=3)
             # 403 is what Comet's public instance answers on this path: a
             # misconfigured URL must show as down, not silently empty.
             return r.status_code < 400
     except Exception as exc:
         import debridio
-        log.debug("health probe %s failed: %s", name, debridio.redact(exc))
+        msg = debridio.redact(exc)
+        if name in ("comet", "mediafusion"):
+            msg = torznab_scraper.redact(msg)
+        log.debug("health probe %s failed: %s", name, msg)
         return False
     return True
 

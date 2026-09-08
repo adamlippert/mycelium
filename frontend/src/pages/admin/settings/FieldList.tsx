@@ -11,6 +11,7 @@ export const SERVICE_LABEL: Record<string, string> = {
   torbox: 'TorBox', realdebrid: 'RealDebrid', tmdb: 'TMDB', zilean: 'Zilean', zilean_pg: 'Postgres',
   debridio: 'Debridio', jellyfin: 'Jellyfin', seerr: 'Seerr', radarr: 'Radarr', sonarr: 'Sonarr',
   trakt: 'Trakt', opensubtitles: 'OpenSubtitles', discord: 'Discord', telegram: 'Telegram', oidc: 'OIDC',
+  comet: 'Comet', mediafusion: 'MediaFusion',
 };
 
 export type CustomCard = ComponentType<{ values: Values; onChange: (key: string, next: FieldValue) => void }>;

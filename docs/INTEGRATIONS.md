@@ -241,13 +241,16 @@ kept once, credited to the highest one, with the others listed under
 **MediaFusion** works out of the box: Settings > Scrapers > Use
 MediaFusion, with the public ElfHosted instance as the default URL. A
 private instance takes its API password in the MediaFusion API key
-field.
+field, used by both the Test button and the health probe; a wrong key
+shows the scraper as down on the Scrapers page.
 
 **Comet** is self-hosted only. The public instance refuses the Torznab
-path, so the Test button reports "this instance does not expose
-Torznab" for it. Point Comet URL at your own instance
-(`http://comet:8000` on the same Docker network); a protected instance
-carries its access token in the path (`https://comet.example/s/<token>`).
+path, so the Test button reports "Comet refused the Torznab path (HTTP
+403): the public instance does not expose it, a protected instance
+needs its access token in the URL". Point Comet URL at your own
+instance (`http://comet:8000` on the same Docker network); a protected
+instance carries its access token in the path
+(`https://comet.example/s/<token>`).
 
 Neither feed says whether TorBox has a release cached. Mycelium checks
 TorBox itself, exactly as it does for Torrentio results, so the cache

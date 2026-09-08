@@ -358,7 +358,7 @@ SECTIONS = [
                "secret", advanced=True, depends_on="DEBRIDIO_ENABLED"),
             _f("COMET_ENABLED", "Use Comet", "Search a Comet instance's Torznab feed. Self-hosted only: the public instance refuses this path."),
             _f("COMET_URL", "Comet URL", "Address of your Comet instance, with its access token path if protected.", "url",
-               placeholder="http://comet:8000", depends_on="COMET_ENABLED", test="comet", required=True),
+               placeholder="http://comet:8000", depends_on="COMET_ENABLED", test="comet"),
             _f("MEDIAFUSION_ENABLED", "Use MediaFusion", "Search MediaFusion's Torznab feed. The public ElfHosted instance works without a key."),
             _f("MEDIAFUSION_URL", "MediaFusion URL", "Leave the default for the public instance or point at your own.", "url",
                placeholder="https://mediafusion.elfhosted.com", depends_on="MEDIAFUSION_ENABLED", test="mediafusion"),

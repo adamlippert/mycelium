@@ -16,6 +16,7 @@ import requests
 import config
 import debridio
 import settings as _settings
+import torznab_scraper
 
 log = logging.getLogger(__name__)
 
@@ -231,10 +232,11 @@ def _test_torznab(v: dict, url_key: str, path: str, api_key: str, label: str,
     if (m := _need(v, url_key)):
         return {"ok": False, "message": f"{m} is empty"}
     base = _v(v, url_key).rstrip("/")
-    url = f"{base}{path}?t=caps"
-    if api_key:
-        url += f"&apikey={api_key}"
-    r = _http("GET", url)
+    url = f"{base}{path}"
+    # M9: params=, not string concatenation - an api key containing &, # or a
+    # space either truncated on the wire or made requests raise InvalidURL.
+    params = {"t": "caps", "apikey": api_key} if api_key else {"t": "caps"}
+    r = _http("GET", url, params=params)
     if r.status_code == 403:
         return {"ok": False, "message": refused}
     if r.status_code >= 400:
@@ -252,12 +254,14 @@ def _test_torznab(v: dict, url_key: str, path: str, api_key: str, label: str,
 
 
 def test_comet(v: dict) -> dict:
-    return _test_torznab(v, "COMET_URL", "/torznab/api", "", "Comet",
-                         "this instance does not expose Torznab; use your own Comet URL")
+    return _test_torznab(v, "COMET_URL", torznab_scraper.COMET_PATH, "", "Comet",
+                         "Comet refused the Torznab path (HTTP 403): the public instance does not "
+                         "expose it, a protected instance needs its access token in the URL")
 
 
 def test_mediafusion(v: dict) -> dict:
-    return _test_torznab(v, "MEDIAFUSION_URL", "/torznab", _v(v, "MEDIAFUSION_API_KEY"), "MediaFusion",
+    return _test_torznab(v, "MEDIAFUSION_URL", torznab_scraper.MEDIAFUSION_PATH, _v(v, "MEDIAFUSION_API_KEY"),
+                         "MediaFusion",
                          "MediaFusion refused the request (HTTP 403); a private instance needs its API password")
 
 

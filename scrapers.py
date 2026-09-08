@@ -61,15 +61,11 @@ def _fetch_torrentio(media_type, imdb_id, season, episode, timeout=None):
                                    timeout=timeout)
 
 
-_COMET_PATH = "/torznab/api"        # comet/api/endpoints/torznab.py
-_MEDIAFUSION_PATH = "/torznab"      # backend/src/routes/torznab.rs
-
-
 def _fetch_comet(media_type, imdb_id, season, episode, timeout=None):
     kw = {"api_key": "", "raise_on_error": True}
     if timeout is not None:
         kw["timeout"] = timeout
-    return torznab_scraper.fetch("comet", str(_settings.get("COMET_URL", "") or ""), _COMET_PATH,
+    return torznab_scraper.fetch("comet", str(_settings.get("COMET_URL", "") or ""), torznab_scraper.COMET_PATH,
                                  media_type, imdb_id, season, episode, **kw)
 
 
@@ -79,7 +75,15 @@ def _fetch_mediafusion(media_type, imdb_id, season, episode, timeout=None):
         kw["timeout"] = timeout
     return torznab_scraper.fetch("mediafusion",
                                  str(_settings.get("MEDIAFUSION_URL", "https://mediafusion.elfhosted.com") or ""),
-                                 _MEDIAFUSION_PATH, media_type, imdb_id, season, episode, **kw)
+                                 torznab_scraper.MEDIAFUSION_PATH, media_type, imdb_id, season, episode, **kw)
+
+
+def _redact_exc(exc) -> str:
+    """Scrub every known secret shape from a caught scraper exception before
+    it is logged: the Torznab api key / Comet access-token path (C1, I2) and
+    Debridio's own config-token patterns, combined so this one call site
+    protects whichever scraper actually failed."""
+    return debridio.redact(torznab_scraper.redact(exc))
 
 
 # (name, settings key or None if always on, fetch adapter)
@@ -157,7 +161,7 @@ def merge_candidates(media_type: str, imdb_id: str, season: int | None = None,
             except Exception as exc:
                 failed += 1
                 log.warning("Scraper %s failed for %s: %s",
-                            name, imdb_id, debridio.redact(exc))
+                            name, imdb_id, _redact_exc(exc))
 
     merged: list[Stream] = []
     by_hash: dict[str, Stream] = {}

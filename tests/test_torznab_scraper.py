@@ -123,7 +123,9 @@ def test_fetch_treats_bad_xml_as_a_failure(monkeypatch):
     assert tz.fetch("comet", "http://c", "/torznab/api", "movie", "tt1") == []
     monkeypatch.setattr(tz.requests, "get", lambda url, params=None, timeout=None: _Resp("<not xml", 200))
     assert tz.fetch("comet", "http://c", "/torznab/api", "movie", "tt1") == []
-    with pytest.raises(Exception):
+    # M14: pytest.raises(Exception) passed for literally anything, including
+    # a bug in the test's own lambda; pin the real failure shape instead.
+    with pytest.raises(tz.ET.ParseError):
         tz.fetch("comet", "http://c", "/torznab/api", "movie", "tt1", raise_on_error=True)
 
 
@@ -133,6 +135,12 @@ def test_fetch_with_an_empty_base_url_returns_nothing_without_a_request(monkeypa
 
 
 def test_fetch_redacts_the_api_key_from_a_logged_failure(monkeypatch, caplog):
+    # C1: the configured key is read from settings (not merely the apikey=
+    # query backstop), so it is scrubbed even where the literal replace
+    # would miss a differently-encoded key.
+    monkeypatch.setattr(tz._settings, "get",
+                        lambda k, d=None: "secretpw" if k == "MEDIAFUSION_API_KEY" else d)
+
     def boom(url, params=None, timeout=None):
         raise tz.requests.exceptions.HTTPError(
             "403 Client Error for url: https://mf.test/torznab?t=movie&imdbid=tt1&limit=100&apikey=secretpw"
@@ -144,3 +152,39 @@ def test_fetch_redacts_the_api_key_from_a_logged_failure(monkeypatch, caplog):
     assert out == []
     assert "secretpw" not in caplog.text
     assert "mediafusion" in caplog.text and "tt1" in caplog.text
+
+
+def test_fetch_redacts_a_comet_access_token_from_the_url_path(monkeypatch, caplog):
+    # I2: a protected Comet instance carries its token in the URL PATH
+    # (/s/<token>/), which the apikey= query rule cannot see.
+    def boom(url, params=None, timeout=None):
+        raise tz.requests.exceptions.HTTPError(
+            "403 Client Error for url: https://comet.test/s/tok123abc/torznab/api?t=movie&imdbid=tt1"
+        )
+
+    monkeypatch.setattr(tz.requests, "get", boom)
+    with caplog.at_level(logging.WARNING):
+        out = tz.fetch("comet", "https://comet.test/s/tok123abc", "/torznab/api", "movie", "tt1")
+    assert out == []
+    assert "tok123abc" not in caplog.text
+    assert "comet" in caplog.text and "tt1" in caplog.text
+
+
+def test_redact_skips_a_secret_shorter_than_the_minimum_length(monkeypatch):
+    # M8: a one- or two-character configured key must not wipe every
+    # matching substring out of unrelated log text.
+    monkeypatch.setattr(tz._settings, "get", lambda k, d=None: "ab" if k == "MEDIAFUSION_API_KEY" else d)
+    out = tz.redact("mediafusion request failed for tt1: Invalid URL 'ab://torznab': No scheme supplied.")
+    assert "ab://torznab" in out
+
+
+def test_redact_masks_a_secret_at_the_minimum_length(monkeypatch):
+    monkeypatch.setattr(tz._settings, "get", lambda k, d=None: "abcd" if k == "MEDIAFUSION_API_KEY" else d)
+    out = tz.redact("request failed: config value was abcd, rejected")
+    assert "abcd" not in out
+
+
+def test_torznab_paths_are_owned_here():
+    # M6: the two paths live once and everything else imports them.
+    assert tz.COMET_PATH == "/torznab/api"
+    assert tz.MEDIAFUSION_PATH == "/torznab"

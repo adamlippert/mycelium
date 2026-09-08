@@ -64,6 +64,20 @@ def test_all_sources_are_merged(monkeypatch):
     assert len(scrapers.fetch_candidates("movie", "tt1")) == 3
 
 
+def _src(name):
+    with open(os.path.join(os.path.dirname(__file__), "..", name), encoding="utf-8") as f:
+        return f.read()
+
+
+def test_the_five_torznab_keys_are_documented_in_env_example():
+    # M4: config.py reads all five from the environment; every other
+    # scraper's env surface is documented here, and this branch's was not.
+    env = _src(".env.example")
+    for key in ("COMET_ENABLED", "COMET_URL", "MEDIAFUSION_ENABLED",
+               "MEDIAFUSION_URL", "MEDIAFUSION_API_KEY"):
+        assert f"\n{key}=" in env, f"{key} missing from .env.example"
+
+
 def test_registry_order_puts_the_torznab_scrapers_before_torrentio():
     assert [n for n, _, _ in scrapers._SCRAPERS] == ["debridio", "zilean", "comet", "mediafusion", "torrentio"]
     keys = {n: k for n, k, _ in scrapers._SCRAPERS}
@@ -281,6 +295,10 @@ def test_merge_candidates_still_dedups_and_records_also_seen_in(monkeypatch):
 
 
 def test_timeout_is_forwarded_to_every_scraper(monkeypatch):
+    # M7: the name promises all five; the assertion used to cover three, and
+    # the autouse fixture made the two Torznab adapters run for real against
+    # the literal base URL "True" (harmless only because requests happens to
+    # reject it before any socket opens).
     seen = {}
 
     def _rec(name):
@@ -292,8 +310,14 @@ def test_timeout_is_forwarded_to_every_scraper(monkeypatch):
     monkeypatch.setattr(scrapers.debridio, "fetch", _rec("debridio"))
     monkeypatch.setattr(scrapers.zilean, "fetch_streams", _rec("zilean"))
     monkeypatch.setattr(scrapers.torrentio, "fetch_streams", _rec("torrentio"))
+
+    def fake_torznab(name, base_url, path, media_type, imdb_id, season=None, episode=None, **kw):
+        seen[name] = kw.get("timeout")
+        return []
+
+    monkeypatch.setattr(scrapers.torznab_scraper, "fetch", fake_torznab)
     scrapers.merge_candidates("movie", "tt1", timeout=12)
-    assert seen == {"debridio": 12, "zilean": 12, "torrentio": 12}
+    assert seen == {"debridio": 12, "zilean": 12, "comet": 12, "mediafusion": 12, "torrentio": 12}
 
 
 def test_scraper_failure_is_logged_through_redact(monkeypatch, caplog):
@@ -310,6 +334,54 @@ def test_scraper_failure_is_logged_through_redact(monkeypatch, caplog):
         scrapers.fetch_candidates("movie", "tt1")
     blob = " ".join(r.getMessage() for r in caplog.records)
     assert "eyJhcGlfa2V5" not in blob
+
+
+def test_merge_candidates_redacts_the_mediafusion_api_key_from_the_log(monkeypatch, caplog):
+    # C1: torznab_scraper.fetch redacted and re-raised the ORIGINAL
+    # exception, and merge_candidates logged it a second time through
+    # debridio.redact alone, which has no rule for MEDIAFUSION_API_KEY or
+    # apikey=. This must be exercised at the merge_candidates log site, not
+    # only at torznab_scraper.fetch's own log line.
+    values = {"MEDIAFUSION_API_KEY": "secretpw"}
+    monkeypatch.setattr(scrapers._settings, "get", lambda k, d=None: values.get(k, True))
+
+    def fake_torznab(name, base_url, path, media_type, imdb_id, season=None, episode=None, **kw):
+        if name == "mediafusion":
+            raise scrapers.torznab_scraper.requests.exceptions.HTTPError(
+                "403 Client Error for url: https://mf.example/torznab?t=movie&"
+                "imdbid=tt1&limit=100&apikey=secretpw"
+            )
+        return []
+
+    monkeypatch.setattr(scrapers.torznab_scraper, "fetch", fake_torznab)
+    monkeypatch.setattr(scrapers.debridio, "fetch", lambda *a, **k: [])
+    monkeypatch.setattr(scrapers.zilean, "fetch_streams", lambda *a, **k: [])
+    monkeypatch.setattr(scrapers.torrentio, "fetch_streams", lambda *a, **k: [])
+    with caplog.at_level("WARNING"):
+        scrapers.merge_candidates("movie", "tt1")
+    assert "secretpw" not in caplog.text
+    assert "mediafusion" in caplog.text
+
+
+def test_merge_candidates_redacts_a_comet_access_token_from_the_log(monkeypatch, caplog):
+    # I2: a protected Comet instance carries its token in the URL path, not
+    # a query string, and the token never lands in settings under a key name
+    # this module knows - it must be scrubbed by pattern alone.
+    def fake_torznab(name, base_url, path, media_type, imdb_id, season=None, episode=None, **kw):
+        if name == "comet":
+            raise scrapers.torznab_scraper.requests.exceptions.HTTPError(
+                "403 Client Error for url: https://comet.test/s/tok123abc/torznab/api?t=movie&imdbid=tt1"
+            )
+        return []
+
+    monkeypatch.setattr(scrapers.torznab_scraper, "fetch", fake_torznab)
+    monkeypatch.setattr(scrapers.debridio, "fetch", lambda *a, **k: [])
+    monkeypatch.setattr(scrapers.zilean, "fetch_streams", lambda *a, **k: [])
+    monkeypatch.setattr(scrapers.torrentio, "fetch_streams", lambda *a, **k: [])
+    with caplog.at_level("WARNING"):
+        scrapers.merge_candidates("movie", "tt1")
+    assert "tok123abc" not in caplog.text
+    assert "comet" in caplog.text
 
 
 def test_every_call_site_uses_the_orchestrator():

@@ -253,7 +253,7 @@ def test_the_torznab_scraper_keys_are_typed_placed_and_hot():
     for key in ("COMET_ENABLED", "MEDIAFUSION_ENABLED"):
         assert key in settings._BOOL_KEYS and fields[key]["kind"] == "bool"
     assert fields["COMET_URL"]["kind"] == "url" and fields["COMET_URL"]["depends_on"] == "COMET_ENABLED"
-    assert fields["COMET_URL"]["test"] == "comet" and fields["COMET_URL"]["required"] is True
+    assert fields["COMET_URL"]["test"] == "comet"
     assert fields["MEDIAFUSION_URL"]["kind"] == "url" and fields["MEDIAFUSION_URL"]["test"] == "mediafusion"
     assert fields["MEDIAFUSION_API_KEY"]["kind"] == "secret" and fields["MEDIAFUSION_API_KEY"]["depends_on"] == "MEDIAFUSION_ENABLED"
     section = next(s for s in settings.SECTIONS if s["id"] == "scrapers")

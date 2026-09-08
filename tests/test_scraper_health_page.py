@@ -124,3 +124,50 @@ def test_a_torznab_probe_without_a_url_is_down(monkeypatch):
     monkeypatch.setattr(health_cache.requests, "get",
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("no request expected")))
     assert health_cache._probe("comet") is False
+
+
+def test_the_mediafusion_probe_sends_the_configured_api_key(monkeypatch):
+    # I3: the probe stayed keyless while the tester sent apikey=, so a
+    # correctly configured private instance answered 401/403 to caps
+    # forever and _active() dropped it from every search permanently.
+    import health_cache
+
+    class _Resp:
+        status_code = 200
+
+    calls = []
+
+    def fake_get(url, timeout=None, **kw):
+        calls.append(url)
+        return _Resp()
+
+    monkeypatch.setattr(health_cache.requests, "get", fake_get)
+    monkeypatch.setattr(health_cache._settings, "get",
+                        lambda k, d=None: {"MEDIAFUSION_URL": "https://mf.test",
+                                           "MEDIAFUSION_API_KEY": "pw"}.get(k, d))
+    assert health_cache._probe("mediafusion") is True
+    assert calls[-1] == "https://mf.test/torznab?t=caps&apikey=pw"
+
+    monkeypatch.setattr(health_cache._settings, "get",
+                        lambda k, d=None: {"MEDIAFUSION_URL": "https://mf.test"}.get(k, d))
+    assert health_cache._probe("mediafusion") is True
+    assert calls[-1] == "https://mf.test/torznab?t=caps"
+
+
+def test_the_probe_redacts_a_comet_access_token_from_its_debug_log(monkeypatch, caplog):
+    # I2: health_cache._probe logs the failure too, at DEBUG - the normal
+    # state for a misconfigured or briefly unreachable instance, so this is
+    # not a rare edge case.
+    import health_cache
+
+    def boom(url, timeout=None, **kw):
+        raise health_cache.requests.exceptions.HTTPError(
+            "403 Client Error for url: https://comet.test/s/tok123abc/torznab/api?t=caps"
+        )
+
+    monkeypatch.setattr(health_cache.requests, "get", boom)
+    monkeypatch.setattr(health_cache._settings, "get",
+                        lambda k, d=None: {"COMET_URL": "https://comet.test/s/tok123abc"}.get(k, d))
+    with caplog.at_level("DEBUG"):
+        assert health_cache._probe("comet") is False
+    assert "tok123abc" not in caplog.text

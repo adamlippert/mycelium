@@ -285,19 +285,26 @@ _CAPS = ('<?xml version="1.0" encoding="UTF-8"?><caps><server version="6.1.5" '
 
 def test_mediafusion_reports_the_caps_server(http, monkeypatch):
     routes, calls = http
-    routes["/torznab?t=caps"] = FakeResp(200, _CAPS, ctype="text/xml")
+    routes["/torznab"] = FakeResp(200, _CAPS, ctype="text/xml")
     out = service_tests.run("mediafusion", {"MEDIAFUSION_URL": "https://mf.test", "MEDIAFUSION_API_KEY": "pw"})
     assert out["ok"] and out["message"] == "MediaFusion | ElfHosted 6.1.5"
-    assert calls[-1][1] == "https://mf.test/torznab?t=caps&apikey=pw"
+    # M9: params=, not string concatenation - an api key containing &, # or
+    # a space must not be able to truncate the request or make requests
+    # raise InvalidURL.
+    assert calls[-1][1] == "https://mf.test/torznab"
+    assert calls[-1][2]["params"] == {"t": "caps", "apikey": "pw"}
     assert "pw" not in out["message"]
 
 
 def test_comet_explains_a_refused_torznab_path(http, monkeypatch):
     routes, calls = http
-    routes["/torznab/api?t=caps"] = FakeResp(403, "Forbidden", ctype="text/html")
+    routes["/torznab/api"] = FakeResp(403, "Forbidden", ctype="text/html")
     out = service_tests.run("comet", {"COMET_URL": "https://comet.elfhosted.com"})
     assert out["ok"] is False
-    assert out["message"] == "this instance does not expose Torznab; use your own Comet URL"
+    # M15: the old message told a self-hosted instance with a wrong access
+    # token to do the thing it already did.
+    assert out["message"] == ("Comet refused the Torznab path (HTTP 403): the public instance does not "
+                              "expose it, a protected instance needs its access token in the URL")
 
 
 def test_comet_blank_url_uses_the_schema_label(http, monkeypatch):

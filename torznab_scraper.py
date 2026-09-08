@@ -15,6 +15,7 @@ import xml.etree.ElementTree as ET
 
 import requests
 
+import settings as _settings
 from streams import Stream, detect_languages, parse_quality
 from torrentio import _looks_like_season_pack
 
@@ -22,23 +23,44 @@ log = logging.getLogger(__name__)
 
 _HEX40_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 _APIKEY_QS_RE = re.compile(r"apikey=[^&\s'\"]*", re.IGNORECASE)
+# A protected Comet instance carries its access token in the URL PATH
+# (https://comet.example/s/<token>/torznab/api), not a query string, so the
+# apikey= rule above cannot see it.
+_COMET_TOKEN_RE = re.compile(r"/s/[^/\s'\"]+/")
 _NS = "{http://torznab.com/schemas/2015/feed}"
 LIMIT = 100  # MediaFusion clamps to 100; Comet ignores the parameter
 
+# The two Torznab paths, owned here so scrapers.py, health_cache.py and
+# service_tests.py describe the same endpoint instead of re-typing the
+# literal string three times.
+COMET_PATH = "/torznab/api"        # comet/api/endpoints/torznab.py
+MEDIAFUSION_PATH = "/torznab"      # backend/src/routes/torznab.rs
 
-def _redact(text, api_key: str) -> str:
-    """Strip the Torznab api key out of a URL or exception message before it
-    is logged. requests/urllib3 embed the fully-resolved request URL, apikey
-    included, in HTTPError and ConnectionError text on the two most common
-    failure paths, so the literal key value is scrubbed first (works for any
-    encoding) and the apikey= query fragment is stripped as a backstop
-    (catches a differently-encoded key the literal replace would miss)."""
+# M8 / debridio._MIN_SECRET_LEN: a secret shorter than this is too short to
+# be a real key (and too likely to be a placeholder like "true") to scrub
+# safely - replacing every occurrence of a one- or two-character string would
+# mangle unrelated log text instead of protecting anything.
+_MIN_SECRET_LEN = 4
+
+
+def redact(text) -> str:
+    """Strip Torznab credentials out of a URL or exception message before it
+    is logged. requests/urllib3 embed the fully-resolved request URL in
+    HTTPError and ConnectionError text on the two most common failure paths,
+    so this must catch three shapes: the configured MediaFusion api key
+    (read from settings, not passed in, so every call site gets the same
+    protection for free), any apikey=<value> query fragment (a backstop for
+    a differently-encoded key), and a Comet protected-instance access token
+    living in the URL path rather than a query string."""
     if not text:
         return ""
     out = str(text)
-    if api_key:
-        out = out.replace(api_key, "***")
-    return _APIKEY_QS_RE.sub("apikey=***", out)
+    secret = str(_settings.get("MEDIAFUSION_API_KEY", "") or "")
+    if len(secret) >= _MIN_SECRET_LEN:
+        out = out.replace(secret, "***")
+    out = _APIKEY_QS_RE.sub("apikey=***", out)
+    out = _COMET_TOKEN_RE.sub("/s/***/", out)
+    return out
 
 
 def build_url(base_url: str, path: str, media_type: str, imdb_id: str,
@@ -126,7 +148,7 @@ def fetch(name: str, base_url: str, path: str, media_type: str, imdb_id: str,
         resp.raise_for_status()
         streams, _ = parse_feed(name, resp.text, season)
     except Exception as exc:
-        log.warning("%s request failed for %s: %s", name, imdb_id, _redact(exc, api_key))
+        log.warning("%s request failed for %s: %s", name, imdb_id, redact(exc))
         if raise_on_error:
             raise
         return []

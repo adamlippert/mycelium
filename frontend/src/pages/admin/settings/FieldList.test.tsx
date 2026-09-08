@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { SettingsField, SettingsSection } from '../../../api';
-import { FieldList } from './FieldList';
+import { FieldList, SERVICE_LABEL } from './FieldList';
 import { SECRET_CLEARED } from './visibility';
 
 const apiMocks = vi.hoisted(() => ({ settingsTest: vi.fn(), setupTest: vi.fn(), settingsPicker: vi.fn(), setupPicker: vi.fn() }));
@@ -56,6 +56,13 @@ describe('FieldList endpoint', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Load Radarr root folder' }));
     await waitFor(() => expect(apiMocks.setupPicker).toHaveBeenCalledWith('radarr_root_folders', { RADARR_URL: 'http://r.test' }));
     expect(apiMocks.settingsTest).not.toHaveBeenCalled();
+  });
+});
+
+describe('SERVICE_LABEL', () => {
+  it('names the Torznab scrapers', () => {
+    expect(SERVICE_LABEL.comet).toBe('Comet');
+    expect(SERVICE_LABEL.mediafusion).toBe('MediaFusion');
   });
 });
 
