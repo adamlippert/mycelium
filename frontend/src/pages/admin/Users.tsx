@@ -64,11 +64,14 @@ export default function Users() {
     },
     {
       key: 'quota',
-      header: 'Quota used',
+      header: 'Monthly cap',
       render: (u) => (
-        <span className="font-mono text-xs text-muted">
-          {u.quota_monthly === 0 ? 'unlimited' : u.quota_monthly}
-        </span>
+        <CapField
+          key={`${u.id}-${u.quota_monthly}`}
+          username={u.username}
+          value={u.quota_monthly}
+          onSave={(cap) => updateMut.mutateAsync({ id: u.id, fields: { quota_monthly: cap } })}
+        />
       ),
     },
     {
@@ -133,6 +136,9 @@ export default function Users() {
         <CreateUserForm />
       </Card>
       <DataTable columns={columns} rows={rows} empty="No users yet" />
+      <p className="text-xs text-muted">
+        Monthly cap: requests per calendar month; blank means no cap. Denied requests do not count.
+      </p>
     </div>
   );
 }
@@ -208,5 +214,43 @@ function CreateUserForm() {
         <div className={`mt-3 text-xs ${msg.kind === 'ok' ? 'text-ok' : 'text-danger'}`}>{msg.text}</div>
       )}
     </div>
+  );
+}
+
+/** Inline editor for a user's monthly request cap. Blank means no cap
+ * (stored as 0). Saves on Enter or on blur when the value changed, and
+ * shows the outcome next to the field like the other row controls. */
+function CapField({ username, value, onSave }: {
+  username: string;
+  value: number;
+  onSave: (cap: number) => Promise<unknown>;
+}) {
+  const [text, setText] = useState(value === 0 ? '' : String(value));
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const save = async () => {
+    const next = text.trim() === '' ? 0 : Math.max(0, parseInt(text, 10) || 0);
+    if (next === value) return;
+    try {
+      await onSave(next);
+      setMsg({ ok: true, text: 'saved' });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : 'save failed' });
+    }
+  };
+  return (
+    <span className="inline-flex items-center gap-2">
+      <input
+        type="number"
+        min={0}
+        aria-label={`Monthly cap for ${username}`}
+        placeholder="unlimited"
+        value={text}
+        onChange={(e) => { setText(e.target.value); setMsg(null); }}
+        onBlur={save}
+        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+        className="w-24 rounded border border-border bg-bg px-2 py-1 font-mono text-xs"
+      />
+      {msg && <span className={`text-xs ${msg.ok ? 'text-ok' : 'text-danger'}`}>{msg.text}</span>}
+    </span>
   );
 }
