@@ -17,7 +17,7 @@ export function ReferenceSection({ id, title, hint, children }: {
     try { localStorage.setItem(KEY + id, next ? '1' : '0'); } catch { /* storage unavailable */ }
   };
   return (
-    <details open={open} onToggle={(e) => toggle((e.currentTarget as HTMLDetailsElement).open)}
+    <details open={open}
       className="rounded-xl border border-border bg-card">
       <summary
         className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-body"

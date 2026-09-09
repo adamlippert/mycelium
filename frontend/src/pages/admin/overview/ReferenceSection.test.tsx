@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ReferenceSection } from './ReferenceSection';
 
 describe('ReferenceSection', () => {
@@ -20,5 +20,20 @@ describe('ReferenceSection', () => {
     let opened = false;
     render(<ReferenceSection id="folders" title="Top folders" hint="">{(open) => { opened = open; return null; }}</ReferenceSection>);
     expect(opened).toBe(true);
+  });
+
+  it('writes localStorage exactly once per click, opening then closing', async () => {
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+    render(<ReferenceSection id="endpoints" title="Integration endpoints" hint="">{() => <p>body</p>}</ReferenceSection>);
+
+    await userEvent.click(screen.getByText('Integration endpoints'));
+    expect(setItemSpy).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem('mycelium.overview.endpoints')).toBe('1');
+
+    await userEvent.click(screen.getByText('Integration endpoints'));
+    expect(setItemSpy).toHaveBeenCalledTimes(2);
+    expect(localStorage.getItem('mycelium.overview.endpoints')).toBe('0');
+
+    setItemSpy.mockRestore();
   });
 });
