@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-09-08
+
 ### Changed
 
 - The admin Overview is rebuilt as five bands, problems first. A status
