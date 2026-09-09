@@ -30,11 +30,15 @@ _lock = threading.Lock()
 _last_seen: dict[str, float] = {}  # token -> monotonic of the last redirect
 
 
+def _now() -> float:
+    return time.monotonic()
+
+
 def note_redirect(token: str, size: int, now: float | None = None) -> bool:
     """Record `size` as estimated egress for `token` when this redirect
     starts a new play. Returns True when a row was written. A size of zero
     or less writes nothing but still marks the token as seen."""
-    now = time.monotonic() if now is None else now
+    now = _now() if now is None else now
     with _lock:
         last = _last_seen.get(token)
         new_play = last is None or (now - last) >= PLAY_GAP_SEC
@@ -50,6 +54,13 @@ def note_redirect(token: str, size: int, now: float | None = None) -> bool:
         log.warning("egress estimate for token=%s not recorded: %s", token, exc)
         return False
     return True
+
+
+def recent(window_sec: int = 900) -> int:
+    """Tokens the redirect branch resolved within the last window_sec."""
+    now = _now()
+    with _lock:
+        return sum(1 for seen in _last_seen.values() if now - seen <= window_sec)
 
 
 def _reset() -> None:

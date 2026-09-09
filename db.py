@@ -798,6 +798,44 @@ def egress_this_month() -> int:
         return int(row["n"])
 
 
+def play_counts(days: int) -> dict:
+    """Plays and distinct titles from the egress log. One estimated row is
+    one play of a redirected title; proxied rows count one play per
+    distinct (token, calendar day). days=0 means the current UTC day,
+    otherwise the last `days` days."""
+    since = ("strftime('%Y-%m-%d 00:00:00', 'now')" if days <= 0
+             else f"datetime('now', '-{int(days)} days')")
+    with _connect() as conn:
+        estimated = conn.execute(
+            f"SELECT COUNT(*) AS n FROM egress_log WHERE estimated = 1 AND created_at >= {since}"
+        ).fetchone()["n"]
+        proxied = conn.execute(
+            f"SELECT COUNT(*) AS n FROM (SELECT DISTINCT token, date(created_at) AS d "
+            f"FROM egress_log WHERE estimated = 0 AND created_at >= {since})"
+        ).fetchone()["n"]
+        titles = conn.execute(
+            f"SELECT COUNT(DISTINCT token) AS n FROM egress_log WHERE created_at >= {since}"
+        ).fetchone()["n"]
+    return {"plays": int(estimated) + int(proxied), "titles": int(titles)}
+
+
+def count_requests_mirrored() -> tuple[int, int]:
+    """(mirrored, total) over success requests, from requests.arr_mirrored_at."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS total, COALESCE(SUM(arr_mirrored_at IS NOT NULL), 0) AS mirrored "
+            "FROM requests WHERE status = 'success'").fetchone()
+    return int(row["mirrored"]), int(row["total"])
+
+
+def oldest_pending_user_request_age_sec() -> int | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT CAST(strftime('%s', 'now') AS INTEGER) - CAST(strftime('%s', MIN(created_at)) AS INTEGER) AS age "
+            "FROM user_requests WHERE status = 'pending'").fetchone()
+    return int(row["age"]) if row and row["age"] is not None else None
+
+
 def count_wanted_episodes_by_status() -> dict[str, int]:
     with _connect() as conn:
         rows = conn.execute(

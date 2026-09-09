@@ -33,6 +33,7 @@ import retry_queue
 import scraper_metrics
 import scrapers
 import shell_summary
+import overview
 import stats
 import strm_generator
 import tmdb
@@ -1109,6 +1110,14 @@ def ui_api_webhook_secret_rotate():
 @app.get("/ui/api/stats")
 def ui_api_stats():
     return jsonify(stats.get_overview())
+
+
+@app.get("/ui/api/overview")
+def ui_api_overview():
+    """Everything the admin Overview reads from the database, in one call."""
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    return jsonify(overview.get())
 
 
 @app.get("/ui/api/storage")

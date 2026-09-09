@@ -102,11 +102,19 @@ class RateLimited(Exception):
     we never even send a request we know TorBox will reject with 429."""
 
 
+_last_429_at: float | None = None  # wall-clock time of the last 429 from createtorrent
+
+
+def last_429_at() -> float | None:
+    return _last_429_at
+
+
 def add_magnet(magnet: str, timeout: int = 30, reason: str = "unknown",
                cached: bool | None = None) -> dict:
     """Add a magnet. `cached` is what the caller's cache check said: True
     means the add does not count against TorBox's hourly uncached budget.
     TorBox's answer corrects the flag afterwards where it is explicit."""
+    global _last_429_at
     url = f"{_base_url().rstrip('/')}/torrents/createtorrent"
     # Client-side guard: check both the 60/hour and the 10/minute edge limits,
     # and reserve the slot in the same locked step (see _reserve_createtorrent_slot).
@@ -116,6 +124,7 @@ def add_magnet(magnet: str, timeout: int = 30, reason: str = "unknown",
         resp = requests.post(url, headers=_headers(), data={"magnet": magnet}, timeout=timeout)
         if resp.status_code == 429:
             retry_after = int(resp.headers.get("Retry-After", 60))
+            _last_429_at = time.time()
             log.warning("createtorrent [%s] got 429 from TorBox (Retry-After=%ds)  -  raising RateLimited",
                         reason, retry_after)
             raise RateLimited()
