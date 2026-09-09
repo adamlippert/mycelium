@@ -155,6 +155,28 @@ def test_build_survives_a_failing_source(monkeypatch):
     assert out["status"]["scrapers"] == []
 
 
+def test_build_survives_stats_build_overview_failing(monkeypatch):
+    import stats
+    monkeypatch.setattr(stats, "_build_overview", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    out = overview.build()
+    s = out["status"]
+    assert s["failures_7d"] == 0 and s["queue"] == {"retry": 0, "wanted": 0}
+    a = out["activity"]
+    assert a["requests_7d"] == {"total": 0, "succeeded": 0, "failed": 0, "success_rate": 0.0}
+    assert a["egress"] == {"proxied_bytes": 0, "estimated_bytes": 0}
+    lib = out["library"]
+    assert lib["movies"] == 0 and lib["episodes"] == 0 and lib["series"] == 0
+    assert lib["wanted"] == 0 and lib["upcoming"] == 0 and lib["qualities"] == {}
+    assert "consistency" in lib
+
+
+def test_consistency_reports_the_last_cleanup_run():
+    run_id = db.insert_cleanup_run()
+    db.update_cleanup_run(run_id, scanned=10, repaired=2, deleted=3, unfixable=0)
+    out = overview._consistency()
+    assert out["last_cleanup"] == {"ran_at": db.get_last_cleanup_run()["ran_at"], "deleted": 3}
+
+
 def test_get_caches_for_the_ttl(monkeypatch):
     calls = []
     monkeypatch.setattr(overview, "build", lambda: calls.append(1) or {"x": len(calls)})

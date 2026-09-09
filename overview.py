@@ -66,30 +66,43 @@ def _consistency() -> dict:
             "last_cleanup": ({"ran_at": last["ran_at"], "deleted": int(last.get("deleted", 0))} if last else None)}
 
 
+_BASE_DEFAULT = {
+    "library": {"movie_count": 0, "episode_count": 0, "series_count": 0},
+    "requests": {"total": 0, "succeeded_7d": 0, "failed_7d": 0, "success_rate_7d": 0.0},
+    "wanted": {"active": 0, "found": 0, "give_up": 0},
+    "movies_pending": 0,
+    "egress_bytes_month": 0,
+    "egress_estimated_bytes_month": 0,
+    "qualities": {},
+}
+_PLAY_COUNTS_DEFAULT = {"plays": 0, "titles": 0}
+
+
 def build() -> dict:
     import egress_estimate
     import stats
     import torbox
-    base = stats._build_overview()
-    req = db.get_request_stats(days=7)
-    wanted = db.count_wanted_episodes_by_status()
-    today = db.play_counts(0)
-    week = db.play_counts(7)
-    last_429 = torbox.last_429_at()
+    base = _safe(stats._build_overview, _BASE_DEFAULT)
+    today = _safe(lambda: db.play_counts(0), _PLAY_COUNTS_DEFAULT)
+    week = _safe(lambda: db.play_counts(7), _PLAY_COUNTS_DEFAULT)
+    last_429 = _safe(torbox.last_429_at, None)
+    failed_7d = int(base["requests"]["failed_7d"])
+    succeeded_7d = int(base["requests"]["succeeded_7d"])
+    wanted_active = int(base["wanted"]["active"])
     return {
         "status": {
             "scrapers": _safe(_scrapers, []),
             "torbox_adds": _safe(_torbox_adds, {"uncached": 0, "cached": 0, "limit": 60, "resets_in_sec": 0}),
-            "failures_7d": int(req["failed"]),
-            "queue": {"retry": len(_safe(db.get_pending_retries, [])), "wanted": int(wanted.get("wanted", 0))},
+            "failures_7d": failed_7d,
+            "queue": {"retry": len(_safe(db.get_pending_retries, [])), "wanted": wanted_active},
             "attention": _safe(_attention, 0),
             "approvals": _safe(_approvals, {"pending": 0, "oldest_age_sec": None}),
         },
         "activity": {
             "plays": {"today": today["plays"], "week": week["plays"],
                       "titles_today": today["titles"], "titles_week": week["titles"]},
-            "requests_7d": {"total": int(req["succeeded"]) + int(req["failed"]),
-                            "succeeded": int(req["succeeded"]), "failed": int(req["failed"]),
+            "requests_7d": {"total": succeeded_7d + failed_7d,
+                            "succeeded": succeeded_7d, "failed": failed_7d,
                             "success_rate": base["requests"]["success_rate_7d"]},
             "egress": {"proxied_bytes": base["egress_bytes_month"],
                        "estimated_bytes": base["egress_estimated_bytes_month"]},
@@ -98,7 +111,7 @@ def build() -> dict:
             "movies": base["library"]["movie_count"],
             "episodes": base["library"]["episode_count"],
             "series": base["library"]["series_count"],
-            "wanted": int(wanted.get("wanted", 0)),
+            "wanted": wanted_active,
             "upcoming": int(base.get("movies_pending", 0)),
             "qualities": base["qualities"],
             "consistency": _safe(_consistency, {"db_items": 0, "strm_without_db": 0, "db_without_strm": 0,
