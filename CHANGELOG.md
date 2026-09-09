@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.25.1] - 2026-09-08
+
 ### Fixed
 
 - The Overview's scraper states no longer sit on "unknown". The page
