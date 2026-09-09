@@ -4,6 +4,20 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- The admin Overview is rebuilt as five bands, problems first. A status
+  strip shows services, scrapers, TorBox adds, failures, the queue,
+  titles needing attention and pending approvals, each with a link to
+  the tab that fixes it and a glow only when something is wrong. New
+  figures: plays today and this week (from the egress rows), pending
+  approvals with the oldest age, titles needing attention, per-scraper
+  state and latency, titles streamed in the last 15 minutes, and the
+  last TorBox 429. The two TorBox cards are one card; metrics, the
+  integration endpoints and the top folders are collapsed sections that
+  remember their state and load only when opened. Everything the
+  database can answer comes from one new `GET /ui/api/overview` call.
+
 ## [0.24.1] - 2026-09-08
 
 ### Changed
