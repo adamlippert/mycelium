@@ -33,17 +33,20 @@ export default function Overview() {
   return (
     <div className="space-y-7">
       <Band title="Right now" hint="refreshes every 30 s; quiet rows stay quiet">
-        <StatusStrip status={o?.status} services={healthQ.data?.services} loading={overviewQ.isLoading} error={overviewQ.isError} />
+        <StatusStrip status={o?.status} services={healthQ.data?.services} servicesLoading={healthQ.isLoading}
+          loading={overviewQ.isLoading} error={overviewQ.isError} errors={o?.errors} />
         {o && <ScraperStrip scrapers={o.status.scrapers} />}
       </Band>
       <Band title="Activity" hint="what people did, and what it cost">
-        <ActivityBand activity={o?.activity} events={activityQ.data?.events} loading={overviewQ.isLoading} />
+        <ActivityBand activity={o?.activity} events={activityQ.data?.events} loading={overviewQ.isLoading} errors={o?.errors} />
       </Band>
       <Band title="Library" hint="what is on the shelf">
-        <LibraryBand library={o?.library} torbox={torboxUsageQ.data} loading={overviewQ.isLoading} />
+        <LibraryBand library={o?.library} torbox={torboxUsageQ.data} loading={overviewQ.isLoading}
+          torboxLoading={torboxUsageQ.isLoading} errors={o?.errors} />
       </Band>
       <Band title="TorBox">
-        <TorboxCard adds={o?.status.torbox_adds} byReason={quotaQ.data?.by_reason} usage={torboxUsageQ.data}
+        <TorboxCard adds={o?.status.torbox_adds} addsLoading={quotaQ.isLoading} byReason={quotaQ.data?.by_reason}
+          usage={torboxUsageQ.data} usageLoading={torboxUsageQ.isLoading}
           streamFront={healthQ.data?.stream_front} recentStreams={o?.torbox.recent_streams} last429At={o?.torbox.last_429_at} idleMinutes={null} />
       </Band>
       <Band title="Reference" hint="collapsed by default; state remembered">

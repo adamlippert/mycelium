@@ -17,7 +17,7 @@ const events = [
 
 describe('ActivityBand', () => {
   it('renders the five tiles with the documented formats', () => {
-    render(<MemoryRouter><ActivityBand activity={activity} events={events} loading={false} /></MemoryRouter>);
+    render(<MemoryRouter><ActivityBand activity={activity} events={events} loading={false} errors={[]} /></MemoryRouter>);
     expect(screen.getByText('4')).toBeInTheDocument();
     expect(screen.getByText('3 titles')).toBeInTheDocument();
     expect(screen.getByText('23')).toBeInTheDocument();
@@ -30,7 +30,7 @@ describe('ActivityBand', () => {
   });
 
   it('renders the feed with pills by event family and a link to the logs', () => {
-    render(<MemoryRouter><ActivityBand activity={activity} events={events} loading={false} /></MemoryRouter>);
+    render(<MemoryRouter><ActivityBand activity={activity} events={events} loading={false} errors={[]} /></MemoryRouter>);
     expect(screen.getByText('Severance S02E04')).toBeInTheDocument();
     expect(screen.getByText('play')).toBeInTheDocument();
     expect(screen.getByText('swap')).toBeInTheDocument();
@@ -43,5 +43,19 @@ describe('ActivityBand', () => {
     expect(eventPill('upgraded')).toEqual({ label: 'upgrade', tone: 'neutral' });
     expect(eventPill('failed')).toEqual({ label: 'failed', tone: 'danger' });
     expect(eventPill('mystery')).toBeNull();
+  });
+
+  it('marks the plays tiles unavailable when the plays block failed, leaving the rest alone', () => {
+    render(<MemoryRouter><ActivityBand activity={activity} events={events} loading={false} errors={['plays']} /></MemoryRouter>);
+    expect(screen.getAllByText('unavailable')).toHaveLength(2);
+    expect(screen.getByText('11')).toBeInTheDocument();
+    expect(screen.getByText('82%')).toBeInTheDocument();
+  });
+
+  it('marks requests, success rate and egress unavailable when the base block failed', () => {
+    render(<MemoryRouter><ActivityBand activity={activity} events={events} loading={false} errors={['base']} /></MemoryRouter>);
+    expect(screen.getAllByText('unavailable')).toHaveLength(3);
+    expect(screen.getByText('4')).toBeInTheDocument();
+    expect(screen.getByText('23')).toBeInTheDocument();
   });
 });

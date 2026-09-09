@@ -87,6 +87,19 @@ def _probe(name: str) -> bool:
     return True
 
 
+def peek(name: str) -> bool | None:
+    """The cached probe result for name, without ever probing: None when
+    nothing is cached yet or the cached entry has aged past
+    HEALTH_CACHE_SECONDS. Used by a caller that must never make an outbound
+    request itself (the admin Overview poll)."""
+    now = time.monotonic()
+    with _lock:
+        cached = _cache.get(name)
+    if cached and now - cached[1] < HEALTH_CACHE_SECONDS:
+        return cached[0]
+    return None
+
+
 def is_up(name: str) -> bool:
     if name == "zilean" and (
         not _settings.get("ZILEAN_ENABLED", False)

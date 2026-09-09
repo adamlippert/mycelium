@@ -11,9 +11,17 @@ const library = {
 };
 const torbox = { usage: { torrent_count: 128, total_bytes: 3_400_000_000_000, total_gb: 3400, states: {} }, plan: 'Pro' };
 
+function renderIt(props: Partial<Parameters<typeof LibraryBand>[0]> = {}) {
+  return render(
+    <MemoryRouter>
+      <LibraryBand library={library} torbox={torbox} loading={false} torboxLoading={false} errors={[]} {...props} />
+    </MemoryRouter>,
+  );
+}
+
 describe('LibraryBand', () => {
   it('renders size tiles, quality shares and consistency', () => {
-    render(<MemoryRouter><LibraryBand library={library} torbox={torbox} loading={false} /></MemoryRouter>);
+    renderIt();
     expect(screen.getByText('312')).toBeInTheDocument();
     expect(screen.getByText('1,940')).toBeInTheDocument();
     expect(screen.getByText('64 series')).toBeInTheDocument();
@@ -27,7 +35,26 @@ describe('LibraryBand', () => {
   });
 
   it('shows the TorBox tile as unavailable when the list failed', () => {
-    render(<MemoryRouter><LibraryBand library={library} torbox={undefined} loading={false} /></MemoryRouter>);
+    renderIt({ torbox: undefined });
     expect(screen.getByText('unavailable')).toBeInTheDocument();
+  });
+
+  it('shows the TorBox tile as "-" while its query is loading, not unavailable', () => {
+    renderIt({ torbox: undefined, torboxLoading: true });
+    expect(screen.queryByText('unavailable')).not.toBeInTheDocument();
+    const sizeCard = screen.getByText('Size').parentElement as HTMLElement;
+    expect(within(sizeCard).getByText('-')).toBeInTheDocument();
+  });
+
+  it('marks the size tiles unavailable when the base block failed, even with library data present', () => {
+    renderIt({ errors: ['base'] });
+    const sizeCard = screen.getByText('Size').parentElement as HTMLElement;
+    expect(within(sizeCard).getAllByText('unavailable').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('marks the consistency card unavailable when the consistency block failed', () => {
+    renderIt({ errors: ['consistency'] });
+    const consistencyCard = screen.getByText('Consistency').parentElement as HTMLElement;
+    expect(within(consistencyCard).getByText('unavailable')).toBeInTheDocument();
   });
 });

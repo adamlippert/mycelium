@@ -31,6 +31,11 @@ def _isolated_db(tmp_path, monkeypatch):
     db.init()
     egress_estimate._reset()
     overview._cache["data"] = None
+    overview._orphans_cache["data"] = None
+    overview._orphans_cache["ts"] = None
+    import stats
+    stats._overview_cache["data"] = None
+    stats._overview_cache["ts"] = 0.0
     yield
     _drop_cached_conn()
 
@@ -119,7 +124,7 @@ def test_last_429_is_recorded_by_add_magnet(monkeypatch):
 def test_build_has_the_documented_shape(monkeypatch):
     import library_sync
     import scrapers
-    monkeypatch.setattr(scrapers, "health_rows", lambda: [
+    monkeypatch.setattr(scrapers, "health_rows", lambda probe=True: [
         {"name": "torrentio", "state": "ok", "latency_ms": 640.0, "samples": 3},
         {"name": "comet", "state": "down", "latency_ms": None, "samples": 0}])
     monkeypatch.setattr(torbox, "createtorrent_usage", lambda window_sec=3600: {
@@ -146,18 +151,20 @@ def test_build_has_the_documented_shape(monkeypatch):
     assert lib["consistency"] == {"db_items": 295, "strm_without_db": 5, "db_without_strm": 0,
                                   "arr_mirrored": 0, "arr_total": 1, "last_cleanup": None}
     assert out["torbox"] == {"recent_streams": 0, "last_429_at": None}
+    assert out["errors"] == []
 
 
 def test_build_survives_a_failing_source(monkeypatch):
     import scrapers
-    monkeypatch.setattr(scrapers, "health_rows", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(scrapers, "health_rows", lambda probe=True: (_ for _ in ()).throw(RuntimeError("boom")))
     out = overview.build()
     assert out["status"]["scrapers"] == []
+    assert out["errors"] == ["scrapers"]
 
 
-def test_build_survives_stats_build_overview_failing(monkeypatch):
+def test_build_survives_get_overview_failing(monkeypatch):
     import stats
-    monkeypatch.setattr(stats, "_build_overview", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(stats, "get_overview", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
     out = overview.build()
     s = out["status"]
     assert s["failures_7d"] == 0 and s["queue"] == {"retry": 0, "wanted": 0}
@@ -168,6 +175,56 @@ def test_build_survives_stats_build_overview_failing(monkeypatch):
     assert lib["movies"] == 0 and lib["episodes"] == 0 and lib["series"] == 0
     assert lib["wanted"] == 0 and lib["upcoming"] == 0 and lib["qualities"] == {}
     assert "consistency" in lib
+    assert "base" in out["errors"]
+
+
+def test_build_calls_the_cached_overview_not_the_raw_walk(monkeypatch):
+    """I4: overview.build() must go through stats.get_overview() (the 60s
+    shared cache), never stats._build_overview() (the uncached media-tree
+    walk plus six heavy view-count queries)."""
+    import stats
+    calls = []
+    monkeypatch.setattr(stats, "get_overview", lambda: calls.append("cached") or dict(overview._BASE_DEFAULT))
+    monkeypatch.setattr(stats, "_build_overview",
+                        lambda: calls.append("raw") or (_ for _ in ()).throw(AssertionError("must not run the raw walk")))
+    overview.build()
+    assert calls == ["cached"]
+
+
+def test_build_never_probes_scrapers_over_the_network(monkeypatch):
+    """I2: the Overview poll must never make an outbound HTTP request. A
+    raised exception from a faked requests.get would be swallowed by
+    health_cache._probe's own try/except, so this asserts the call count
+    directly rather than relying on the exception to surface."""
+    import health_cache
+    calls = []
+    monkeypatch.setattr(health_cache.requests, "get", lambda *a, **k: calls.append(1) or (_ for _ in ()).throw(RuntimeError("unreachable")))
+    out = overview.build()
+    assert calls == []
+    assert "scrapers" not in out["errors"]
+
+
+def test_orphans_are_cached_across_builds_and_refreshed_after_the_ttl(monkeypatch):
+    import library_sync
+    calls = []
+    monkeypatch.setattr(library_sync, "orphans", lambda: calls.append(1) or {
+        "db_count": 0, "strm_without_db": 0, "db_without_strm": 0})
+    monkeypatch.setattr(overview.time, "monotonic", lambda: 1000.0)
+    overview.build()
+    overview.build()
+    assert len(calls) == 1
+    monkeypatch.setattr(overview.time, "monotonic", lambda: 1000.0 + overview.ORPHANS_CACHE_TTL_SEC + 1)
+    overview.build()
+    assert len(calls) == 2
+
+
+def test_view_count_attention_matches_view_counts(monkeypatch):
+    import library_admin
+    db.insert_request("A", "tt1", "movie")
+    rid = db.insert_request("B", "tt2", "movie")
+    db.update_request(rid, "failed", error="boom")
+    assert library_admin.view_count("attention") == library_admin.view_counts()["attention"]
+    assert library_admin.view_count("attention") > 0
 
 
 def test_consistency_reports_the_last_cleanup_run():

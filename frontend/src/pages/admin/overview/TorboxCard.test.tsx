@@ -6,8 +6,9 @@ const usage = { usage: { torrent_count: 128, total_bytes: 3_400_000_000_000, tot
 
 describe('TorboxCard', () => {
   it('merges budget, library and streaming into one card', () => {
-    render(<TorboxCard adds={{ uncached: 3, cached: 41, limit: 60, resets_in_sec: 2520 }} byReason={{ 'catbox-search': 2, processor: 1 }}
-      usage={usage} streamFront recentStreams={2} last429At={null} idleMinutes={90} />);
+    render(<TorboxCard adds={{ uncached: 3, cached: 41, limit: 60, resets_in_sec: 2520 }} addsLoading={false}
+      byReason={{ 'catbox-search': 2, processor: 1 }}
+      usage={usage} usageLoading={false} streamFront recentStreams={2} last429At={null} idleMinutes={90} />);
     expect(screen.getByText('3 / 60')).toBeInTheDocument();
     expect(screen.getByText('41 cached adds this hour, not limited by TorBox. Resets in 42 min.')).toBeInTheDocument();
     expect(screen.getByText('catbox-search')).toBeInTheDocument();
@@ -21,9 +22,17 @@ describe('TorboxCard', () => {
 
   it('shows the last 429 as a relative time and the Flask front when the Go front is off', () => {
     const t = new Date(Date.now() - 3 * 86400 * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
-    render(<TorboxCard adds={undefined} byReason={undefined} usage={undefined} streamFront={false} recentStreams={0} last429At={t} idleMinutes={null} />);
+    render(<TorboxCard adds={undefined} addsLoading={false} byReason={undefined} usage={undefined} usageLoading={false}
+      streamFront={false} recentStreams={0} last429At={t} idleMinutes={null} />);
     expect(screen.getByText('3 d ago')).toBeInTheDocument();
     expect(screen.getByText('Flask')).toBeInTheDocument();
     expect(screen.getAllByText('unavailable').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('shows the adds and usage columns as "-" while loading, not unavailable', () => {
+    render(<TorboxCard adds={undefined} addsLoading byReason={undefined} usage={undefined} usageLoading
+      streamFront={false} recentStreams={0} last429At={null} idleMinutes={null} />);
+    expect(screen.queryByText('unavailable')).not.toBeInTheDocument();
+    expect(screen.getAllByText('-').length).toBeGreaterThanOrEqual(2);
   });
 });

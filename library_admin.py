@@ -179,6 +179,14 @@ def view_counts() -> dict[str, int]:
     return out
 
 
+def view_count(view: str) -> int:
+    """One view's count, without running the other five. Used by a poller
+    that only needs a single rail number (the admin Overview's Attention
+    cell) and would otherwise pay for the whole rail on every call."""
+    with db._connect() as conn:
+        return conn.execute(f"SELECT COUNT(*) FROM ({_BASE}) t WHERE {_VIEW_WHERE[view]}").fetchone()[0]
+
+
 def _seasons_summary(imdb_id: str) -> list[dict]:
     with db._connect() as conn:
         present = {r["season"]: r["n"] for r in conn.execute(

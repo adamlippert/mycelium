@@ -5,13 +5,17 @@ import { formatGiB } from './format';
 
 const nf = new Intl.NumberFormat('en-US');
 
-export function LibraryBand({ library, torbox, loading }: {
+export function LibraryBand({ library, torbox, loading, torboxLoading, errors }: {
   library: OverviewPayload['library'] | undefined; torbox: TorBoxUsage | undefined; loading: boolean;
+  torboxLoading: boolean; errors: string[] | undefined;
 }) {
-  const v = (s: string) => (loading || !library ? '-' : s);
+  const baseFailed = (errors ?? []).includes('base');
+  const consistencyFailed = (errors ?? []).includes('consistency');
+  const v = (s: string) => (loading ? '-' : baseFailed ? 'unavailable' : !library ? '-' : s);
   const q = Object.entries(library?.qualities ?? {}).sort((a, b) => b[1] - a[1]);
   const total = q.reduce((s, [, n]) => s + n, 0) || 1;
   const c = library?.consistency;
+  const consistencyOff = !c || consistencyFailed;
   return (
     <div className="grid gap-3 lg:grid-cols-3">
       <Card>
@@ -20,8 +24,8 @@ export function LibraryBand({ library, torbox, loading }: {
           <StatTile value={v(nf.format(library?.movies ?? 0))} label="Movies" />
           <StatTile value={v(nf.format(library?.episodes ?? 0))} label="Episodes" sub={library ? `${library.series} series` : undefined} />
           <StatTile value={v(String(library?.wanted ?? 0))} label="Wanted" sub={library ? `${library.upcoming} upcoming` : undefined} />
-          <StatTile value={torbox ? formatGiB(torbox.usage.total_bytes) : 'unavailable'} label="On TorBox"
-            sub={torbox ? `${torbox.usage.torrent_count} torrents` : undefined} />
+          <StatTile value={torboxLoading ? '-' : torbox ? formatGiB(torbox.usage.total_bytes) : 'unavailable'} label="On TorBox"
+            sub={torboxLoading ? undefined : torbox ? `${torbox.usage.torrent_count} torrents` : undefined} />
         </div>
       </Card>
       <Card>
@@ -43,14 +47,14 @@ export function LibraryBand({ library, torbox, loading }: {
       </Card>
       <Card>
         <div className="mb-3 text-sm font-semibold text-body">Consistency</div>
-        {!c ? <p className="text-xs text-muted">{loading ? 'Loading…' : 'unavailable'}</p> : (
+        {consistencyOff ? <p className="text-xs text-muted">{loading ? 'Loading…' : 'unavailable'}</p> : (
           <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-xs">
-            <span className="text-muted">DB items</span><span className="text-right font-mono text-body">{nf.format(c.db_items)}</span>
-            <span className="text-muted">strm without DB row</span><span className={`text-right font-mono ${c.strm_without_db > 0 ? 'text-warn' : 'text-body'}`}>{c.strm_without_db}</span>
-            <span className="text-muted">DB row without strm</span><span className={`text-right font-mono ${c.db_without_strm > 0 ? 'text-warn' : 'text-body'}`}>{c.db_without_strm}</span>
-            <span className="text-muted">Arr mirror</span><span className="text-right font-mono text-body">{c.arr_mirrored}/{c.arr_total}</span>
+            <span className="text-muted">DB items</span><span className="text-right font-mono text-body">{nf.format(c!.db_items)}</span>
+            <span className="text-muted">strm without DB row</span><span className={`text-right font-mono ${c!.strm_without_db > 0 ? 'text-warn' : 'text-body'}`}>{c!.strm_without_db}</span>
+            <span className="text-muted">DB row without strm</span><span className={`text-right font-mono ${c!.db_without_strm > 0 ? 'text-warn' : 'text-body'}`}>{c!.db_without_strm}</span>
+            <span className="text-muted">Arr mirror</span><span className="text-right font-mono text-body">{c!.arr_mirrored}/{c!.arr_total}</span>
             <span className="text-muted">Last cleanup</span>
-            <span className="text-right font-mono text-body">{c.last_cleanup ? `${c.last_cleanup.ran_at.slice(11, 16)}, ${c.last_cleanup.deleted} removed` : 'never'}</span>
+            <span className="text-right font-mono text-body">{c!.last_cleanup ? `${c!.last_cleanup.ran_at.slice(11, 16)}, ${c!.last_cleanup.deleted} removed` : 'never'}</span>
           </div>
         )}
         <Link to={{ hash: 'maintenance' }} className="mt-3 block text-[11px] text-accent-light hover:underline">Run integrity check</Link>

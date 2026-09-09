@@ -66,6 +66,11 @@ export type OverviewPayload = {
     };
   };
   torbox: { recent_streams: number; last_429_at: string | null };
+  /** Names of the blocks whose backend source failed and fell back to a
+   * neutral default: base, scrapers, torbox_adds, attention, approvals,
+   * consistency, plays, last_429. Cells that read from a failed block show
+   * "unavailable" instead of the (fake) default value. */
+  errors: string[];
 };
 
 /** Whether OIDC / password login are available, read from the meta tags

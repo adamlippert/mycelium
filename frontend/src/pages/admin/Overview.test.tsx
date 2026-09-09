@@ -39,6 +39,7 @@ vi.mock('../../api', async () => {
           },
         },
         torbox: { recent_streams: 2, last_429_at: null },
+        errors: [],
       }),
       health: () => Promise.resolve({
         services: [

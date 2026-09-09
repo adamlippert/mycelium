@@ -86,6 +86,26 @@ def test_torznab_scrapers_are_listed_and_disabled_by_default(monkeypatch):
     assert list(rows) == ["debridio", "zilean", "comet", "mediafusion", "torrentio"]
 
 
+def test_probe_false_with_no_cache_yields_unknown(monkeypatch):
+    """I2: the admin Overview poll must never probe. With nothing cached
+    yet for a scraper without latency samples, the state stays unknown
+    rather than falling back to a live probe."""
+    import health_cache
+    _settings_returning({}, monkeypatch)
+    monkeypatch.delitem(health_cache._cache, "torrentio", raising=False)
+    rows = {r["name"]: r for r in scrapers.health_rows(probe=False)}
+    assert rows["torrentio"]["state"] == "unknown"
+
+
+def test_probe_false_with_a_fresh_cached_result_yields_ok(monkeypatch):
+    import health_cache
+    import time as _time
+    _settings_returning({}, monkeypatch)
+    monkeypatch.setitem(health_cache._cache, "torrentio", (True, _time.monotonic()))
+    rows = {r["name"]: r for r in scrapers.health_rows(probe=False)}
+    assert rows["torrentio"]["state"] == "ok"
+
+
 def test_the_endpoint_uses_health_rows_not_active():
     with open(os.path.join(os.path.dirname(__file__), "..", "app.py")) as f:
         src = f.read()

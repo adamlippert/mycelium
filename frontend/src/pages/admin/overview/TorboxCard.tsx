@@ -13,9 +13,11 @@ function ago(iso: string): string {
 
 const STATE_LABEL: Record<string, string> = { completed: 'Ready', cached: 'Ready', downloading: 'Downloading', stalled: 'Stalled', meta_dl: 'Fetching metadata', uploading: 'Seeding', paused: 'Paused' };
 
-export function TorboxCard({ adds, byReason, usage, streamFront, recentStreams, last429At, idleMinutes }: {
-  adds: OverviewPayload['status']['torbox_adds'] | undefined; byReason: Record<string, number> | undefined;
-  usage: TorBoxUsage | undefined; streamFront: boolean | undefined; recentStreams: number | undefined;
+export function TorboxCard({ adds, addsLoading, byReason, usage, usageLoading, streamFront, recentStreams, last429At, idleMinutes }: {
+  adds: OverviewPayload['status']['torbox_adds'] | undefined; addsLoading: boolean;
+  byReason: Record<string, number> | undefined;
+  usage: TorBoxUsage | undefined; usageLoading: boolean;
+  streamFront: boolean | undefined; recentStreams: number | undefined;
   last429At: string | null | undefined; idleMinutes: number | null;
 }) {
   const states = Object.entries(usage?.usage.states ?? {}).sort((a, b) => b[1] - a[1]);
@@ -24,7 +26,9 @@ export function TorboxCard({ adds, byReason, usage, streamFront, recentStreams, 
       <div className="mb-3 text-sm font-semibold text-body">TorBox</div>
       <div className="grid gap-5 text-xs lg:grid-cols-3">
         <div>
-          {adds ? (
+          {addsLoading ? (
+            <p className="text-muted">-</p>
+          ) : adds ? (
             <>
               <div className="mb-2 flex items-baseline justify-between"><span className="text-muted">Uncached adds this hour</span><span className="font-mono text-body">{adds.uncached} / {adds.limit}</span></div>
               <div className="h-1.5 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, Math.round((100 * adds.uncached) / (adds.limit || 1)))}%` }} /></div>
@@ -38,7 +42,9 @@ export function TorboxCard({ adds, byReason, usage, streamFront, recentStreams, 
           ) : <p className="text-muted">unavailable</p>}
         </div>
         <div className="grid grid-cols-[1fr_auto] content-start gap-x-4 gap-y-1">
-          {usage ? (
+          {usageLoading ? (
+            <span className="text-muted">-</span>
+          ) : usage ? (
             <>
               <Row k="Torrents" v={String(usage.usage.torrent_count)} />
               <Row k="Total size" v={formatGiB(usage.usage.total_bytes)} />

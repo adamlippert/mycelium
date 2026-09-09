@@ -41,25 +41,31 @@ function clock(ts: string): string {
   return m ? `${m[1]}:${m[2]}` : ts;
 }
 
-export function ActivityBand({ activity, events, loading }: {
+export function ActivityBand({ activity, events, loading, errors }: {
   activity: OverviewPayload['activity'] | undefined; events: ActivityEvent[] | undefined; loading: boolean;
+  errors: string[] | undefined;
 }) {
   const p = activity?.plays;
   const r = activity?.requests_7d;
   const e = activity?.egress;
-  const v = (s: string) => (loading || !activity ? '-' : s);
+  const playsOff = (errors ?? []).includes('plays');
+  const baseOff = (errors ?? []).includes('base');
+  // loading or a wholly missing payload keeps the pre-existing "-"; a named
+  // block that failed (while the rest of the payload loaded fine) reads
+  // "unavailable" instead of the block's fake zero default.
+  const v = (s: string, blockOff: boolean) => (loading || !activity ? '-' : blockOff ? 'unavailable' : s);
   return (
     <div className="grid gap-3 lg:grid-cols-[1.1fr_1fr]">
       <Card>
         <div className="mb-3 text-sm font-semibold text-body">Watching and requesting</div>
         <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))' }}>
-          <StatTile value={v(String(p?.today ?? 0))} label="Plays today" sub={p ? `${p.titles_today} titles` : undefined} />
-          <StatTile value={v(String(p?.week ?? 0))} label="Plays this week" sub={p ? `${p.titles_week} titles` : undefined} />
-          <StatTile value={v(String(r?.total ?? 0))} label="Requests 7d" sub={r ? `${r.succeeded} ok, ${r.failed} failed` : undefined}
-            glow={r && r.failed > 0 ? 'danger' : undefined} />
-          <StatTile value={v(r ? `${Math.round(r.success_rate)}%` : '-')} label="Success rate 7d" glow="ok" />
-          <StatTile value={v(e ? formatTB(e.proxied_bytes + e.estimated_bytes) : '-')} label="Egress this month"
-            sub={e ? `${formatTB(e.proxied_bytes)} proxied, ${formatTB(e.estimated_bytes)} estimated` : undefined} />
+          <StatTile value={v(String(p?.today ?? 0), playsOff)} label="Plays today" sub={p && !playsOff ? `${p.titles_today} titles` : undefined} />
+          <StatTile value={v(String(p?.week ?? 0), playsOff)} label="Plays this week" sub={p && !playsOff ? `${p.titles_week} titles` : undefined} />
+          <StatTile value={v(String(r?.total ?? 0), baseOff)} label="Requests 7d" sub={r && !baseOff ? `${r.succeeded} ok, ${r.failed} failed` : undefined}
+            glow={r && r.failed > 0 && !baseOff ? 'danger' : undefined} />
+          <StatTile value={v(r ? `${Math.round(r.success_rate)}%` : '-', baseOff)} label="Success rate 7d" glow="ok" />
+          <StatTile value={v(e ? formatTB(e.proxied_bytes + e.estimated_bytes) : '-', baseOff)} label="Egress this month"
+            sub={e && !baseOff ? `${formatTB(e.proxied_bytes)} proxied, ${formatTB(e.estimated_bytes)} estimated` : undefined} />
         </div>
       </Card>
       <Card>

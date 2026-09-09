@@ -114,7 +114,7 @@ _SCRAPERS = [
 ]
 
 
-def health_rows() -> list[dict]:
+def health_rows(probe: bool = True) -> list[dict]:
     """Every scraper for the admin Scrapers page, in _SCRAPERS order.
 
     Deliberately NOT _active(): that is a traffic-routing filter, and using
@@ -123,7 +123,11 @@ def health_rows() -> list[dict]:
     probe failed vanished instead of showing "down". Disabled scrapers are
     listed as such, and when this process has no latency samples yet (they
     are in-memory, so every restart clears them) the live health probe
-    stands in for "unknown"."""
+    stands in for "unknown".
+
+    probe=False (the admin Overview poll) never makes an outbound request:
+    a scraper without latency samples reports the cached probe result via
+    health_cache.peek() when one is still fresh, else "unknown"."""
     import scraper_metrics
     rows = []
     for name, key, _fn in _SCRAPERS:
@@ -133,7 +137,11 @@ def health_rows() -> list[dict]:
             continue
         row = scraper_metrics.get_health([name])[0]
         if row["state"] == "unknown":
-            row["state"] = "ok" if health_cache.is_up(name) else "down"
+            if probe:
+                row["state"] = "ok" if health_cache.is_up(name) else "down"
+            else:
+                cached = health_cache.peek(name)
+                row["state"] = "unknown" if cached is None else ("ok" if cached else "down")
         rows.append(row)
     return rows
 
