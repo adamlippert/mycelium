@@ -16,3 +16,5 @@ export { Select } from './Select';
 export type { Option } from './Select';
 export { MultiSelect } from './MultiSelect';
 export { OrderedList } from './OrderedList';
+export { StatusCell } from './StatusCell';
+export type { StatusTone } from './StatusCell';

@@ -41,6 +41,33 @@ export type StatsOverview = {
   qualities: Record<string, number>;
 };
 
+/** GET /ui/api/overview, built by overview.py. Service pings and the TorBox list are separate calls. */
+export type OverviewPayload = {
+  status: {
+    scrapers: { name: string; state: 'ok' | 'slow' | 'down' | 'unknown' | 'disabled'; latency_ms: number | null }[];
+    torbox_adds: { uncached: number; cached: number; limit: number; resets_in_sec: number };
+    failures_7d: number;
+    queue: { retry: number; wanted: number };
+    attention: number;
+    approvals: { pending: number; oldest_age_sec: number | null };
+  };
+  activity: {
+    plays: { today: number; week: number; titles_today: number; titles_week: number };
+    requests_7d: { total: number; succeeded: number; failed: number; success_rate: number };
+    egress: { proxied_bytes: number; estimated_bytes: number };
+  };
+  library: {
+    movies: number; episodes: number; series: number; wanted: number; upcoming: number;
+    qualities: Record<string, number>;
+    consistency: {
+      db_items: number; strm_without_db: number; db_without_strm: number;
+      arr_mirrored: number; arr_total: number;
+      last_cleanup: { ran_at: string; deleted: number } | null;
+    };
+  };
+  torbox: { recent_streams: number; last_429_at: string | null };
+};
+
 /** Whether OIDC / password login are available, read from the meta tags
  * _spa_index() embeds in the served HTML (see app.py). GET /ui/api/session
  * cannot be the source here: it 401s for a logged-out visitor, which is
@@ -270,6 +297,7 @@ export const api = {
   session: () => http<SessionInfo>('/ui/api/session'),
   loginFlags,
   stats: () => http<StatsOverview>('/ui/api/stats'),
+  overview: () => http<OverviewPayload>('/ui/api/overview'),
   libraryStatusMap: () => http<Record<string, string>>('/ui/api/library/status-map'),
   libraryMovies: (opts?: { page?: number; pageSize?: number; search?: string; filter?: string }) => {
     const params = new URLSearchParams();
