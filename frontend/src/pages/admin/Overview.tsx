@@ -45,7 +45,7 @@ export default function Overview() {
           torboxLoading={torboxUsageQ.isLoading} errors={o?.errors} />
       </Band>
       <Band title="TorBox">
-        <TorboxCard adds={o?.status.torbox_adds} addsLoading={quotaQ.isLoading} byReason={quotaQ.data?.by_reason}
+        <TorboxCard adds={o?.status.torbox_adds} addsLoading={overviewQ.isLoading} byReason={quotaQ.data?.by_reason}
           usage={torboxUsageQ.data} usageLoading={torboxUsageQ.isLoading}
           streamFront={healthQ.data?.stream_front} recentStreams={o?.torbox.recent_streams} last429At={o?.torbox.last_429_at} idleMinutes={null} />
       </Band>
