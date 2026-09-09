@@ -88,16 +88,55 @@ def _probe(name: str) -> bool:
 
 
 def peek(name: str) -> bool | None:
-    """The cached probe result for name, without ever probing: None when
-    nothing is cached yet or the cached entry has aged past
-    HEALTH_CACHE_SECONDS. Used by a caller that must never make an outbound
-    request itself (the admin Overview poll)."""
-    now = time.monotonic()
+    """The last probe result for name, without ever probing: None only when
+    nothing has been probed yet. A stale result is still returned, because
+    the last known state beats "unknown" while a refresh is in flight; use
+    stale_names() to learn what needs a refresh."""
     with _lock:
         cached = _cache.get(name)
-    if cached and now - cached[1] < HEALTH_CACHE_SECONDS:
-        return cached[0]
-    return None
+    return cached[0] if cached else None
+
+
+def stale_names(names: list[str]) -> list[str]:
+    """The names with no cached probe or one older than HEALTH_CACHE_SECONDS."""
+    now = time.monotonic()
+    with _lock:
+        return [n for n in names
+                if n not in _cache or now - _cache[n][1] >= HEALTH_CACHE_SECONDS]
+
+
+_refresh_lock = threading.Lock()
+_refreshing = False
+
+
+def refresh_async(names: list[str]) -> bool:
+    """Probe the stale entries among names on one daemon thread, at most one
+    refresh at a time. Returns True when a refresh was started. The admin
+    Overview poll uses this so it never probes inline yet the next poll
+    sees real states; app.py calls it once after boot to warm the cache."""
+    global _refreshing
+    todo = stale_names(list(names))
+    if not todo:
+        return False
+    with _refresh_lock:
+        if _refreshing:
+            return False
+        _refreshing = True
+
+    def _run():
+        global _refreshing
+        try:
+            for n in todo:
+                try:
+                    is_up(n)
+                except Exception as exc:
+                    log.debug("health refresh %s failed: %s", n, exc)
+        finally:
+            with _refresh_lock:
+                _refreshing = False
+
+    threading.Thread(target=_run, name="health-refresh", daemon=True).start()
+    return True
 
 
 def is_up(name: str) -> bool:

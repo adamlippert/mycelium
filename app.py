@@ -31,6 +31,7 @@ import quota
 import recovery
 import retry_queue
 import scraper_metrics
+import health_cache
 import scrapers
 import shell_summary
 import overview
@@ -567,6 +568,9 @@ def _delayed(seconds: float, target, name: str) -> None:
     threading.Thread(target=_run, name=name, daemon=True).start()
 
 
+# Warm the scraper health cache so the first Overview after a boot shows
+# real states instead of "unknown"; the Overview itself never probes inline.
+_delayed(10.0, lambda: health_cache.refresh_async(scrapers.enabled_names()), "scraper-probe-warmup")
 _delayed(15.0, monitor.sync_movies, "movie-sync-init")
 _delayed(20.0, monitor.sync_series, "series-sync-init")
 # import_unknown=False: booting is not a request to adopt the TorBox account.

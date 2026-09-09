@@ -86,24 +86,65 @@ def test_torznab_scrapers_are_listed_and_disabled_by_default(monkeypatch):
     assert list(rows) == ["debridio", "zilean", "comet", "mediafusion", "torrentio"]
 
 
-def test_probe_false_with_no_cache_yields_unknown(monkeypatch):
-    """I2: the admin Overview poll must never probe. With nothing cached
-    yet for a scraper without latency samples, the state stays unknown
-    rather than falling back to a live probe."""
+def test_probe_false_with_no_cache_yields_unknown_and_kicks_a_refresh(monkeypatch):
+    """The admin Overview poll never probes inline. With nothing cached yet
+    the state is unknown, and the stale names go to a background refresh so
+    the next poll sees a real state."""
     import health_cache
     _settings_returning({}, monkeypatch)
     monkeypatch.delitem(health_cache._cache, "torrentio", raising=False)
+    kicked = []
+    monkeypatch.setattr(health_cache, "refresh_async", lambda names: kicked.append(list(names)) or True)
     rows = {r["name"]: r for r in scrapers.health_rows(probe=False)}
     assert rows["torrentio"]["state"] == "unknown"
+    assert kicked == [["torrentio"]], "only enabled scrapers are refreshed"
 
 
-def test_probe_false_with_a_fresh_cached_result_yields_ok(monkeypatch):
+def test_probe_false_serves_the_last_known_state_even_when_stale(monkeypatch):
     import health_cache
     import time as _time
     _settings_returning({}, monkeypatch)
+    monkeypatch.setattr(health_cache, "refresh_async", lambda names: False)
     monkeypatch.setitem(health_cache._cache, "torrentio", (True, _time.monotonic()))
     rows = {r["name"]: r for r in scrapers.health_rows(probe=False)}
     assert rows["torrentio"]["state"] == "ok"
+    monkeypatch.setitem(health_cache._cache, "torrentio", (False, _time.monotonic() - 10 * health_cache.HEALTH_CACHE_SECONDS))
+    rows = {r["name"]: r for r in scrapers.health_rows(probe=False)}
+    assert rows["torrentio"]["state"] == "down", "stale beats unknown while the refresh runs"
+
+
+def test_refresh_async_probes_only_stale_names_once_at_a_time(monkeypatch):
+    import threading
+    import time as _time
+    import health_cache
+    probed = []
+    gate = threading.Event()
+
+    def fake_is_up(name):
+        probed.append(name)
+        gate.wait(2)
+        return True
+
+    monkeypatch.setattr(health_cache, "is_up", fake_is_up)
+    monkeypatch.setattr(health_cache, "_refreshing", False)
+    monkeypatch.setitem(health_cache._cache, "fresh", (True, _time.monotonic()))
+    monkeypatch.setitem(health_cache._cache, "stale", (True, _time.monotonic() - 10 * health_cache.HEALTH_CACHE_SECONDS))
+    monkeypatch.delitem(health_cache._cache, "missing", raising=False)
+    assert health_cache.refresh_async(["fresh", "stale", "missing"]) is True
+    assert health_cache.refresh_async(["missing"]) is False, "a second refresh does not start while one runs"
+    gate.set()
+    deadline = _time.monotonic() + 3
+    while health_cache._refreshing and _time.monotonic() < deadline:
+        _time.sleep(0.01)
+    assert sorted(probed) == ["missing", "stale"]
+    assert health_cache.refresh_async(["fresh"]) is False, "nothing stale, nothing started"
+
+
+def test_the_app_warms_the_scraper_probes_after_boot():
+    with open(os.path.join(os.path.dirname(__file__), "..", "app.py")) as f:
+        src = f.read()
+    assert 'health_cache.refresh_async(scrapers.enabled_names())' in src
+    assert '"scraper-probe-warmup"' in src
 
 
 def test_the_endpoint_uses_health_rows_not_active():

@@ -4,6 +4,14 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- The Overview's scraper states no longer sit on "unknown". The page
+  still never probes inline, but a stale or missing probe result now
+  triggers a background refresh so the next poll shows the real state,
+  the last known state is shown while that refresh runs, and the probes
+  are warmed ten seconds after boot.
+
 ## [0.25.0] - 2026-09-08
 
 ### Changed

@@ -125,16 +125,20 @@ def health_rows(probe: bool = True) -> list[dict]:
     are in-memory, so every restart clears them) the live health probe
     stands in for "unknown".
 
-    probe=False (the admin Overview poll) never makes an outbound request:
-    a scraper without latency samples reports the cached probe result via
-    health_cache.peek() when one is still fresh, else "unknown"."""
+    probe=False (the admin Overview poll) never probes inline: a scraper
+    without latency samples reports the last cached probe result (stale
+    included) or "unknown" when nothing was ever probed, and the stale or
+    missing entries are refreshed on a background thread so the next poll
+    sees real states."""
     import scraper_metrics
     rows = []
+    enabled = []
     for name, key, _fn in _SCRAPERS:
         if key is not None and not _settings.get(key, False):
             rows.append({"name": name, "state": "disabled",
                          "latency_ms": None, "samples": 0})
             continue
+        enabled.append(name)
         row = scraper_metrics.get_health([name])[0]
         if row["state"] == "unknown":
             if probe:
@@ -143,7 +147,14 @@ def health_rows(probe: bool = True) -> list[dict]:
                 cached = health_cache.peek(name)
                 row["state"] = "unknown" if cached is None else ("ok" if cached else "down")
         rows.append(row)
+    if not probe:
+        health_cache.refresh_async(enabled)
     return rows
+
+
+def enabled_names() -> list[str]:
+    """Registry names whose scraper is switched on (Torrentio always)."""
+    return [name for name, key, _fn in _SCRAPERS if key is None or _settings.get(key, False)]
 
 
 def _active() -> list[tuple]:

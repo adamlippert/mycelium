@@ -198,9 +198,12 @@ def test_build_never_probes_scrapers_over_the_network(monkeypatch):
     directly rather than relying on the exception to surface."""
     import health_cache
     calls = []
+    kicked = []
     monkeypatch.setattr(health_cache.requests, "get", lambda *a, **k: calls.append(1) or (_ for _ in ()).throw(RuntimeError("unreachable")))
+    monkeypatch.setattr(health_cache, "refresh_async", lambda names: kicked.append(list(names)) or True)
     out = overview.build()
-    assert calls == []
+    assert calls == [], "no probe runs inside the request"
+    assert kicked and "torrentio" in kicked[0], "the stale names are refreshed in the background instead"
     assert "scrapers" not in out["errors"]
 
 
