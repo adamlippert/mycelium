@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.25.4",
+    "date": "2026-09-13",
+    "notes": [
+      "An episode detached from a partial season pack is searched right away and that pack is remembered as not containing the episode, so neither the monitor's search, the re-resolve of a dead release nor a re-request of the season registers the episode against it again",
+      "Registering an episode marks its wanted row found; the season pack path never did, so monitored series kept every episode \"wanted\" until the next monitor run",
+      "The monitor's on-disk check only looked in a \"Season N\" folder while the files live in \"Season 0N\", so for seasons 1 to 9 every registered episode was flipped back to wanted on each series check and searched again",
+      "A detached episode with a future air date returns as not aired, and its wanted row carries the series title instead of the episode's own title"
+    ]
+  },
+  {
     "version": "0.25.3",
     "date": "2026-09-13",
     "notes": [

@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.25.4] - 2026-09-13
+
 ### Fixed
 
 - An episode detached from a partial season pack is searched right away
