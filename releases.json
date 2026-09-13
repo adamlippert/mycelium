@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.26.0",
+    "date": "2026-09-13",
+    "notes": [
+      "A season request registers only the episodes its cached pack actually contains. TorBox lists a cached pack's files, so episodes are matched to files at request time with their file ids stored up front (the first play skips the reconciliation); episodes the pack lacks go on the wanted list immediately with the pack excluded for them, up to three aired ones are searched right away as single episodes, unaired ones wait as not aired. Without a usable file list every episode is registered as before",
+      "The first episode of a season pack (TorBox file id 0) was re-listed on every play and failed to play when TorBox answered without a files list; a known file id of 0 is now treated as known"
+    ]
+  },
+  {
     "version": "0.25.4",
     "date": "2026-09-13",
     "notes": [

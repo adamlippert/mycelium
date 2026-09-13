@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-09-13
+
 ### Changed
 
 - A season request registers only the episodes its cached pack actually
