@@ -109,6 +109,30 @@ def _pick_episode_file(files: list[dict], season: int, episode: int) -> dict | N
     return None
 
 
+def pack_videos(files: list[dict]) -> list[dict]:
+    """The playable video files of a pack: no trailers, samples or extras."""
+    return [f for f in (files or []) if _is_video(f.get('name') or '') and not _is_trailer(f)]
+
+
+def map_episodes_to_files(videos: list[dict], season: int, episodes: list[int]) -> dict[int, int]:
+    """Map episode numbers to file ids for a season pack. By name first
+    (episode_matches); when no name matches at all and the pack holds
+    exactly one video per episode asked for, sorted names map onto sorted
+    episode numbers. Episodes without a file are absent from the result.
+    Shared by the request-time registration (processor) and the first-play
+    reconciliation (catbox)."""
+    mapping: dict[int, int] = {}
+    for ep in episodes:
+        f = _pick_episode_file(videos, season, ep)
+        if f is not None:
+            mapping[ep] = f["id"]
+    if not mapping and videos and len(videos) == len(episodes):
+        by_name = sorted(videos, key=lambda f: (f.get("name") or "").lower())
+        for ep, f in zip(sorted(episodes), by_name):
+            mapping[ep] = f["id"]
+    return mapping
+
+
 def _clean_torrent_name(name: str) -> str:
     """Strip site prefixes and Cyrillic blocks from a raw torrent name."""
     s = _SITE_PREFIX_RE.sub('', name).strip()
@@ -824,10 +848,13 @@ def create_lazy_episode_strm(info_hash: str, magnet: str, title: str,
                                quality: str | None = None,
                                source: str | None = None,
                                size_gb: float | None = None,
-                               preload_first: bool = False) -> bool:
+                               preload_first: bool = False,
+                               file_id: int | None = None) -> bool:
     """Write a Catbox virtual episode .strm WITHOUT adding to TorBox.
     For season packs: multiple episodes share the same info_hash/magnet;
-    catbox.materialize picks the right file by SxxExx at playback time.
+    `file_id` is the pack file for this episode when the caller already
+    knows it (TorBox lists a cached pack's files), otherwise
+    catbox.materialize picks the file by SxxExx at playback time.
     Atomically writes tvshow.nfo and series poster/fanart on first episode.
     Returns True if a new .strm was written."""
     import catbox
@@ -859,7 +886,7 @@ def create_lazy_episode_strm(info_hash: str, magnet: str, title: str,
         title=ep_name,
         media_type="series",
         torbox_id=None,
-        file_id=None,
+        file_id=file_id,
         strm_path=str(path),
         imdb_id=imdb_id,
         quality=quality,

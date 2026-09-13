@@ -137,9 +137,7 @@ def _resolve_pack_files(token: str, item: dict, live: dict) -> int | None:
     An empty files list (the single-item endpoint sometimes omits it)
     changes nothing: no match and no detaching."""
     import strm_generator
-    files = live.get("files") or []
-    videos = [f for f in files
-              if strm_generator._is_video(f.get("name") or "") and not strm_generator._is_trailer(f)]
+    videos = strm_generator.pack_videos(live.get("files") or [])
     if not videos:
         return None
     season = item.get("season")
@@ -166,17 +164,12 @@ def _reconcile_pack(token: str, item: dict, season, videos: list) -> int | None:
                 if s.get("season") == season and s.get("episode")]
     if not any(s["token"] == token for s in siblings):
         siblings.append(item)
-    matched: dict[str, int] = {}
-    for s in siblings:
-        f = strm_generator._pick_episode_file(videos, season, s["episode"])
-        if f is not None:
-            matched[s["token"]] = f["id"]
-    if not matched and len(videos) == len(siblings):
-        by_name = sorted(videos, key=lambda f: (f.get("name") or "").lower())
-        for s, f in zip(sorted(siblings, key=lambda s: s["episode"]), by_name):
-            matched[s["token"]] = f["id"]
+    by_episode = strm_generator.map_episodes_to_files(videos, season, [s["episode"] for s in siblings])
+    matched = {s["token"]: by_episode[s["episode"]] for s in siblings if s["episode"] in by_episode}
+    if matched and not any(strm_generator.episode_matches(f.get("name") or "", season, s["episode"])
+                           for s in siblings for f in videos):
         log.info("Catbox: %s S%02d pack %s: no episode tags in the file names, mapped %d files by order",
-                 item.get("title"), season, item["info_hash"][:8], len(by_name))
+                 item.get("title"), season, item["info_hash"][:8], len(matched))
     for s in siblings:
         fid = matched.get(s["token"])
         if fid is not None and s.get("file_id") != fid:
@@ -680,11 +673,14 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
 
     file_id = item["file_id"]
     is_episode = item["media_type"] != "movie" and item.get("season") and item.get("episode")
-    if file_id and is_episode and db.hash_has_duplicate_file_ids(item["info_hash"]):
+    if file_id is not None and is_episode and db.hash_has_duplicate_file_ids(item["info_hash"]):
         # Two episodes of this pack point at one file: the old largest-file
         # fallback. Match the pack's files again for the whole season.
         file_id = None
-    if not file_id:
+    # TorBox file ids start at 0, so a preset 0 is a known file, not "unknown":
+    # `if not file_id` sent the first episode of every pack through the
+    # listing again and failed the play when the ?id= endpoint omitted files.
+    if file_id is None:
         live = torbox.find_by_id(torbox_id)
         if live:
             import strm_generator

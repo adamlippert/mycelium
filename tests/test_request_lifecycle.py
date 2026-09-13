@@ -63,7 +63,9 @@ def lazy_series(monkeypatch):
     monkeypatch.setattr(blacklist, "filter_candidates", lambda c: list(c))
     monkeypatch.setattr(debrid, "check_cached_multi",
                         lambda hashes: {"torbox": set(hashes)})
-    monkeypatch.setattr(processor, "_get_season_episode_count", lambda i, s: 3)
+    monkeypatch.setattr(processor, "_get_season_episodes",
+                        lambda i, s: (100, [{"episode_number": n, "air_date": "2024-01-01"} for n in (1, 2, 3)]))
+    monkeypatch.setattr(processor.torbox, "check_cached_files", lambda hashes, **k: {})
 
 
 def test_season_pack_already_registered_is_success(lazy_series, monkeypatch):
@@ -135,7 +137,9 @@ def test_lazy_season_registers_the_release_source_label_not_the_scraper_name(mon
     monkeypatch.setattr(processor, "_fetch_season_candidates", lambda *a, **k: [pack])
     monkeypatch.setattr(blacklist, "filter_candidates", lambda c: list(c))
     monkeypatch.setattr(debrid, "check_cached_multi", lambda hashes: {"torbox": set(hashes)})
-    monkeypatch.setattr(processor, "_get_season_episode_count", lambda i, s: 3)
+    monkeypatch.setattr(processor, "_get_season_episodes",
+                        lambda i, s: (100, [{"episode_number": n, "air_date": "2024-01-01"} for n in (1, 2, 3)]))
+    monkeypatch.setattr(processor.torbox, "check_cached_files", lambda hashes, **k: {})
     calls = []
     monkeypatch.setattr(strm_generator, "create_lazy_episode_strm",
                         lambda *a, **k: calls.append(k) or True)
@@ -161,7 +165,9 @@ def test_lazy_season_stores_null_source_when_the_release_name_has_no_tag(monkeyp
     monkeypatch.setattr(processor, "_fetch_season_candidates", lambda *a, **k: [pack])
     monkeypatch.setattr(blacklist, "filter_candidates", lambda c: list(c))
     monkeypatch.setattr(debrid, "check_cached_multi", lambda hashes: {"torbox": set(hashes)})
-    monkeypatch.setattr(processor, "_get_season_episode_count", lambda i, s: 3)
+    monkeypatch.setattr(processor, "_get_season_episodes",
+                        lambda i, s: (100, [{"episode_number": n, "air_date": "2024-01-01"} for n in (1, 2, 3)]))
+    monkeypatch.setattr(processor.torbox, "check_cached_files", lambda hashes, **k: {})
     calls = []
     monkeypatch.setattr(strm_generator, "create_lazy_episode_strm",
                         lambda *a, **k: calls.append(k) or True)

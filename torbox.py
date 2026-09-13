@@ -392,15 +392,10 @@ def check_cached(hashes: list[str], timeout: int = 15) -> set[str]:
 
 
 def check_cached_files(hashes: list[str], timeout: int = 15) -> dict[str, dict]:
-    """Like check_cached(), but keeps the per-hash size/name info that
-    TorBox's checkcached response already includes for free. Used to answer
-    "how big is this" without add_magnet/materialize -- no torrent is added
-    to the account, this is a pure cache-status lookup.
-
-    Single-file torrents report size/name at the top level; multi-file
-    torrents (season packs) additionally carry a "files" list -- callers
-    that need one specific episode should look there first and fall back
-    to the top-level entry otherwise."""
+    """Like check_cached(), but keeps the per-hash name, size and files
+    list (id, name, size per file) of the cached data. No torrent is added
+    to the account, this is a pure cache-status lookup. Returns {} when the
+    lookup fails; callers treat that as "contents unknown"."""
     if not hashes:
         return {}
     _BATCH = 100
@@ -410,7 +405,10 @@ def check_cached_files(hashes: list[str], timeout: int = 15) -> dict[str, dict]:
             out.update(check_cached_files(hashes[i:i + _BATCH], timeout=timeout))
         return out
     url = f"{_base_url().rstrip('/')}/torrents/checkcached"
-    params = {"hash": ",".join(hashes), "format": "object"}
+    # list_files makes each cached entry carry its files list with the
+    # same ids the torrent shows once added (verified against the API on
+    # 2026-09-13), so a season pack's contents are known before any add.
+    params = {"hash": ",".join(hashes), "format": "object", "list_files": "true"}
     try:
         resp = requests.get(url, headers=_headers(), params=params, timeout=timeout)
         resp.raise_for_status()

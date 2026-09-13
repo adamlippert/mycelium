@@ -4,6 +4,26 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- A season request registers only the episodes its cached pack actually
+  contains. TorBox lists a cached pack's files, so the processor matches
+  episodes to files at request time, stores each file id up front (the
+  first play of every episode skips the reconciliation), and puts the
+  episodes the pack lacks on the wanted list immediately with the pack
+  recorded as not containing them. Aired ones are searched right away as
+  single episodes (three per request, the monitor takes the rest); unaired
+  ones wait as "not aired". When TorBox cannot list the files, or lists
+  files no episode can be matched to, every episode is registered as
+  before and the first play reconciles.
+
+### Fixed
+
+- The first episode of a season pack, whose TorBox file id is 0, was sent
+  through the file listing again on every play and failed to play when
+  TorBox answered without a files list. A known file id of 0 is now
+  treated as known.
+
 ## [0.25.4] - 2026-09-13
 
 ### Fixed

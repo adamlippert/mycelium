@@ -310,17 +310,102 @@ def _try_realdebrid_fallback(title: str, candidates: list,
     return None
 
 
-def _get_season_episode_count(imdb_id: str, season: int) -> int:
-    """Ask TMDB how many episodes a season has. Returns 0 on failure."""
+def _get_season_episodes(imdb_id: str, season: int) -> tuple[int | None, list[dict]]:
+    """TMDB's episode list for a season (episode_number, air_date per entry)
+    with the resolved TMDB id. (None, []) on failure."""
     try:
         import tmdb
         tmdb_id = tmdb.find_by_imdb(imdb_id, kind="tv")
         if not tmdb_id:
-            return 0
-        episodes = tmdb.get_season_episodes(tmdb_id, season)
-        return len(episodes)
+            return None, []
+        return tmdb_id, list(tmdb.get_season_episodes(tmdb_id, season) or [])
     except Exception:
-        return 0
+        return None, []
+
+
+def _get_season_episode_count(imdb_id: str, season: int) -> int:
+    """Ask TMDB how many episodes a season has. Returns 0 on failure."""
+    return len(_get_season_episodes(imdb_id, season)[1])
+
+
+def _pack_contents(pack: TorrentioStream, season: int, episodes: list[int],
+                   count_known: bool) -> tuple[list[int], list[int], dict[int, int]]:
+    """Which of `episodes` a cached pack contains, from TorBox's file list:
+    (present, missing, {episode: file_id}). Contents unknown (lookup failed
+    or no files listed) means every episode counts as present with no file
+    id, the first play then reconciles. With an unknown episode count only
+    the episodes the file names prove are registered and nothing is missing."""
+    try:
+        info = torbox.check_cached_files([pack.info_hash]).get(pack.info_hash.lower()) or {}
+    except Exception as exc:
+        log.warning("Lazy: file list for %s unavailable: %s", pack.info_hash[:8], exc)
+        info = {}
+    videos = strm_generator.pack_videos(info.get("files") or [])
+    if not videos:
+        return list(episodes), [], {}
+    mapping = strm_generator.map_episodes_to_files(videos, season, episodes)
+    if not mapping:
+        # Files listed but none recognisable (no episode tags and not one
+        # file per episode): the pack is not proven wrong, only unreadable
+        # here. Register as before and let the first play reconcile rather
+        # than exclude a possibly fine pack for every episode.
+        log.info("Lazy: pack %s lists %d video(s) but no episode could be matched; registering by name at first play",
+                 pack.info_hash[:8], len(videos))
+        return list(episodes), [], {}
+    present = [ep for ep in episodes if ep in mapping]
+    missing = [ep for ep in episodes if ep not in mapping] if count_known else []
+    return present, missing, mapping
+
+
+# Missing episodes searched inline at request time; the rest wait for the
+# monitor, which retries every wanted row anyway. Keeps a pack that lacks
+# half a season from turning one request into a dozen scrapes.
+_IMMEDIATE_SEARCH_CAP = 3
+
+
+def _register_missing(req: MediaRequest, season: int, missing: list[int], pack_hash: str,
+                      tmdb_id: int | None, tmdb_eps: list[dict]) -> int:
+    """Episodes a chosen pack does not contain: put them on the wanted list
+    (not_aired when TMDB says so), record the pack as not containing them,
+    and search each aired one right away as a single episode. Returns how
+    many got a .strm."""
+    import debrid
+    from datetime import date
+    today = date.today().isoformat()
+    air = {e.get("episode_number"): (e.get("air_date") or None) for e in tmdb_eps}
+    tmdb_id = tmdb_id or getattr(req, "tmdb_id", None)
+    written = 0
+    searched = 0
+    for ep in missing:
+        if _already_registered(req.imdb_id, season, ep):
+            continue  # in the library from another release; nothing to want
+        db.upsert_wanted_episode(req.imdb_id, tmdb_id, req.title, season, ep, air.get(ep))
+        db.exclude_episode_hash(req.imdb_id, season, ep, pack_hash)
+        if air.get(ep) and air[ep] > today:
+            db.mark_episode_status(req.imdb_id, season, ep, "not_aired")
+            continue
+        db.mark_episode_status(req.imdb_id, season, ep, "wanted")
+        if searched >= _IMMEDIATE_SEARCH_CAP:
+            continue
+        searched += 1
+        try:
+            cands = blacklist.filter_candidates(_fetch_season_candidates(req, season, episode=ep))
+            cands = blacklist.filter_for_episode(cands, req.imdb_id, season, ep)
+            if not cands:
+                continue
+            cached = debrid.check_cached_multi([c.info_hash for c in cands]).get("torbox", set())
+            winner = next((c for c in cands if c.info_hash in cached), None)
+            if winner is None:
+                continue
+            if strm_generator.create_lazy_episode_strm(
+                winner.info_hash, winner.magnet, req.title, season, ep,
+                imdb_id=req.imdb_id, quality=winner.quality,
+                source=release_tags.source_label(winner.name), size_gb=winner.size_gb,
+            ):
+                written += 1
+        except Exception as exc:
+            log.warning("Lazy: search for %s S%02dE%02d failed, left wanted: %s", req.title, season, ep, exc)
+    return written
 
 
 def _already_registered(imdb_id: str | None, season: int, episode: int) -> bool:
@@ -368,15 +453,24 @@ def _lazy_register_season(req: MediaRequest, season: int) -> tuple[bool, Optiona
     packs = [s for s in pack_candidates if s.is_season_pack and s.info_hash in cached_hashes]
     if packs:
         pack = packs[0]
-        ep_count = _get_season_episode_count(req.imdb_id, season)
+        tmdb_id, tmdb_eps = _get_season_episodes(req.imdb_id, season)
+        ep_count = len(tmdb_eps)
         if ep_count == 0:
             ep_count = 24  # safe upper bound when TMDB unavailable
-        log.info("Lazy: cached season pack for %s S%02d (%d ep), registering %d episode(s)",
-                 req.title, season, ep_count, ep_count)
+        episodes = list(range(1, ep_count + 1))
+        # Register only what the pack contains: TorBox lists a cached
+        # pack's files, so an episode the pack lacks never gets a .strm
+        # that would play the wrong file (or nothing) and be detached at
+        # first play. Its file id is known now too, so the first play of
+        # every episode skips the reconciliation.
+        present, missing, file_ids = _pack_contents(pack, season, episodes, count_known=bool(tmdb_eps))
+        log.info("Lazy: cached season pack for %s S%02d (%d ep), registering %d episode(s)%s",
+                 req.title, season, ep_count, len(present),
+                 f", pack lacks {', '.join(f'E{e:02d}' for e in missing)}" if missing else "")
         written = 0
         existing = 0
         preload_done = False
-        for ep in range(1, ep_count + 1):
+        for ep in present:
             if strm_generator.create_lazy_episode_strm(
                 pack.info_hash, pack.magnet, req.title, season, ep,
                 imdb_id=req.imdb_id,
@@ -384,11 +478,14 @@ def _lazy_register_season(req: MediaRequest, season: int) -> tuple[bool, Optiona
                 source=release_tags.source_label(pack.name),
                 size_gb=pack.size_gb,
                 preload_first=not preload_done,
+                file_id=file_ids.get(ep),
             ):
                 written += 1
                 preload_done = True
             elif _already_registered(req.imdb_id, season, ep):
                 existing += 1
+        if missing:
+            written += _register_missing(req, season, missing, pack.info_hash, tmdb_id, tmdb_eps)
         if written:
             log.info("Lazy season pack: %d .strm(s) registered for %s S%02d", written, req.title, season)
             return True, pack
@@ -424,6 +521,7 @@ def _lazy_register_season(req: MediaRequest, season: int) -> tuple[bool, Optiona
                 log.warning("Lazy fetch failed for %s S%02dE%02d: %s", req.title, season, episode, exc)
                 break
             ep_cands_raw = blacklist.filter_candidates(ep_cands_raw)
+            ep_cands_raw = blacklist.filter_for_episode(ep_cands_raw, req.imdb_id, season, episode)
             if not ep_cands_raw:
                 break
             ep_hashes = [s.info_hash for s in ep_cands_raw]
