@@ -4,6 +4,28 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- An episode detached from a partial season pack is searched right away
+  instead of waiting for the next monitor run, and that pack is remembered
+  as not containing the episode (`wanted_episodes.excluded_hashes`), so
+  neither the monitor's search nor a re-request of the season registers
+  the episode against it again. Before, the same pack sorted first in the
+  search results and would have been picked once more, detaching again on
+  the next play.
+- Registering an episode's `.strm` marks its wanted row found. The season
+  pack path never did, so a monitored series kept every episode "wanted"
+  until the next monitor run noticed the files.
+- A detached episode whose air date lies in the future returns as
+  "not aired" rather than "wanted", and its wanted row carries the series
+  title instead of the episode's own title.
+- The monitor's "is this episode on disk" check only looked in a
+  `Season N` folder while the `.strm` files live in `Season 0N`, so for
+  seasons 1 to 9 every registered episode was flipped back to "wanted" on
+  each series check and searched again. Both folder names are checked now.
+- A token that re-resolves after its release died no longer picks a pack
+  that was recorded as not containing its episode.
+
 ## [0.25.3] - 2026-09-13
 
 ### Changed

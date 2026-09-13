@@ -841,6 +841,13 @@ def create_lazy_episode_strm(info_hash: str, magnet: str, title: str,
     # token for the same episode. Checking imdb_id+season+episode catches that.
     if imdb_id and db.get_virtual_item_by_episode(imdb_id, season, episode):
         return False
+    # A pack that was found not to contain this episode (catbox detached it)
+    # must not be tried for it again, whoever asks: the monitor's retry, the
+    # processor's pack path or a re-request of the season.
+    if imdb_id and (info_hash or "").lower() in db.excluded_hashes_for(imdb_id, season, episode):
+        log.info("Lazy: %s S%02dE%02d skips %s, that release does not contain the episode",
+                 title, season, episode, (info_hash or "")[:8])
+        return False
     season_dir = f"Season {season:02d}"
     ep_name = f"{safe_title} S{season:02d}E{episode:02d}"
     path = Path(MEDIA_PATH) / "series" / safe_title / season_dir / f"{ep_name}.strm"
@@ -870,6 +877,10 @@ def create_lazy_episode_strm(info_hash: str, magnet: str, title: str,
     if written:
         _write_spore_stubs(path, token, ep_name, quality, size_gb)
         if imdb_id:
+            # The wanted row (if the series is monitored) is satisfied now;
+            # without this the processor's pack path left every episode
+            # "wanted" until the next monitor run noticed the files.
+            db.mark_episode_status(imdb_id, season, episode, "found")
             series_root = path.parent.parent
             tvshow_nfo = series_root / "tvshow.nfo"
             if not tvshow_nfo.exists():

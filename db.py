@@ -1,4 +1,5 @@
 import logging
+import re
 import sqlite3
 import threading
 import time
@@ -85,6 +86,7 @@ CREATE TABLE IF NOT EXISTS wanted_episodes (
     attempt_count   INTEGER NOT NULL DEFAULT 0,
     first_attempted TEXT,
     last_attempted  TEXT,
+    excluded_hashes TEXT,
     UNIQUE(imdb_id, season, episode)
 );
 
@@ -391,6 +393,21 @@ def _migrate() -> None:
         if "estimated" not in egress_cols:
             conn.execute("ALTER TABLE egress_log ADD COLUMN estimated INTEGER NOT NULL DEFAULT 0")
             log.info("Migration: added egress_log.estimated")
+
+        we_cols = {r["name"] for r in conn.execute("PRAGMA table_info(wanted_episodes)")}
+        if "excluded_hashes" not in we_cols:
+            conn.execute("ALTER TABLE wanted_episodes ADD COLUMN excluded_hashes TEXT")
+            log.info("Migration: added wanted_episodes.excluded_hashes")
+            # 0.25.2 seeded detached episodes with the item title ("Show
+            # S04E04"); a search from such a row files under that folder.
+            fixed = 0
+            for r in conn.execute("SELECT id, title FROM wanted_episodes WHERE title GLOB '* S[0-9]*E[0-9]*'").fetchall():
+                clean = _EP_TITLE_SUFFIX_RE.sub("", r["title"]).strip()
+                if clean and clean != r["title"]:
+                    conn.execute("UPDATE wanted_episodes SET title=? WHERE id=?", (clean, r["id"]))
+                    fixed += 1
+            if fixed:
+                log.info("Migration: stripped the episode suffix from %d wanted_episodes title(s)", fixed)
 
         req_cols = {r["name"] for r in conn.execute("PRAGMA table_info(requests)")}
         if "tmdb_id" not in req_cols:
@@ -1050,6 +1067,58 @@ def get_all_wanted_episodes() -> list[dict]:
             "SELECT * FROM wanted_episodes ORDER BY title, season, episode"
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+_EP_TITLE_SUFFIX_RE = re.compile(r"\s+S\d{1,2}E\d{1,3}\s*$", re.IGNORECASE)
+
+
+def set_wanted_episode_title(imdb_id: str, season: int, episode: int, title: str) -> None:
+    with _connect() as conn:
+        conn.execute("UPDATE wanted_episodes SET title=? WHERE imdb_id=? AND season=? AND episode=?",
+                     (title, imdb_id, season, episode))
+        conn.commit()
+
+
+def exclude_episode_hash(imdb_id: str, season: int, episode: int, info_hash: str) -> None:
+    """Remember that `info_hash` does not contain this episode (a season pack
+    that turned out to be partial), so no search registers the episode
+    against it again. Per episode on purpose: the same pack is still the
+    right release for the episodes it does contain."""
+    info_hash = (info_hash or "").lower()
+    if not info_hash:
+        return
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT excluded_hashes FROM wanted_episodes WHERE imdb_id=? AND season=? AND episode=?",
+            (imdb_id, season, episode)).fetchone()
+        if row is None:
+            return
+        have = [h for h in (row["excluded_hashes"] or "").split(",") if h]
+        if info_hash in have:
+            return
+        have.append(info_hash)
+        conn.execute(
+            "UPDATE wanted_episodes SET excluded_hashes=? WHERE imdb_id=? AND season=? AND episode=?",
+            (",".join(have), imdb_id, season, episode))
+        conn.commit()
+
+
+def excluded_hashes_for(imdb_id: str, season: int, episode: int) -> set[str]:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT excluded_hashes FROM wanted_episodes WHERE imdb_id=? AND season=? AND episode=?",
+            (imdb_id, season, episode)).fetchone()
+    if row is None:
+        return set()
+    return {h for h in (row["excluded_hashes"] or "").split(",") if h}
+
+
+def get_wanted_episode(imdb_id: str, season: int, episode: int) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM wanted_episodes WHERE imdb_id=? AND season=? AND episode=?",
+            (imdb_id, season, episode)).fetchone()
+        return dict(row) if row else None
 
 
 def mark_episode_status(imdb_id: str, season: int, episode: int, status: str) -> None:

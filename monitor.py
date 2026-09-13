@@ -37,8 +37,14 @@ def strm_exists_episode(title: str, season: int, episode: int) -> bool:
     if not folder:
         return False
     s_ep = f"s{season:02d}e{episode:02d}"
-    pattern = os.path.join(folder, f"Season {season}", "*.strm")
-    return any(s_ep in os.path.basename(f).lower() for f in glob.glob(pattern))
+    # strm_generator writes "Season 04"; older trees and other tools use
+    # "Season 4". Globbing only the latter made seasons 1 to 9 look absent,
+    # so the sync kept flipping registered episodes back to wanted.
+    for season_dir in {f"Season {season:02d}", f"Season {season}"}:
+        pattern = os.path.join(folder, season_dir, "*.strm")
+        if any(s_ep in os.path.basename(f).lower() for f in glob.glob(pattern)):
+            return True
+    return False
 
 
 def strm_exists_movie(title: str) -> bool:
@@ -219,6 +225,8 @@ def _retry_episode(ep: dict) -> bool:
     db.increment_episode_attempt(ep["id"])
 
     candidates = scrapers.fetch_candidates("series", imdb_id, season=season, episode=episode)
+    import blacklist
+    candidates = blacklist.filter_for_episode(candidates, imdb_id, season, episode)
     if not candidates:
         log.info("Monitor: no acceptable candidates for %s S%02dE%02d (still wanted)",
                  title, season, episode)

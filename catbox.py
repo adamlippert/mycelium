@@ -14,6 +14,7 @@ Resolved CDN URLs are cached in-memory per token to avoid hammering TorBox's
 multiple probe/seek requests for the same item in quick succession.
 """
 import logging
+import re
 import threading
 import time
 import uuid
@@ -80,6 +81,7 @@ _search_cache_lock = threading.Lock()
 _SEARCH_HIT_TTL    = 300    # 5 min: re-check soon if a cached release was found
 _SEARCH_MISS_TTL   = 21600  # 6 h:  nothing cached  -  back off (matches _fail_put below)
 _token_locks_lock = threading.Lock()
+_pack_locks: dict[str, threading.Lock] = {}
 
 # ── scan/probe burst detection ────────────────────────────────────────────────
 # A media-server library scan opens many DISTINCT .strm URLs in a short burst,
@@ -141,6 +143,25 @@ def _resolve_pack_files(token: str, item: dict, live: dict) -> int | None:
     if not videos:
         return None
     season = item.get("season")
+    # Only the playing token's lock is held here; a sibling episode of the
+    # same pack materializing at the same moment would reconcile the same
+    # siblings, detach them twice and start a second search. One pack at a
+    # time; the second caller then sees the detached rows already gone.
+    with _pack_lock(item["info_hash"]):
+        return _reconcile_pack(token, item, season, videos)
+
+
+def _pack_lock(info_hash: str) -> threading.Lock:
+    with _token_locks_lock:
+        lock = _pack_locks.get(info_hash)
+        if lock is None:
+            lock = threading.Lock()
+            _pack_locks[info_hash] = lock
+        return lock
+
+
+def _reconcile_pack(token: str, item: dict, season, videos: list) -> int | None:
+    import strm_generator
     siblings = [s for s in db.get_virtual_items_by_hash(item["info_hash"])
                 if s.get("season") == season and s.get("episode")]
     if not any(s["token"] == token for s in siblings):
@@ -166,12 +187,18 @@ def _resolve_pack_files(token: str, item: dict, live: dict) -> int | None:
                     item.get("title"), season, item["info_hash"][:8],
                     ", ".join(f"E{s['episode']:02d}" for s in sorted(unmatched, key=lambda s: s["episode"])),
                     "; ".join((f.get("name") or "").rsplit("/", 1)[-1] for f in videos))
+        to_search = []
         for s in unmatched:
-            _detach_episode(s)
+            status, title = _detach_episode(s)
+            if status == "wanted" and s.get("imdb_id"):
+                to_search.append({"imdb_id": s["imdb_id"], "title": title,
+                                  "season": season, "episode": s["episode"]})
+        if to_search:
+            _start_detached_search(to_search)
     return matched.get(token)
 
 
-def _detach_episode(vi: dict) -> None:
+def _detach_episode(vi: dict) -> tuple[str, str]:
     """Remove an episode that its pack does not contain and put it back on
     the wanted list, so the monitor searches for it as its own torrent."""
     import os
@@ -200,13 +227,55 @@ def _detach_episode(vi: dict) -> None:
         except Exception as exc:
             log.debug("Catbox: Jellyfin note skipped for %s: %s", strm_path, exc)
     imdb_id = vi.get("imdb_id")
+    status = "wanted"
+    title = _series_title(vi.get("title") or "")
     if imdb_id:
         req = db.get_request_by_imdb(imdb_id) or {}
-        db.upsert_wanted_episode(imdb_id, req.get("tmdb_id"), vi.get("title") or req.get("title") or imdb_id,
-                                 vi["season"], vi["episode"], None)
-        db.mark_episode_status(imdb_id, vi["season"], vi["episode"], "wanted")
-    log.info("Catbox: detached S%02dE%02d of %s (token %s) back to wanted",
-             vi["season"], vi["episode"], vi.get("title"), token)
+        # The virtual item's title carries the episode suffix ("Show S04E04");
+        # a wanted row with that title would search and file under a folder
+        # of that name. Prefer the request title, else strip the suffix.
+        title = req.get("title") or _series_title(vi.get("title") or "") or imdb_id
+        season, episode = vi["season"], vi["episode"]
+        db.upsert_wanted_episode(imdb_id, req.get("tmdb_id"), title, season, episode, None)
+        row = db.get_wanted_episode(imdb_id, season, episode) or {}
+        if row.get("title") and _EP_SUFFIX_RE.search(row["title"]):
+            # An existing row seeded by 0.25.2 with the item title.
+            db.set_wanted_episode_title(imdb_id, season, episode, title)
+        air_date = row.get("air_date")
+        if air_date and air_date > datetime.now().date().isoformat():
+            status = "not_aired"
+        db.mark_episode_status(imdb_id, season, episode, status)
+        if vi.get("info_hash"):
+            db.exclude_episode_hash(imdb_id, season, episode, vi["info_hash"])
+    log.info("Catbox: detached S%02dE%02d of %s (token %s) back to %s",
+             vi["season"], vi["episode"], vi.get("title"), token, status)
+    return status, title
+
+
+_EP_SUFFIX_RE = re.compile(r"\s+S\d{1,2}E\d{1,3}\s*$", re.IGNORECASE)
+
+
+def _series_title(item_title: str) -> str:
+    return _EP_SUFFIX_RE.sub("", item_title or "").strip()
+
+
+def _start_detached_search(episodes: list[dict]) -> None:
+    """Seam for tests; production starts the search on a daemon thread."""
+    threading.Thread(target=_search_detached, args=(episodes,), daemon=True,
+                     name="detached-search").start()
+
+
+def _search_detached(episodes: list[dict]) -> None:
+    """Search each detached episode right away instead of waiting for the
+    next monitor run. Runs on its own thread, off the play request; every
+    failure is logged, none reaches the player."""
+    import monitor
+    for ep in episodes:
+        try:
+            monitor.search_episode_now(ep["imdb_id"], ep["title"], ep["season"], ep["episode"])
+        except Exception as exc:
+            log.warning("Catbox: immediate search for %s S%02dE%02d failed: %s",
+                        ep["title"], ep["season"], ep["episode"], exc)
 
 
 def _content_key(item: dict) -> str | None:
@@ -773,6 +842,8 @@ def _search_best_cached_release(item: dict) -> tuple[str, str] | None | object:
         if not ranked:
             return None
         ranked = blacklist.filter_candidates(ranked)
+        if media_type != "movie":
+            ranked = blacklist.filter_for_episode(ranked, imdb_id, season, episode)
         log.info("Catbox search: %d candidate(s) after ranking/filter for %s",
                  len(ranked), item.get("title"))
         if not ranked:
