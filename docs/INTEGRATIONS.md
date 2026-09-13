@@ -151,6 +151,15 @@ Deleting a single **episode** in Jellyfin removes that `.strm` file (Jellyfin
 has the rights to do so) but is not a title deletion, so it is ignored here;
 the repair job may regenerate the file. Delete the series instead.
 
+## Jellyfin: versions and authentication
+
+Jellyfin 10.x and 12.x are supported. Mycelium authenticates every request
+with the standard `Authorization: MediaBrowser Token="<key>"` header;
+Jellyfin 12 no longer accepts the legacy `X-Emby-Token` header or the
+`api_key` query parameter by default. The Settings test for Jellyfin calls
+the authenticated system-info endpoint, so it fails when the key is
+rejected rather than only when the server is unreachable.
+
 ## Jellyfin: targeted refresh
 
 After an add, an upgrade or a purge, Mycelium now tells Jellyfin exactly

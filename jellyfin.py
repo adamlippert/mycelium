@@ -26,12 +26,20 @@ _pending: dict[tuple[str, str], None] = {}
 _TARGETED_BATCH = 200
 
 
+def auth_headers(api_key: str | None = None) -> dict:
+    """The Jellyfin auth header for an API key, in the standard form
+    `Authorization: MediaBrowser Token="..."`. Jellyfin 12.0 disabled the
+    legacy `X-Emby-Token` header and the `api_key` query parameter by
+    default (every such request gets a 401); 10.x accepts the standard
+    form as well. Pass the key, or omit it to use the configured one."""
+    key = api_key if api_key is not None else settings.get("JELLYFIN_API_KEY")
+    if not key:
+        return {}
+    return {"Authorization": f'MediaBrowser Token="{key}"'}
+
+
 def _jf_headers() -> dict:
-    JELLYFIN_API_KEY = settings.get("JELLYFIN_API_KEY")
-    h = {"Content-Type": "application/json"}
-    if JELLYFIN_API_KEY:
-        h["X-Emby-Token"] = JELLYFIN_API_KEY
-    return h
+    return {"Content-Type": "application/json", **auth_headers()}
 
 
 def note_change(path, update_type: str) -> None:

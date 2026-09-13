@@ -5,6 +5,8 @@ import logging
 
 import requests
 
+import jellyfin
+
 import config
 import db
 import monitor
@@ -23,7 +25,7 @@ def _jellyfin_resume_items() -> list[dict]:
         r = requests.get(
             f"{jellyfin_url.rstrip('/')}/Users/Me/Items/Resume",
             params={"Limit": 50},
-            headers={"X-Emby-Token": jellyfin_key},
+            headers=jellyfin.auth_headers(jellyfin_key),
             timeout=8,
         )
         r.raise_for_status()

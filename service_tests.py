@@ -138,11 +138,17 @@ def test_debridio(v: dict) -> dict:
 def test_jellyfin(v: dict) -> dict:
     if (m := _need(v, "JELLYFIN_URL")):
         return {"ok": False, "message": f"{m} is empty"}
+    import jellyfin
     key = _v(v, "JELLYFIN_API_KEY")
-    r = _http("GET", f"{_v(v, 'JELLYFIN_URL').rstrip('/')}/System/Info/Public", headers={"X-Emby-Token": key} if key else {})
+    # The public endpoint answers without a key, which made a wrong key
+    # look fine; with a key, the authenticated one proves it is accepted.
+    path = "/System/Info" if key else "/System/Info/Public"
+    r = _http("GET", f"{_v(v, 'JELLYFIN_URL').rstrip('/')}{path}", headers=jellyfin.auth_headers(key))
     if r.status_code < 400:
         d = _json(r)
         return {"ok": True, "message": f"{d.get('ServerName', 'Jellyfin')} {d.get('Version', '')}".strip()}
+    if r.status_code in (401, 403):
+        return {"ok": False, "message": f"Jellyfin rejected the API key ({_status(r)})"}
     return {"ok": False, "message": f"Jellyfin answered {_status(r)}"}
 
 

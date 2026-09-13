@@ -43,8 +43,9 @@ def _jellyfin_libraries_row(jellyfin_url: str, jellyfin_key: str) -> dict | None
     them has image extraction on. None when the options cannot be read; the
     Jellyfin ping row already says whether Jellyfin is reachable."""
     try:
+        import jellyfin
         r = requests.get(f"{jellyfin_url.rstrip('/')}/Library/VirtualFolders",
-                         headers={"X-Emby-Token": jellyfin_key} if jellyfin_key else {}, timeout=5)
+                         headers=jellyfin.auth_headers(jellyfin_key), timeout=5)
         if r.status_code >= 400:
             return None
         libraries = r.json() or []
@@ -148,11 +149,16 @@ def check_all() -> list[dict]:
         services.append({"name": "TMDB", "status": "disabled"})
     jellyfin_url = _s("JELLYFIN_URL")
     if jellyfin_url:
+        import jellyfin
         jellyfin_key = _s("JELLYFIN_API_KEY")
+        # With a key, ping the authenticated endpoint so a rejected key
+        # (Jellyfin 12 refusing the legacy header, a revoked key) shows as
+        # down instead of a green 401. Without one, plain reachability.
         services.append(_ping(
             "Jellyfin",
-            f"{jellyfin_url.rstrip('/')}/System/Info/Public",
-            headers={"X-Emby-Token": jellyfin_key} if jellyfin_key else {},
+            f"{jellyfin_url.rstrip('/')}/System/Info" + ("" if jellyfin_key else "/Public"),
+            headers=jellyfin.auth_headers(jellyfin_key),
+            down_codes=(401, 403) if jellyfin_key else (),
         ))
         libraries = _jellyfin_libraries_row(jellyfin_url, jellyfin_key)
         if libraries:

@@ -4,6 +4,17 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Jellyfin 12.0 support. Jellyfin 12 disables the legacy `X-Emby-Token`
+  header by default, so every refresh, library lookup and health ping got
+  a 401 while the Settings test still said ok (it called an endpoint that
+  never needed a key). All requests now send the standard
+  `Authorization: MediaBrowser Token` header, which Jellyfin 10.x accepts
+  too. The Settings test and the health ping call the authenticated
+  system-info endpoint when a key is configured, so a rejected key shows
+  as a failure.
+
 ## [0.26.0] - 2026-09-13
 
 ### Changed

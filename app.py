@@ -3408,7 +3408,7 @@ def ui_api_jellyfin_item():
         resp = _req.get(
             f"{jurl}/Items",
             params={"AnyProviderIdEquals": f"imdb.{imdb_id}", "includeItemTypes": "Movie,Series"},
-            headers={"X-Emby-Token": jkey},
+            headers=jellyfin.auth_headers(jkey),
             timeout=5,
         )
         resp.raise_for_status()
@@ -3451,7 +3451,7 @@ def ui_api_jellyfin_items():
                     "Recursive": "true",
                     "Limit": 10000,
                 },
-                headers={"X-Emby-Token": jkey},
+                headers=jellyfin.auth_headers(jkey),
                 timeout=15,
             )
             resp.raise_for_status()
