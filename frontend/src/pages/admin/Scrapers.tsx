@@ -4,6 +4,7 @@ import { api } from '../../api';
 import type { PillState } from '../../components/primitives';
 import { Card, DataTable, Pill, StatusDot } from '../../components/primitives';
 import type { Column } from '../../components/primitives';
+import { formatLatency } from './overview/format';
 
 type ScraperRow = {
   name: string;
@@ -13,12 +14,6 @@ type ScraperRow = {
 };
 
 /** "212 ms" under 1000ms, "1.4 s" at/over 1000ms, "-" when there is no sample yet. */
-export function formatLatency(ms: number | null): string {
-  if (ms == null) return '-';
-  if (ms >= 1000) return `${(ms / 1000).toFixed(1)} s`;
-  return `${Math.round(ms)} ms`;
-}
-
 const PILL_BY_STATE: Record<ScraperRow['state'], PillState> = {
   ok: 'ready',
   slow: 'queued',

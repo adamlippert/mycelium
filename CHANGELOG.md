@@ -4,6 +4,14 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Overview: the TorBox card shows the idle cleanup delay again (it read
+  "-" since the redesign), a countdown under a minute reads "under 1 min"
+  instead of "0 min", the activity feed only knows pills for events the
+  backend actually logs, and the latency formatter is shared with the
+  Scrapers page.
+
 ## [0.27.1] - 2026-09-13
 
 ### Fixed

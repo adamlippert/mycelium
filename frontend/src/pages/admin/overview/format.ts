@@ -8,9 +8,10 @@ export function formatTB(bytes: number): string {
   return `${(bytes / 1e12).toFixed(2)} TB`;
 }
 
-/** "42 min" under an hour, "1 h 05 min" above it. */
+/** "under 1 min", "42 min" under an hour, "1 h 05 min" above it. */
 export function formatCountdown(sec: number): string {
   if (sec <= 0) return 'now';
+  if (sec < 60) return 'under 1 min';
   const m = Math.floor(sec / 60);
   if (m < 60) return `${m} min`;
   return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;

@@ -65,7 +65,7 @@ export type OverviewPayload = {
       last_cleanup: { ran_at: string; deleted: number } | null;
     };
   };
-  torbox: { recent_streams: number; last_429_at: string | null };
+  torbox: { recent_streams: number; last_429_at: string | null; idle_minutes?: number | null };
   /** Names of the blocks whose backend source failed and fell back to a
    * neutral default: base, scrapers, torbox_adds, attention, approvals,
    * consistency, plays, last_429. Cells that read from a failed block show

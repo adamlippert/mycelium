@@ -150,7 +150,7 @@ def test_build_has_the_documented_shape(monkeypatch):
     assert lib["qualities"] == {"1080p": 1}
     assert lib["consistency"] == {"db_items": 295, "strm_without_db": 5, "db_without_strm": 0,
                                   "arr_mirrored": 0, "arr_total": 1, "last_cleanup": None}
-    assert out["torbox"] == {"recent_streams": 0, "last_429_at": None}
+    assert out["torbox"] == {"recent_streams": 0, "last_429_at": None, "idle_minutes": 1440}
     assert out["errors"] == []
 
 
@@ -251,3 +251,18 @@ def test_route_is_admin_only_and_served_from_the_cache():
     src = _src("app.py")
     m = re.search(r'@app\.get\("/ui/api/overview"\)\s*\ndef (\w+)\(\):(.*?)\n\n', src, re.S)
     assert m and "auth.is_admin()" in m.group(2) and "overview.get()" in m.group(2)
+
+
+def test_every_activity_pill_names_an_event_the_backend_logs():
+    """The Overview's activity pills map event names to labels; a pill for
+    an event nothing logs is dead weight and misleads the next reader."""
+    import glob
+    root = os.path.join(os.path.dirname(__file__), "..")
+    logged = set()
+    for path in glob.glob(os.path.join(root, "*.py")):
+        logged |= set(re.findall(r'log_activity\(\s*"([a-z_]+)"', open(path).read()))
+    logged |= {"swapped", "upgraded"}   # release_swap.swap logs its `action` argument
+    band = open(os.path.join(root, "frontend", "src", "pages", "admin", "overview", "ActivityBand.tsx")).read()
+    pills = set(re.findall(r"^  ([a-z_]+): \{ label:", band, re.MULTILINE))
+    assert pills, "PILLS map not found"
+    assert pills <= logged, f"pills for events never logged: {sorted(pills - logged)}"

@@ -13,7 +13,9 @@ import threading
 import time
 from datetime import datetime, timezone
 
+import config
 import db
+import settings
 
 log = logging.getLogger(__name__)
 
@@ -159,6 +161,8 @@ def build() -> dict:
             "recent_streams": egress_estimate.recent(900),
             "last_429_at": (datetime.fromtimestamp(last_429, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
                             if last_429 else None),
+            "idle_minutes": _safe(lambda: int(settings.get("CATBOX_IDLE_MINUTES", config.CATBOX_IDLE_MINUTES) or 0),
+                                  None, name="idle_minutes", errors=errors),
         },
         "errors": errors,
     }

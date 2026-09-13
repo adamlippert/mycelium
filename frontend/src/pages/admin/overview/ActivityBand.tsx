@@ -10,16 +10,11 @@ type PillTone = 'ok' | 'warn' | 'danger' | 'neutral';
  * release_swap.swap() logs through a variable. Unknown names render without
  * a pill rather than erroring. */
 const PILLS: Record<string, { label: string; tone: PillTone }> = {
-  played: { label: 'play', tone: 'ok' },
   swapped: { label: 'swap', tone: 'neutral' },
   upgraded: { label: 'upgrade', tone: 'neutral' },
   added: { label: 'request', tone: 'ok' },
-  requested: { label: 'request', tone: 'ok' },
-  approved: { label: 'request', tone: 'ok' },
   wanted: { label: 'wanted', tone: 'warn' },
   failed: { label: 'failed', tone: 'danger' },
-  scraper: { label: 'scraper', tone: 'danger' },
-  cleanup: { label: 'job', tone: 'neutral' },
   purged: { label: 'removed', tone: 'neutral' },
   dedup_removed: { label: 'removed', tone: 'neutral' },
   found: { label: 'found', tone: 'ok' },

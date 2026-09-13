@@ -9,7 +9,7 @@ const activity = {
   egress: { proxied_bytes: 210_000_000_000, estimated_bytes: 1_630_000_000_000 },
 };
 const events = [
-  { id: 1, created_at: '2026-09-08 10:41:00', event: 'played', title: 'Severance S02E04', message: 'by anna', success: true },
+  { id: 1, created_at: '2026-09-08 10:41:00', event: 'found', title: 'Severance S02E04', message: 'lazy strm created', success: true },
   { id: 2, created_at: '2026-09-08 10:05:00', event: 'swapped', title: 'Heat (1995)', message: '1080p to 2160p', success: true },
   { id: 3, created_at: '2026-09-08 08:30:00', event: 'wanted', title: 'Dune Part Two', message: 'no cached release', success: false },
   { id: 4, created_at: '2026-09-08 07:58:00', event: 'mystery', title: 'X', message: '', success: true },
@@ -32,14 +32,15 @@ describe('ActivityBand', () => {
   it('renders the feed with pills by event family and a link to the logs', () => {
     render(<MemoryRouter><ActivityBand activity={activity} events={events} loading={false} errors={[]} /></MemoryRouter>);
     expect(screen.getByText('Severance S02E04')).toBeInTheDocument();
-    expect(screen.getByText('play')).toBeInTheDocument();
+    expect(screen.getByText('found')).toBeInTheDocument();
     expect(screen.getByText('swap')).toBeInTheDocument();
     expect(screen.getByText('wanted')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'All activity' })).toHaveAttribute('href', expect.stringContaining('logs'));
   });
 
   it('maps events to pills and leaves unknown events without one', () => {
-    expect(eventPill('played')).toEqual({ label: 'play', tone: 'ok' });
+    expect(eventPill('swapped')).toEqual({ label: 'swap', tone: 'neutral' });
+    expect(eventPill('played')).toBeNull();
     expect(eventPill('upgraded')).toEqual({ label: 'upgrade', tone: 'neutral' });
     expect(eventPill('failed')).toEqual({ label: 'failed', tone: 'danger' });
     expect(eventPill('mystery')).toBeNull();

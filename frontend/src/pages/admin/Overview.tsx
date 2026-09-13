@@ -47,7 +47,7 @@ export default function Overview() {
       <Band title="TorBox">
         <TorboxCard adds={o?.status.torbox_adds} addsLoading={overviewQ.isLoading} byReason={quotaQ.data?.by_reason}
           usage={torboxUsageQ.data} usageLoading={torboxUsageQ.isLoading}
-          streamFront={healthQ.data?.stream_front} recentStreams={o?.torbox.recent_streams} last429At={o?.torbox.last_429_at} idleMinutes={null} />
+          streamFront={healthQ.data?.stream_front} recentStreams={o?.torbox.recent_streams} last429At={o?.torbox.last_429_at} idleMinutes={o?.torbox.idle_minutes ?? null} />
       </Band>
       <Band title="Reference" hint="collapsed by default; state remembered">
         <div className="space-y-3">
