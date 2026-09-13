@@ -463,7 +463,7 @@ def test_candidates_route_rejects_a_negative_season_or_episode_like_swap_does():
     (None, None, (None, None)),
     ([1], 2, None),
     (True, 1, None),
-    (2, None, None),
+    (2, None, (2, None)),   # a season without an episode is the whole season
     (0, 0, (0, 0)),
     (-1, 1, None),
     (1, -1, None),
@@ -508,3 +508,185 @@ def test_swap_holds_the_token_lock_around_the_write(monkeypatch):
     out = rs.swap(rs.find_item("tt1"), _candidate(H3))
     assert out["ok"] is True
     assert events == ["enter:tok", "update", "exit:tok"]
+
+
+# whole-season swap
+
+HP = "e" * 40   # the new pack
+HQ = "f" * 40   # a single-episode release (not a pack)
+PACK_FILES = [{"id": i, "name": f"Show/Heat S02E{n:02d}.mkv", "size": 1000 + n} for i, n in enumerate((1, 2, 3))]
+
+
+@pytest.fixture
+def season_fake(monkeypatch):
+    """Season 2 of Heat: E1 and E2 present on H1, E3 wanted, E4 wanted. The
+    scrapers offer pack HP (cached, E1 to E3) and single HQ; TorBox lists
+    the pack's files."""
+    import scrapers
+    import streams as streams_mod
+    import debrid
+    import filter_rules
+    import torbox
+    db.insert_request("Heat", "tt2", "series")
+    _item("tt2", "t21", H1, season=2, episode=1)
+    _item("tt2", "t22", H1, season=2, episode=2)
+    db.upsert_wanted_episode("tt2", 9, "Heat", 2, 3, "2024-01-01")
+    db.upsert_wanted_episode("tt2", 9, "Heat", 2, 4, "2024-01-01")
+    found = [_stream("Heat.S02.1080p.WEB-DL", HP, pack=True), _stream("Heat.S02E01.1080p", HQ),
+             _stream("Heat.S02.720p.HDTV", H1, quality="720p", pack=True)]
+    calls = {}
+    def merge(media_type, imdb, season=None, episode=None, **kw):
+        calls["merge"] = (media_type, imdb, season, episode)
+        return list(found)
+    monkeypatch.setattr(scrapers, "merge_candidates", merge)
+    def fake_rank(items, prefer_season_pack=False, override=None):
+        calls["rank"] = prefer_season_pack
+        return list(items), [filter_rules.Verdict(kept=True, rule=None, value=None) for _ in items]
+    monkeypatch.setattr(streams_mod, "rank_streams_explained", fake_rank)
+    monkeypatch.setattr(debrid, "check_cached_multi", lambda hashes: {"torbox": {HP, H1}})
+    files = {"files": PACK_FILES}
+    monkeypatch.setattr(torbox, "check_cached_files", lambda hashes, **k: {h: files for h in hashes if h == HP})
+    written = []
+    import strm_generator
+    def fake_create(info_hash, magnet, title, season, episode, **kw):
+        written.append((episode, info_hash, kw.get("file_id")))
+        _item("tt2", f"new{episode}", info_hash, season=season, episode=episode)
+        db.mark_episode_status("tt2", season, episode, "found")
+        return True
+    monkeypatch.setattr(strm_generator, "create_lazy_episode_strm", fake_create)
+    return calls, written
+
+
+def test_season_candidates_keep_packs_only_with_coverage_and_current_flags(season_fake):
+    calls, _ = season_fake
+    out = rs.candidates("tt2", "series", 2, None)
+    assert calls["merge"] == ("series", "tt2", 2, 1) and calls["rank"] is True
+    assert out["current"] is None
+    rows = {r["info_hash"]: r for r in out["candidates"]}
+    assert set(rows) == {HP, H1}, "single-episode releases cannot serve a season"
+    assert rows[HP]["episodes"] == [1, 2, 3] and rows[HP]["current"] is False and rows[HP]["cached"] is True
+    assert rows[H1]["episodes"] is None and rows[H1]["current"] is True, "no file list for it: coverage unknown"
+
+
+def test_season_swap_swaps_present_registers_wanted_and_skips_the_rest(season_fake):
+    _, written = season_fake
+    out = rs.swap_by_hash("tt2", HP, 2, None, blacklist_old=True)
+    assert out["ok"] is True
+    assert (out["swapped"], out["registered"], out["kept"], out["skipped"], out["busy"]) == ([1, 2], [3], [], [4], [])
+    assert "2 swapped, 1 registered, 1 not in the pack, still wanted (E04)" in out["message"]
+    for tok, fid in (("t21", 0), ("t22", 1)):
+        it = db.get_virtual_item(tok)
+        assert it["info_hash"] == HP and it["file_id"] == fid and it["torbox_id"] is None
+    assert written == [(3, HP, 2)]
+    assert db.excluded_hashes_for("tt2", 2, 4) == {HP}, "E4 stays wanted and never tries this pack"
+    assert H1 in db.get_blacklisted_hashes(db._blacklist_threshold())
+    assert any(a.get("message", "").startswith("S02 to 1080p") for a in db.get_activity(5))
+
+
+def test_season_swap_without_a_file_list_swaps_present_only(season_fake, monkeypatch):
+    import torbox
+    _, written = season_fake
+    monkeypatch.setattr(torbox, "check_cached_files", lambda hashes, **k: {})
+    out = rs.swap_by_hash("tt2", HP, 2, None)
+    assert out["ok"] is True and out["swapped"] == [1, 2] and out["registered"] == [] and out["skipped"] == []
+    assert db.get_virtual_item("t21")["file_id"] is None, "the first play reconciles"
+    assert written == [] and db.excluded_hashes_for("tt2", 2, 4) == set()
+
+
+def test_season_swap_skips_a_busy_token_and_reports_it(season_fake, monkeypatch):
+    import catbox
+    monkeypatch.setattr(rs, "ADMIN_LOCK_TIMEOUT_SEC", 0.01)
+    lock = catbox._token_lock("t22")
+    lock.acquire()
+    try:
+        out = rs.swap_by_hash("tt2", HP, 2, None)
+    finally:
+        lock.release()
+    assert out["ok"] is True and out["swapped"] == [1] and out["busy"] == [2]
+    assert db.get_virtual_item("t22")["info_hash"] == H1
+    assert "busy, try again later (E02)" in out["message"]
+
+
+def test_season_swap_keeps_a_present_episode_the_pack_lacks_and_spares_its_hash(season_fake, monkeypatch):
+    _item("tt2", "t24", H3, season=2, episode=4)   # E4 present on H3, and the pack has E1 to E3
+    with db._connect() as conn:
+        conn.execute("DELETE FROM wanted_episodes WHERE imdb_id='tt2' AND episode=4"); conn.commit()
+    out = rs.swap_by_hash("tt2", HP, 2, None, blacklist_old=True)
+    assert out["ok"] is True and out["swapped"] == [1, 2] and out["kept"] == [4] and out["skipped"] == []
+    assert "1 not in the pack, kept their release (E04)" in out["message"]
+    assert db.get_virtual_item("t24")["info_hash"] == H3
+    blacklisted = db.get_blacklisted_hashes(db._blacklist_threshold())
+    assert H1 in blacklisted and H3 not in blacklisted, "E4 still plays from H3"
+
+
+def test_season_swap_does_not_blacklist_a_hash_a_busy_episode_still_uses(season_fake, monkeypatch):
+    import catbox
+    monkeypatch.setattr(rs, "ADMIN_LOCK_TIMEOUT_SEC", 0.01)
+    lock = catbox._token_lock("t22")
+    lock.acquire()
+    try:
+        out = rs.swap_by_hash("tt2", HP, 2, None, blacklist_old=True)
+    finally:
+        lock.release()
+    assert out["swapped"] == [1] and out["busy"] == [2]
+    assert H1 not in db.get_blacklisted_hashes(db._blacklist_threshold())
+
+
+def test_season_swap_reports_an_episode_it_could_not_register(season_fake, monkeypatch):
+    import strm_generator
+    monkeypatch.setattr(strm_generator, "create_lazy_episode_strm", lambda *a, **k: False)
+    out = rs.swap_by_hash("tt2", HP, 2, None)
+    assert out["ok"] is True and out["failed"] == [3] and "could not be registered (E03)" in out["message"]
+
+
+def test_season_swap_refreshes_jellyfin_only_when_it_registered_something(season_fake, monkeypatch):
+    import jellyfin
+    calls = []
+    monkeypatch.setattr(jellyfin, "refresh_library", lambda *a, **k: calls.append(1))
+    rs.swap_by_hash("tt2", HP, 2, None)
+    assert calls == [1]
+    calls.clear()
+    rs.swap_by_hash("tt2", HP, 2, None)   # everything already on the pack now
+    assert calls == []
+
+
+def test_season_swap_when_every_episode_is_already_on_the_pack_is_ok(season_fake):
+    rs.swap_by_hash("tt2", HP, 2, None)
+    out = rs.swap_by_hash("tt2", HP, 2, None)
+    assert out["ok"] is True and out["swapped"] == [] and out["skipped"] == [4]
+    with db._connect() as conn:
+        conn.execute("DELETE FROM wanted_episodes WHERE imdb_id='tt2' AND episode=4"); conn.commit()
+    out = rs.swap_by_hash("tt2", HP, 2, None)
+    assert out["ok"] is True and "already on this pack" in out["message"]
+
+
+def test_season_swap_holds_the_new_pack_lock_around_the_loop():
+    src = open(os.path.join(_ROOT, "release_swap.py")).read()
+    body = src.split("def swap_season(")[1].split("\ndef ")[0]
+    assert 'with catbox._pack_lock(info_hash):' in body
+
+
+def test_season_swap_validates(season_fake, monkeypatch):
+    import torbox
+    assert rs.swap_by_hash("tt2", "nope", 2, None)["ok"] is False
+    assert rs.swap_by_hash("tt9", HP, 2, None)["message"] == "unknown title"
+    assert rs.swap_by_hash("tt2", HP, 7, None)["message"] == "nothing known about that season"
+    assert rs.swap_by_hash("tt2", HQ, 2, None)["message"] == "that hash is not in the candidate list"
+    unmatched = {"files": [{"id": 0, "name": "x/a.mkv", "size": 1}, {"id": 1, "name": "x/b.mkv", "size": 1}]}
+    monkeypatch.setattr(torbox, "check_cached_files", lambda hashes, **k: {HP: unmatched})
+    out = rs.swap_by_hash("tt2", HP, 2, None)
+    assert out["ok"] is False and "no episode this season matches" in out["message"]
+    assert db.get_virtual_item("t21")["info_hash"] == H1, "nothing changed"
+
+
+def test_season_swap_onto_the_current_pack_only_fills_in_file_ids(season_fake):
+    db.update_virtual_item_upgrade("t21", HP, "m", "1080p", None)
+    out = rs.swap_by_hash("tt2", HP, 2, None)
+    assert out["swapped"] == [2] and db.get_virtual_item("t21")["file_id"] == 0
+
+
+def test_swap_route_accepts_a_season_without_an_episode():
+    src = _src("app.py")
+    body = src.split("def ui_api_library_swap(")[1].split("\ndef ")[0]
+    assert "release_swap.parse_episode_ref(p.get(\"season\"), p.get(\"episode\"))" in body
+    assert "swap_by_hash(" in body

@@ -2115,7 +2115,8 @@ def ui_api_library_activity(imdb_id: str):
 
 @app.get("/ui/api/library/<imdb_id>/candidates")
 def ui_api_library_candidates(imdb_id: str):
-    """The candidate releases for a movie or one episode; a live scrape."""
+    """The candidate releases for a movie, one episode, or (season without
+    episode) the season packs for a whole season; a live scrape."""
     if not auth.is_admin():
         return jsonify(error="admin required"), 403
     import release_swap

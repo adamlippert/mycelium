@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Candidate } from '../../../api';
-import { ReleasesPanel } from './ReleasesPanel';
+import { ReleasesPanel, coverageLabel } from './ReleasesPanel';
 
 const apiMocks = vi.hoisted(() => ({ libraryCandidates: vi.fn(), librarySwap: vi.fn() }));
 vi.mock('../../../api', async () => {
@@ -100,5 +100,43 @@ describe('ReleasesPanel', () => {
     expect(await screen.findByText(/torrentio down/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findAllByRole('listitem')).toHaveLength(1);
+  });
+});
+
+describe('ReleasesPanel season mode', () => {
+  it('asks for the season only, shows coverage badges and posts a season-only swap', async () => {
+    apiMocks.libraryCandidates.mockResolvedValueOnce({ current: null, candidates: [
+      cand({ name: 'Heat.S02.1080p.WEB-DL', episodes: [1, 2, 3, 4] }),
+      cand({ info_hash: 'b'.repeat(40), name: 'Heat.S02.720p.HDTV', quality: '720p', episodes: [1, 2, 3], current: true }),
+      cand({ info_hash: 'c'.repeat(40), name: 'Heat.S02.2160p', quality: '2160p', cached: false, episodes: null }),
+    ] });
+    apiMocks.librarySwap.mockResolvedValue({ ok: true, message: 'S02: 3 swapped, 1 registered; next play uses 1080p WEB-DL', swapped: [1, 2, 3], registered: [4] });
+    const { onDone, onClose } = renderIt({ season: 2, expectedEpisodes: [1, 2, 3, 4] });
+    expect(await screen.findByText('Heat.S02.1080p.WEB-DL')).toBeInTheDocument();
+    expect(apiMocks.libraryCandidates).toHaveBeenCalledWith('tt1', 2, undefined);
+    expect(screen.getByText('all 4 episodes')).toBeInTheDocument();
+    expect(screen.getByText('3 of 4, missing E04')).toBeInTheDocument();
+    expect(screen.getByText('in use')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Use' })).toHaveLength(3);
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Use' })[0]);
+    expect(screen.getByText(/Switch the whole season/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Blacklist the current releases' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(apiMocks.librarySwap).toHaveBeenCalledWith('tt1', { info_hash: 'a'.repeat(40), season: 2, blacklist_old: true }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ ok: true, swapped: [1, 2, 3] })));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('coverageLabel', () => {
+    expect(coverageLabel(null, [1, 2])).toBeNull();
+    expect(coverageLabel(undefined, [1, 2])).toBeNull();
+    expect(coverageLabel([], [1, 2])).toEqual({ text: 'no episode found', tone: 'warn' });
+    expect(coverageLabel([1, 2, 3], [1, 2, 3])).toEqual({ text: 'all 3 episodes', tone: 'ok' });
+    expect(coverageLabel([1, 2, 3], [1, 2, 3, 4, 5])).toEqual({ text: '3 of 5, missing E04, E05', tone: 'warn' });
+    expect(coverageLabel([1, 3, 5], [1, 2, 3, 4, 5])).toEqual({ text: '3 of 5, missing E02, E04', tone: 'warn' });
+    expect(coverageLabel([7], [7])).toEqual({ text: 'all 1 episodes', tone: 'ok' });
+    expect(coverageLabel([1, 2], [])).toEqual({ text: '2 episodes', tone: 'ok' });
+    expect(coverageLabel([1], [])).toEqual({ text: '1 episode', tone: 'ok' });
   });
 });

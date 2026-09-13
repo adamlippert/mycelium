@@ -10,15 +10,21 @@ import { ReleasesPanel } from '../ReleasesPanel';
 function Season({ d, season, onDone }: { d: LibraryDetail; season: { season: number; present: number; wanted: number }; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [swapping, setSwapping] = useState<number | null>(null);
+  const [swappingSeason, setSwappingSeason] = useState(false);
+  const [seasonResult, setSeasonResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [results, setResults] = useState<Record<number, { ok: boolean; message: string }>>({});
-  const q = useQuery({ queryKey: ['library-season', d.request.imdb_id, season.season], queryFn: () => api.librarySeason(d.request.imdb_id, season.season), enabled: open });
+  const q = useQuery({ queryKey: ['library-season', d.request.imdb_id, season.season], queryFn: () => api.librarySeason(d.request.imdb_id, season.season), enabled: open || swappingSeason });
   const pad = (n: number) => String(n).padStart(2, '0');
   return (
     <div className="rounded border border-border p-2 text-xs">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span>Season {season.season}: {season.present} present, {season.wanted} wanted</span>
-        <Button variant="ghost" aria-label={`${open ? 'Collapse' : 'Expand'} season ${season.season}`} onClick={() => setOpen((o) => !o)}>{open ? 'Hide' : 'Show'}</Button>
+        <span className="flex items-center gap-2">
+          <Button variant="ghost" aria-label={`Swap season ${season.season}`} onClick={() => { setSwapping(null); setSeasonResult(null); setSwappingSeason(true); }}>Swap season</Button>
+          <Button variant="ghost" aria-label={`${open ? 'Collapse' : 'Expand'} season ${season.season}`} onClick={() => setOpen((o) => !o)}>{open ? 'Hide' : 'Show'}</Button>
+        </span>
       </div>
+      {seasonResult && <p role="status" className={`mt-1 ${seasonResult.ok ? 'text-ok' : 'text-danger'}`}>{seasonResult.message}</p>}
       {open && q.data && (
         <ul className="mt-2 space-y-1">
           {q.data.episodes.map((e) => (
@@ -30,7 +36,7 @@ function Season({ d, season, onDone }: { d: LibraryDetail; season: { season: num
               {!e.present && <ActionButton label={`Retry S${pad(season.season)}E${pad(e.episode)}`} run={() => ACTIONS.retryEpisode(d, season.season, e.episode)} onDone={onDone} />}
               {e.present && (
                 <span className="flex items-center gap-2">
-                  <Button variant="ghost" aria-label={`Swap S${pad(season.season)}E${pad(e.episode)}`} onClick={() => setSwapping(e.episode)}>Swap</Button>
+                  <Button variant="ghost" aria-label={`Swap S${pad(season.season)}E${pad(e.episode)}`} onClick={() => { setSwappingSeason(false); setSwapping(e.episode); }}>Swap</Button>
                   {results[e.episode] && <span className={results[e.episode].ok ? 'text-ok' : 'text-danger'}>{results[e.episode].message}</span>}
                 </span>
               )}
@@ -38,7 +44,17 @@ function Season({ d, season, onDone }: { d: LibraryDetail; season: { season: num
           ))}
         </ul>
       )}
-      {swapping != null && (
+      {swappingSeason && (
+        <ReleasesPanel
+          key="season"
+          imdb={d.request.imdb_id}
+          season={season.season}
+          expectedEpisodes={(q.data?.episodes ?? []).map((e) => e.episode)}
+          onDone={(result) => { setSeasonResult(result); onDone(); }}
+          onClose={() => setSwappingSeason(false)}
+        />
+      )}
+      {swapping != null && !swappingSeason && (
         <ReleasesPanel
           key={swapping}
           imdb={d.request.imdb_id}

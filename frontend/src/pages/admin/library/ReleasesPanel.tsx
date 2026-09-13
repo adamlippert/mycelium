@@ -5,14 +5,30 @@ import type { Candidate } from '../../../api';
 import { Button } from '../../../components/primitives';
 import { DrawerCard } from './cards/DrawerCard';
 
+/** What a cached pack contains, against the episodes the season has. A gappy
+ * pack names the missing episodes rather than pretending to be a range. */
+export function coverageLabel(episodes: number[] | null | undefined, expected: number[]): { text: string; tone: 'ok' | 'warn' } | null {
+  if (!episodes) return null;
+  if (episodes.length === 0) return { text: 'no episode found', tone: 'warn' };
+  const pad = (n: number) => String(n).padStart(2, '0');
+  if (expected.length === 0) return { text: `${episodes.length} episode${episodes.length === 1 ? '' : 's'}`, tone: 'ok' };
+  const missing = expected.filter((e) => !episodes.includes(e));
+  if (missing.length === 0) return { text: `all ${expected.length} episodes`, tone: 'ok' };
+  return { text: `${episodes.length} of ${expected.length}, missing ${missing.map((n) => `E${pad(n)}`).join(', ')}`, tone: 'warn' };
+}
+
 function Badge({ tone, children }: { tone: 'ok' | 'muted' | 'warn'; children: React.ReactNode }) {
   const cls = { ok: 'bg-ok/20 text-ok', muted: 'bg-white/10 text-muted', warn: 'bg-warn/20 text-warn' }[tone];
   return <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${cls}`}>{children}</span>;
 }
 
-export function ReleasesPanel({ imdb, season, episode, onDone, onClose }: {
-  imdb: string; season?: number; episode?: number; onDone: (result: { ok: boolean; message: string }) => void; onClose: () => void;
+export function ReleasesPanel({ imdb, season, episode, expectedEpisodes = [], onDone, onClose }: {
+  imdb: string; season?: number; episode?: number;
+  /** Season mode: the episode numbers the season has, for the coverage badge. */
+  expectedEpisodes?: number[];
+  onDone: (result: { ok: boolean; message: string }) => void; onClose: () => void;
 }) {
+  const seasonMode = season != null && episode == null;
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['library-candidates', imdb, season, episode], queryFn: () => api.libraryCandidates(imdb, season, episode), retry: false });
   const [picked, setPicked] = useState<Candidate | null>(null);
@@ -24,7 +40,7 @@ export function ReleasesPanel({ imdb, season, episode, onDone, onClose }: {
     if (!picked) return;
     setBusy(true);
     try {
-      const body = { info_hash: picked.info_hash, ...(season != null && episode != null ? { season, episode } : {}), blacklist_old: blacklistOld };
+      const body = { info_hash: picked.info_hash, ...(season != null ? (episode != null ? { season, episode } : { season }) : {}), blacklist_old: blacklistOld };
       const r = await api.librarySwap(imdb, body);
       if (r.ok) {
         qc.invalidateQueries({ queryKey: ['library-candidates', imdb, season, episode] });
@@ -41,7 +57,9 @@ export function ReleasesPanel({ imdb, season, episode, onDone, onClose }: {
   };
 
   return (
-    <DrawerCard title="Releases" description="What the scrapers found for this title; the current release is marked.">
+    <DrawerCard title="Releases" description={seasonMode
+      ? `Season packs the scrapers found for season ${season}; packs already in use are marked. The badge says which episodes a cached pack contains.`
+      : 'What the scrapers found for this title; the current release is marked.'}>
       {q.isLoading && <p className="text-xs text-muted">Asking the scrapers...</p>}
       {q.error && (
         <p className="text-xs text-danger">{(q.error as Error).message} <Button variant="ghost" onClick={() => q.refetch()}>Retry</Button></p>
@@ -54,8 +72,9 @@ export function ReleasesPanel({ imdb, season, episode, onDone, onClose }: {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="max-w-[22rem] truncate font-mono" title={c.name}>{c.name}</span>
                 {c.cached && <Badge tone="ok">cached</Badge>}
-                {c.current && <Badge tone="muted">current</Badge>}
-                {!c.current && <Button onClick={() => { setPicked(c); setMsg(null); }}>Use</Button>}
+                {seasonMode && (() => { const cov = coverageLabel(c.episodes, expectedEpisodes); return cov ? <Badge tone={cov.tone}>{cov.text}</Badge> : null; })()}
+                {c.current && <Badge tone="muted">{seasonMode ? 'in use' : 'current'}</Badge>}
+                {(!c.current || seasonMode) && <Button onClick={() => { setPicked(c); setMsg(null); }}>Use</Button>}
               </div>
               <div className="mt-1 text-muted">
                 {[c.quality, c.source].filter(Boolean).join(' ')}
@@ -65,11 +84,13 @@ export function ReleasesPanel({ imdb, season, episode, onDone, onClose }: {
               {!c.kept && <div className="mt-1 text-muted">dropped: {c.rule} = {c.value}</div>}
               {picked?.info_hash === c.info_hash && (
                 <div className="mt-2 space-y-1 rounded border border-border bg-bg p-2">
-                  <p>Switch to this release? The next play uses it; the file in Jellyfin stays the same.</p>
+                  <p>{seasonMode
+                    ? 'Switch the whole season to this pack? Episodes it contains move to it; episodes it lacks keep their release or stay wanted. Files in Jellyfin stay the same.'
+                    : 'Switch to this release? The next play uses it; the file in Jellyfin stays the same.'}</p>
                   {!c.cached && <p className="text-warn">TorBox does not have this yet; the first play adds it and may wait.</p>}
                   <label className="flex items-center gap-2">
-                    <input type="checkbox" aria-label="Blacklist the current release" checked={blacklistOld} onChange={(e) => setBlacklistOld(e.target.checked)} />
-                    Blacklist the current release
+                    <input type="checkbox" aria-label={seasonMode ? 'Blacklist the current releases' : 'Blacklist the current release'} checked={blacklistOld} onChange={(e) => setBlacklistOld(e.target.checked)} />
+                    {seasonMode ? 'Blacklist the current releases' : 'Blacklist the current release'}
                   </label>
                   <div className="flex items-center gap-2">
                     <Button variant="primary" onClick={confirm} loading={busy} loadingLabel="Switching...">Confirm</Button>

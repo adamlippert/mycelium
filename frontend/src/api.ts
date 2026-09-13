@@ -331,11 +331,12 @@ export const api = {
   libraryDetail: (imdb: string) => http<LibraryDetail>(`/ui/api/library/${imdb}`),
   librarySeason: (imdb: string, season: number) => http<{ episodes: SeasonEpisode[] }>(`/ui/api/library/${imdb}/season/${season}`),
   libraryCandidates: (imdb: string, season?: number, episode?: number) => {
-    const qs = season != null && episode != null ? `?season=${season}&episode=${episode}` : '';
+    // season alone = the season packs for a whole season
+    const qs = season != null ? (episode != null ? `?season=${season}&episode=${episode}` : `?season=${season}`) : '';
     return http<CandidatesResponse>(`/ui/api/library/${imdb}/candidates${qs}`);
   },
   librarySwap: (imdb: string, body: { info_hash: string; season?: number; episode?: number; blacklist_old: boolean }) =>
-    http<{ ok: boolean; message: string }>(`/ui/api/library/${imdb}/swap`, { method: 'POST', body: JSON.stringify(body) }),
+    http<SwapResult>(`/ui/api/library/${imdb}/swap`, { method: 'POST', body: JSON.stringify(body) }),
   libraryActivity: (imdb: string, before: number) => http<{ activity: LibraryDetail['activity'] }>(`/ui/api/library/${imdb}/activity?before=${before}`),
   libraryAction: (path: string, method: 'POST' | 'DELETE' = 'POST', body?: unknown) =>
     http<{ ok: boolean; message: string }>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) }),
@@ -889,8 +890,11 @@ export interface SeasonEpisode { season: number; episode: number; present: boole
 export interface Candidate {
   info_hash: string; name: string; quality: string | null; source: string | null; size_gb: number; seeders: number;
   languages: string[]; cached: boolean; scrapers: string[]; kept: boolean; rule: string | null; value: string | null; current: boolean;
+  /** Season mode only: episode numbers the pack contains per TorBox's file list; null when unknown. */
+  episodes?: number[] | null;
 }
 export interface CandidatesResponse { current: { info_hash: string; quality: string | null; source: string | null } | null; candidates: Candidate[] }
+export interface SwapResult { ok: boolean; message: string; swapped?: number[]; registered?: number[]; skipped?: number[]; busy?: number[] }
 
 export interface GenreRule {
   media_type: 'movie' | 'tv';

@@ -57,6 +57,23 @@ describe('drawer cards', () => {
     expect(screen.getByRole('button', { name: 'Swap S02E01' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Swap S02E03' })).not.toBeInTheDocument();
 
+    // Whole-season swap: the panel asks for the season only and the result lands on the season header.
+    apiMocks.librarySwap.mockResolvedValueOnce({ ok: true, message: 'S02: 2 swapped, 1 registered; next play uses 2160p REMUX', swapped: [1, 2], registered: [3] });
+    await userEvent.click(screen.getByRole('button', { name: 'Swap season 2' }));
+    await waitFor(() => expect(apiMocks.libraryCandidates).toHaveBeenCalledWith('tt4', 2, undefined));
+    await userEvent.click(await screen.findByRole('button', { name: 'Use' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(apiMocks.librarySwap).toHaveBeenCalledWith('tt4', { info_hash: 'f'.repeat(40), season: 2, blacklist_old: false }));
+    expect(await screen.findByRole('status')).toHaveTextContent('S02: 2 swapped, 1 registered; next play uses 2160p REMUX');
+    expect(screen.queryByText('Releases')).not.toBeInTheDocument();
+
+    // A per-episode Swap while the season panel is open closes it and opens the episode one.
+    await userEvent.click(screen.getByRole('button', { name: 'Swap season 2' }));
+    expect(await screen.findByText(/Season packs the scrapers found/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Swap S02E01' }));
+    await waitFor(() => expect(apiMocks.libraryCandidates).toHaveBeenLastCalledWith('tt4', 2, 1));
+    expect(screen.queryByText(/Season packs the scrapers found/)).not.toBeInTheDocument();
+
     await userEvent.click(screen.getByRole('button', { name: 'Swap S02E01' }));
     expect(await screen.findByText('Releases')).toBeInTheDocument();
     await waitFor(() => expect(apiMocks.libraryCandidates).toHaveBeenCalledWith('tt4', 2, 1));

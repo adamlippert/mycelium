@@ -4,6 +4,19 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Whole-season release swap. Each season in the Library drawer has a
+  "Swap season" button that lists the season packs the scrapers find,
+  with a badge per cached pack saying which episodes it contains (from
+  TorBox's file list). Picking one moves every episode the pack contains
+  to it behind its existing token, with the file id set up front, registers
+  wanted episodes the pack contains, and leaves episodes the pack lacks as
+  they are (recorded as not in that pack). The result lists what was
+  swapped, registered, skipped or busy. "Blacklist the current releases"
+  blacklists every release the season was on. Requesting candidates or a
+  swap with a season and no episode addresses the whole season.
+
 ### Removed
 
 - The continue-watching priority job and its `CONTINUE_WATCHING_INTERVAL_MINUTES`
