@@ -86,7 +86,7 @@ def test_default_listing_is_every_title_newest_first_with_the_computed_columns(s
 
 @pytest.mark.parametrize("view,expected", [
     ("attention", {"tt2", "tt6"}),
-    ("wanted", {"tt3"}),
+    ("wanted", {"tt3", "tt4"}),
     ("queue", {"tt4", "tt5", "tt6"}),
     ("incomplete", {"tt4"}),
     ("unmirrored", {"tt4", "tt6"}),
@@ -99,7 +99,24 @@ def test_views_select_exactly_their_titles(seeded, view, expected):
 
 def test_view_counts_match_the_views(seeded):
     counts = la.view_counts()
-    assert counts == {"all": 6, "attention": 2, "wanted": 1, "queue": 3, "incomplete": 1, "unmirrored": 2}
+    assert counts == {"all": 6, "attention": 2, "wanted": 2, "queue": 3, "incomplete": 1, "unmirrored": 2}
+
+
+def test_wanted_view_includes_library_titles_that_still_miss_something(seeded):
+    """A series that is in the library but has wanted episodes (Loki), and
+    a success movie that sits on the wanted-movies list, both belong in the
+    Wanted view next to the requests whose own status is wanted. Before,
+    a series that lost episodes to the season-pack repair was invisible
+    there because its request status stayed success."""
+    _req("Nope", "tt7")
+    db.upsert_wanted_movie("tt7", 700, "Nope", "no release")
+    rows, total, _ = la.list_titles({"view": "wanted"})
+    assert set(_ids(rows)) == {"tt3", "tt4", "tt7"} and total == 3
+    assert la.view_counts()["wanted"] == 3
+    # Marking the episode found takes the series out again.
+    db.mark_episode_status("tt4", 2, 3, "found")
+    rows, _, _ = la.list_titles({"view": "wanted"})
+    assert set(_ids(rows)) == {"tt3", "tt7"}
 
 
 def test_playability_prefers_degraded_across_two_keys_for_the_same_title():

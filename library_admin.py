@@ -68,7 +68,7 @@ LEFT JOIN (
 _VIEW_WHERE = {
     "all": "1=1",
     "attention": "(t.status = 'failed' OR t.play_status = 'degraded' OR t.retry_attempt >= 3)",
-    "wanted": "t.status IN ('wanted', 'upcoming')",
+    "wanted": "(t.status IN ('wanted', 'upcoming') OR t.in_wanted_movies = 1 OR t.missing_episodes > 0)",
     "queue": "(t.status = 'pending' OR t.retry_attempt IS NOT NULL OR t.in_wanted_movies = 1 OR t.missing_episodes > 0)",
     "incomplete": "(t.media_type != 'movie' AND t.missing_episodes > 0)",
     "unmirrored": "(t.status = 'success' AND t.arr_mirrored_at IS NULL)",

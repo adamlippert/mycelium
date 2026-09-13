@@ -4,6 +4,14 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- The admin Library "Wanted" view now also lists titles that are in the
+  library but still missing something: series with wanted episodes and
+  movies on the wanted-movies list. Before, it only showed requests whose
+  own status was wanted or upcoming, so a series that lost episodes to the
+  season-pack repair was invisible there.
+
 ## [0.25.2] - 2026-09-13
 
 ### Fixed
