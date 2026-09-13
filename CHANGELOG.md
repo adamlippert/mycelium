@@ -4,6 +4,13 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Removed
+
+- The continue-watching priority job and its `CONTINUE_WATCHING_INTERVAL_MINUTES`
+  setting. It asked Jellyfin for the current user's in-progress series with
+  a server API key, which has no user, so it never found anything; the
+  monitor searches every wanted episode each run regardless.
+
 ## [0.26.1] - 2026-09-13
 
 ### Fixed

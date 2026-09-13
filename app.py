@@ -17,7 +17,6 @@ import nfo_generator
 import catchup
 import cleanup
 import config as cfg
-import continue_watching
 import db
 import egress_estimate
 import health
@@ -51,7 +50,6 @@ from config import (
     CATBOX_MODE,
     CATCHUP_ENABLED,
     CLEANUP_INTERVAL_HOURS,
-    CONTINUE_WATCHING_INTERVAL_MINUTES,
     LISTEN_HOST,
     LISTEN_PORT,
     MERGE_VERSIONS_INTERVAL_HOURS,
@@ -433,14 +431,6 @@ def _start_scheduler() -> BackgroundScheduler:
             log.info("Scheduled auto-approve (genres + favorite actors) every %dh",
                      AUTO_APPROVE_INTERVAL_HOURS)
 
-        if CONTINUE_WATCHING_INTERVAL_MINUTES > 0:
-            scheduler.add_job(
-                continue_watching.prioritize_next_episodes,
-                trigger="interval", minutes=CONTINUE_WATCHING_INTERVAL_MINUTES,
-                id="continue_watching", next_run_time=None,
-            )
-            log.info("Scheduled continue-watching priority every %dm", CONTINUE_WATCHING_INTERVAL_MINUTES)
-
         if MERGE_VERSIONS_INTERVAL_HOURS > 0:
             scheduler.add_job(
                 jellyfin.merge_duplicate_versions,
@@ -490,7 +480,7 @@ def _start_scheduler() -> BackgroundScheduler:
     # Apply max_instances=1 to all overlap-sensitive jobs already added
     for jid in ("strm_generator", "strm_cleanup", "series_monitor", "movie_sync",
                  "retry_queue", "auto_upgrade", "pack_consolidation",
-                 "trending_precache", "continue_watching", "db_backup",
+                 "trending_precache", "db_backup",
                  "catbox_gc", "merge_versions", "quota_warn"):
         try:
             scheduler.modify_job(jid, max_instances=1)
