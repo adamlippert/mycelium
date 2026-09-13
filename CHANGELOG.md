@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.25.2] - 2026-09-13
+
 ### Fixed
 
 - Episodes of a season pack no longer play the wrong episode. When a pack

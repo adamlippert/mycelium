@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.25.2",
+    "date": "2026-09-13",
+    "notes": [
+      "Episodes of a season pack no longer play the wrong episode. When a pack did not contain an episode's file, the player silently got the largest file in the pack, usually episode 1 or 2. The first play of any episode in a pack now matches every episode of that season to a file: more naming forms are recognised, untagged files map by order only when the pack has one file per episode, and an episode the pack does not contain is detached and returns to the wanted list so the monitor searches for it on its own",
+      "Seasons already broken this way are repaired on their next play"
+    ]
+  },
+  {
     "version": "0.25.1",
     "date": "2026-09-08",
     "notes": [
