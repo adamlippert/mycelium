@@ -75,11 +75,35 @@ def _pick_main_movie_file(files: list[dict]) -> dict | None:
     return max(big or non_trailer, key=lambda f: f.get('size') or 0)
 
 
+_OTHER_SEASON_RE = re.compile(r'[Ss](\d{1,2})[ ._-]?[Ee]\d{1,3}(?!\d)', re.IGNORECASE)
+
+
+def episode_matches(name: str, season: int, episode: int) -> bool:
+    """Does a file name inside a season pack belong to this episode? Accepts
+    S01E03, S1E3, S01.E03, S01 E03, 1x03, E03, Ep03, Episode 3 and a
+    leading "03 -" or "03." number. A name that carries a different
+    season's SxxEyy tag never matches. The basename decides, so a season
+    folder in the path cannot masquerade as an episode number."""
+    base = (name or "").replace("\\", "/").rsplit("/", 1)[-1]
+    s, e = int(season), int(episode)
+    for m in _OTHER_SEASON_RE.finditer(base):
+        if int(m.group(1)) != s:
+            return False
+    patterns = (
+        rf'[Ss]0?{s}[ ._-]?[Ee]0?{e}(?!\d)',
+        rf'(?<!\d){s}x0?{e}(?!\d)',
+        rf'(?<![A-Za-z0-9])(?:ep?|episode)[ ._-]?0?{e}(?!\d)',
+        rf'^0?{e}(?:\D|$)',
+    )
+    return any(re.search(pat, base, re.IGNORECASE) for pat in patterns)
+
+
 def _pick_episode_file(files: list[dict], season: int, episode: int) -> dict | None:
-    """Find the file in a season pack matching SxxExx. Falls back to None if no match."""
-    ep_re = re.compile(rf'[Ss]0?{season}[Ee]0?{episode}\b', re.IGNORECASE)
-    videos = [f for f in files if _is_video(f.get('name') or '')]
-    matched = [f for f in videos if ep_re.search(f.get('name') or '')]
+    """The video file in a season pack for this episode (largest when several
+    names match), or None when no name matches. Never falls back to the
+    largest file: a wrong episode is worse than no episode."""
+    videos = [f for f in files if _is_video(f.get('name') or '') and not _is_trailer(f)]
+    matched = [f for f in videos if episode_matches(f.get('name') or '', season, episode)]
     if matched:
         return max(matched, key=lambda f: f.get('size') or 0)
     return None

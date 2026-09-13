@@ -4,6 +4,21 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Episodes of a season pack no longer play the wrong episode. When a pack
+  did not contain an episode's file (a pack named for the whole season
+  that holds only its first episodes, or files without episode tags),
+  the player silently got the largest file in the pack, usually episode
+  1 or 2, for every such episode. Now the first play of any episode in a
+  pack matches every episode of that season to a file: names in the
+  forms S01E03, S1E3, S01.E03, 1x03, E03, Ep03, Episode 3 and a leading
+  episode number are recognised, untagged files map by order only when
+  the pack has one file per episode, and an episode the pack does not
+  contain is detached: its .strm goes, Jellyfin is told, and it returns
+  to the wanted list so the monitor searches for it as its own torrent.
+  Seasons already broken this way are repaired on their next play.
+
 ## [0.25.1] - 2026-09-08
 
 ### Fixed

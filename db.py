@@ -1593,6 +1593,18 @@ def get_idle_virtual_items(cutoff_iso: str) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def hash_has_duplicate_file_ids(info_hash: str) -> bool:
+    """True when two episodes of one torrent point at the same file: the
+    signature of the old largest-file fallback, which catbox repairs by
+    matching the pack's files again on the next play."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) - COUNT(DISTINCT file_id) AS dupes FROM virtual_items "
+            "WHERE info_hash=? AND episode IS NOT NULL AND file_id IS NOT NULL",
+            (info_hash.lower(),)).fetchone()
+    return int(row["dupes"]) > 0
+
+
 def delete_virtual_item(token: str) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM virtual_items WHERE token=?", (token,))

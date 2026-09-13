@@ -119,6 +119,96 @@ def _token_lock(token: str) -> threading.Lock:
         return lock
 
 
+def _resolve_pack_files(token: str, item: dict, live: dict) -> int | None:
+    """Match every episode of this pack (same hash and season) to a file
+    now that TorBox has listed the files, and return the file id for
+    `token`, or None when its episode is not in the pack.
+
+    Matching is by name (strm_generator.episode_matches); when no name
+    matches at all and the pack holds exactly one video file per
+    registered episode, sorted names map onto sorted episode numbers.
+    An episode with no file is detached: its .strm and virtual item go,
+    Jellyfin is told, and it returns to the wanted list so the monitor
+    searches for it on its own. That replaces the old fallback to the
+    largest file, which played episode 2 for every missing episode.
+
+    An empty files list (the single-item endpoint sometimes omits it)
+    changes nothing: no match and no detaching."""
+    import strm_generator
+    files = live.get("files") or []
+    videos = [f for f in files
+              if strm_generator._is_video(f.get("name") or "") and not strm_generator._is_trailer(f)]
+    if not videos:
+        return None
+    season = item.get("season")
+    siblings = [s for s in db.get_virtual_items_by_hash(item["info_hash"])
+                if s.get("season") == season and s.get("episode")]
+    if not any(s["token"] == token for s in siblings):
+        siblings.append(item)
+    matched: dict[str, int] = {}
+    for s in siblings:
+        f = strm_generator._pick_episode_file(videos, season, s["episode"])
+        if f is not None:
+            matched[s["token"]] = f["id"]
+    if not matched and len(videos) == len(siblings):
+        by_name = sorted(videos, key=lambda f: (f.get("name") or "").lower())
+        for s, f in zip(sorted(siblings, key=lambda s: s["episode"]), by_name):
+            matched[s["token"]] = f["id"]
+        log.info("Catbox: %s S%02d pack %s: no episode tags in the file names, mapped %d files by order",
+                 item.get("title"), season, item["info_hash"][:8], len(by_name))
+    for s in siblings:
+        fid = matched.get(s["token"])
+        if fid is not None and s.get("file_id") != fid:
+            db.update_virtual_file_id(s["token"], fid)
+    unmatched = [s for s in siblings if s["token"] not in matched]
+    if unmatched:
+        log.warning("Catbox: %s S%02d pack %s has no file for %s; detaching them back to wanted. Files: %s",
+                    item.get("title"), season, item["info_hash"][:8],
+                    ", ".join(f"E{s['episode']:02d}" for s in sorted(unmatched, key=lambda s: s["episode"])),
+                    "; ".join((f.get("name") or "").rsplit("/", 1)[-1] for f in videos))
+        for s in unmatched:
+            _detach_episode(s)
+    return matched.get(token)
+
+
+def _detach_episode(vi: dict) -> None:
+    """Remove an episode that its pack does not contain and put it back on
+    the wanted list, so the monitor searches for it as its own torrent."""
+    import os
+    token = vi["token"]
+    strm_path = vi.get("strm_path") or ""
+    for path in (strm_path, strm_path[:-5] + ".nfo" if strm_path.endswith(".strm") else ""):
+        if path:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                log.warning("Catbox: could not remove %s: %s", path, exc)
+    db.delete_virtual_item(token)
+    invalidate_url_cache(token)
+    ckey = _content_key(vi)
+    if ckey:
+        try:
+            db.reset_playability_state(ckey)
+        except Exception as exc:
+            log.debug("Catbox: playability reset skipped for %s: %s", ckey, exc)
+    if strm_path:
+        try:
+            import jellyfin
+            jellyfin.note_change(strm_path, "Deleted")
+        except Exception as exc:
+            log.debug("Catbox: Jellyfin note skipped for %s: %s", strm_path, exc)
+    imdb_id = vi.get("imdb_id")
+    if imdb_id:
+        req = db.get_request_by_imdb(imdb_id) or {}
+        db.upsert_wanted_episode(imdb_id, req.get("tmdb_id"), vi.get("title") or req.get("title") or imdb_id,
+                                 vi["season"], vi["episode"], None)
+        db.mark_episode_status(imdb_id, vi["season"], vi["episode"], "wanted")
+    log.info("Catbox: detached S%02dE%02d of %s (token %s) back to wanted",
+             vi["season"], vi["episode"], vi.get("title"), token)
+
+
 def _content_key(item: dict) -> str | None:
     imdb_id = item.get("imdb_id")
     if not imdb_id:
@@ -520,10 +610,14 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
             return None
 
     file_id = item["file_id"]
+    is_episode = item["media_type"] != "movie" and item.get("season") and item.get("episode")
+    if file_id and is_episode and db.hash_has_duplicate_file_ids(item["info_hash"]):
+        # Two episodes of this pack point at one file: the old largest-file
+        # fallback. Match the pack's files again for the whole season.
+        file_id = None
     if not file_id:
         live = torbox.find_by_id(torbox_id)
         if live:
-            import re as _re
             import strm_generator
             if item["media_type"] == "movie":
                 main = strm_generator._pick_main_movie_file(live.get("files") or [])
@@ -536,20 +630,13 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
                     # serve the largest file automatically  -  works for single-file movies.
                     log.info("Catbox: no files list for %s  -  using file_id=0 (auto)", item["title"])
                     file_id = 0
+            elif is_episode:
+                file_id = _resolve_pack_files(token, item, live)
             else:
                 videos = [f for f in (live.get("files") or [])
                           if strm_generator._is_video(f.get("name") or "")
                           and not strm_generator._is_trailer(f)]
-                s_num = item.get("season")
-                e_num = item.get("episode")
-                if s_num and e_num:
-                    ep_re = _re.compile(rf'[Ss]0?{s_num}[Ee]0?{e_num}\b', _re.IGNORECASE)
-                    matched = [f for f in videos if ep_re.search(f.get("name") or "")]
-                    main = matched[0] if matched else (
-                        max(videos, key=lambda f: f.get("size") or 0) if videos else None
-                    )
-                else:
-                    main = max(videos, key=lambda f: f.get("size") or 0) if videos else None
+                main = max(videos, key=lambda f: f.get("size") or 0) if videos else None
                 if main:
                     file_id = main["id"]
                     db.update_virtual_file_id(token, file_id)
