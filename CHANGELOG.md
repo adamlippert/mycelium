@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-09-13
+
 ### Fixed
 
 - A pack for another season no longer counts as a season pack for the

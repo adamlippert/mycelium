@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.27.1",
+    "date": "2026-09-13",
+    "notes": [
+      "A pack for another season no longer counts as a season pack for the season being searched, in every scraper, and file order mapping only applies to files with no episode tag at all. Before, a season 4 search offered season 1 and 2 packs as covering all eight episodes and could have played season 1 in order",
+      "Debridio results show the release name instead of the addon label in the swap panel and get a source label like every other scraper's"
+    ]
+  },
+  {
     "version": "0.27.0",
     "date": "2026-09-13",
     "notes": [
