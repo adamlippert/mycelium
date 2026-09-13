@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.26.1",
+    "date": "2026-09-13",
+    "notes": [
+      "Jellyfin 12.0 support. Jellyfin 12 disables the legacy X-Emby-Token header, so every refresh, library lookup and health ping got a 401 while the Settings test still said ok. All requests now send the standard Authorization: MediaBrowser Token header (accepted by 10.x too), and the Settings test and health ping call the authenticated system-info endpoint so a rejected key shows as a failure"
+    ]
+  },
+  {
     "version": "0.26.0",
     "date": "2026-09-13",
     "notes": [

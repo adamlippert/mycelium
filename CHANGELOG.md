@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.26.1] - 2026-09-13
+
 ### Fixed
 
 - Jellyfin 12.0 support. Jellyfin 12 disables the legacy `X-Emby-Token`
