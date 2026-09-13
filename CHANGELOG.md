@@ -4,6 +4,18 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- A pack for another season no longer counts as a season pack for the
+  season being searched. Scrapers match on the series, so a season 4
+  search also returned season 1 and 2 packs; those were flagged as packs
+  and, with eight files and eight episodes, mapped onto season 4 in file
+  order. Now a release that names a different season is not a pack for
+  this one (in every scraper), and order mapping only applies to files
+  that carry no episode tag at all. This affects the season swap's
+  candidate list, the processor's pack choice, and the first-play
+  reconciliation alike.
+
 ## [0.27.0] - 2026-09-13
 
 ### Added

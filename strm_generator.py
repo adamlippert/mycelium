@@ -76,6 +76,9 @@ def _pick_main_movie_file(files: list[dict]) -> dict | None:
 
 
 _OTHER_SEASON_RE = re.compile(r'[Ss](\d{1,2})[ ._-]?[Ee]\d{1,3}(?!\d)', re.IGNORECASE)
+# Any episode tag at all (SxxEyy or NxMM): a file that carries one but did
+# not match is tagged for another season, never an untagged file.
+_ANY_EPISODE_TAG_RE = re.compile(r'[Ss]\d{1,2}[ ._-]?[Ee]\d{1,3}(?!\d)|(?<!\d)\d{1,2}x\d{2,3}(?!\d)', re.IGNORECASE)
 
 
 def episode_matches(name: str, season: int, episode: int) -> bool:
@@ -126,7 +129,10 @@ def map_episodes_to_files(videos: list[dict], season: int, episodes: list[int]) 
         f = _pick_episode_file(videos, season, ep)
         if f is not None:
             mapping[ep] = f["id"]
-    if not mapping and videos and len(videos) == len(episodes):
+    if not mapping and videos and len(videos) == len(episodes) and not any(
+            _ANY_EPISODE_TAG_RE.search((f.get("name") or "").replace("\\", "/").rsplit("/", 1)[-1]) for f in videos):
+        # Untagged files only. A pack whose files say S01E01 offered for
+        # season 4 must map nothing, not play season 1 in order.
         by_name = sorted(videos, key=lambda f: (f.get("name") or "").lower())
         for ep, f in zip(sorted(episodes), by_name):
             mapping[ep] = f["id"]

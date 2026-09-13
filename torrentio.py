@@ -38,8 +38,36 @@ def _classify_quality(stream: dict) -> str:
     return release_tags.detect_resolution(blob)
 
 
+_SEASON_NUMBER_RES = (
+    re.compile(r"\bseason[ ._-]?(\d{1,2})(?!\d)", re.IGNORECASE),
+    re.compile(r"(?<![A-Za-z0-9])s(\d{1,2})(?!\d)(?![ ._-]?e\d)", re.IGNORECASE),
+)
+
+
+def _seasons_named(title: str) -> set[int]:
+    """Season numbers a release name states explicitly (S01, Season 1,
+    S01-S03 gives both ends). Empty when the name does not say."""
+    out: set[int] = set()
+    for rx in _SEASON_NUMBER_RES:
+        for m in rx.finditer(title or ""):
+            out.add(int(m.group(1)))
+    return out
+
+
+def names_other_season(title: str, season: int | None) -> bool:
+    """True when the name states one or more seasons and this one is not
+    among them: a season 1 pack offered for a season 4 search. Scrapers
+    match on the series, so this happens on every season search."""
+    if season is None:
+        return False
+    named = _seasons_named(title)
+    return bool(named) and int(season) not in named
+
+
 def _looks_like_season_pack(title: str, season: int | None) -> bool:
     if season is None:
+        return False
+    if names_other_season(title, season):
         return False
     blob = (title or "").lower()
     if "complete" in blob:

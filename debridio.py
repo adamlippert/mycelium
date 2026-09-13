@@ -16,6 +16,8 @@ import json
 import logging
 import re
 
+from torrentio import names_other_season as _names_other_season
+
 import requests
 
 import config
@@ -282,7 +284,7 @@ def _extract_hash(item: dict) -> str:
     return ""
 
 
-def _to_stream(item: dict) -> Stream | None:
+def _to_stream(item: dict, season: int | None = None) -> Stream | None:
     info_hash = _extract_hash(item)
     if not info_hash:
         return None
@@ -297,7 +299,8 @@ def _to_stream(item: dict) -> Stream | None:
         quality=parse_quality(blob),
         seeders=parse_seeders(title),
         size_gb=parse_size_gb(title),
-        is_season_pack=bool(_SEASON_PACK_RE.search(filename or title)),
+        is_season_pack=bool(_SEASON_PACK_RE.search(filename or title))
+        and not _names_other_season(f"{filename} {title}", season),
         source="debridio",
         cached="⚡" in name,
         # Debridio ships flag emoji in the title, which is richer than any
@@ -340,7 +343,7 @@ def fetch(media_type: str, imdb_id: str, season: int | None = None,
     out, skipped = [], 0
     for item in raw:
         try:
-            stream = _to_stream(item)
+            stream = _to_stream(item, season)
         except Exception:
             stream = None
         if stream is None:
