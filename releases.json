@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.27.0",
+    "date": "2026-09-13",
+    "notes": [
+      "Whole-season release swap: each season in the Library drawer has a \"Swap season\" button listing the season packs the scrapers find, with a badge per cached pack saying which episodes it contains. Picking one moves every episode the pack contains to it (file id set up front), registers wanted episodes the pack contains, and leaves episodes the pack lacks as they are; the result lists what was swapped, registered, kept, still wanted or busy",
+      "Removed the continue-watching priority job and its CONTINUE_WATCHING_INTERVAL_MINUTES setting: it queried a per-user Jellyfin endpoint with a server key and never found anything"
+    ]
+  },
+  {
     "version": "0.26.1",
     "date": "2026-09-13",
     "notes": [

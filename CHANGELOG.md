@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-09-13
+
 ### Added
 
 - Whole-season release swap. Each season in the Library drawer has a
