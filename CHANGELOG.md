@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.25.3] - 2026-09-13
+
 ### Changed
 
 - The admin Library "Wanted" view now also lists titles that are in the

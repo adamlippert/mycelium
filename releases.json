@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.25.3",
+    "date": "2026-09-13",
+    "notes": [
+      "The admin Library \"Wanted\" view now also lists titles that are in the library but still miss something: series with wanted episodes and movies on the wanted-movies list. Before, it only showed requests whose own status was wanted or upcoming, so a series that lost episodes to the season-pack repair was invisible there"
+    ]
+  },
+  {
     "version": "0.25.2",
     "date": "2026-09-13",
     "notes": [
