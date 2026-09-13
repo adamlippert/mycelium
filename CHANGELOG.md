@@ -15,6 +15,8 @@ All notable changes to Mycelium are documented in this file.
   that carry no episode tag at all. This affects the season swap's
   candidate list, the processor's pack choice, and the first-play
   reconciliation alike.
+- Debridio results show the release name in the swap panel instead of the
+  addon label, and get a source label from it like every other scraper's.
 
 ## [0.27.0] - 2026-09-13
 

@@ -292,8 +292,12 @@ def _to_stream(item: dict, season: int | None = None) -> Stream | None:
     title = item.get("title") or ""
     filename = (item.get("behaviorHints") or {}).get("filename") or ""
     blob = f"{name} {title} {filename}"
+    # `name` is the addon label ("[TB] Debridio 4k HDR"); the release is the
+    # filename hint, else the first title line. Every other scraper puts the
+    # release in `name`, and the swap panel and source labels read it there.
+    release = filename or (title.splitlines()[0].strip() if title else "") or name
     return Stream(
-        name=name,
+        name=release,
         title=title or filename,
         info_hash=info_hash,
         quality=parse_quality(blob),

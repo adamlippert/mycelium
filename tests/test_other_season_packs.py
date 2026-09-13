@@ -46,3 +46,13 @@ def test_order_mapping_never_applies_to_files_tagged_for_another_season():
     assert sg.map_episodes_to_files(untagged, 4, [1, 2, 3]) == {1: 5, 2: 7, 3: 9}, "untagged files still map by order"
     folder_only = [_f(i, f"Reacher S01E01 folder/Episode {i + 1}.mkv") for i in range(2)]
     assert sg.map_episodes_to_files(folder_only, 4, [1, 2]) == {1: 0, 2: 1}, "a tag in the folder name is not the file's"
+
+
+def test_debridio_names_the_release_not_the_addon():
+    item = {"name": "[TB] \nDebridio 4k HDR", "title": "Reacher.S01.2160p.AMZN.WEB-DL\n💾 12 GB ⚡", "url": "https://x/" + "b" * 40 + "/0",
+            "behaviorHints": {}}
+    assert debridio._to_stream(item, 1).name == "Reacher.S01.2160p.AMZN.WEB-DL"
+    item["behaviorHints"] = {"filename": "Reacher.S01E01.2160p.mkv"}
+    assert debridio._to_stream(item, 1).name == "Reacher.S01E01.2160p.mkv"
+    bare = {"name": "[TB] Debridio", "title": "", "url": "https://x/" + "c" * 40 + "/0", "behaviorHints": {}}
+    assert debridio._to_stream(bare, 1).name == "[TB] Debridio", "nothing better known"
