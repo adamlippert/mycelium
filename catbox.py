@@ -1088,6 +1088,8 @@ def reconcile_torbox_ids() -> dict:
                     continue  # its account's list didn't answer; leave it
                 if item["torbox_id"] in live_ids_by_account.get(acct_id, set()):
                     continue
+            elif not lists:
+                continue  # homeless, and no account answered: nothing known to have changed
             if _token_lock(item["token"]).locked():
                 continue  # a play is materializing it right now
             target = hash_to_home.get((item.get("info_hash") or "").lower())
@@ -1129,7 +1131,7 @@ def release_idle() -> int:
     """Remove TorBox items idle longer than CATBOX_IDLE_MINUTES. Returns count released."""
     _sweep_caches()
     idle_minutes = _settings.get("CATBOX_IDLE_MINUTES", _CATBOX_IDLE_MINUTES_DEFAULT)
-    cutoff = datetime.utcnow() - timedelta(minutes=idle_minutes)
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=idle_minutes)
     cutoff_iso = cutoff.strftime("%Y-%m-%d %H:%M:%S")
     items = db.get_idle_virtual_items(cutoff_iso)
     released = 0

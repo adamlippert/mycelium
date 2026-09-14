@@ -161,3 +161,20 @@ def test_reconcile_skips_an_account_whose_list_fails_and_leaves_its_items(monkey
     out = catbox.reconcile_torbox_ids()
     assert out["accounts"]["second"]["skipped"] and db.get_virtual_item("b")["torbox_id"] == 2
     assert out["accounts"]["main"]["skipped"] is None
+
+
+def test_reconcile_leaves_a_homeless_item_alone_when_every_account_is_down(monkeypatch):
+    import torbox_pool as pool
+    db.insert_torbox_account("second", "k2")
+    third = db.insert_torbox_account("third", "k3")
+    pool.invalidate()
+    db.update_torbox_account(third, enabled=False)
+    pool.invalidate()
+    _item("stuck", 9, HA, account=third)  # homeless: its account is disabled
+    def boom(acct, **k):
+        raise RuntimeError("down")
+    monkeypatch.setattr(catbox.torbox, "list_torrents", boom)
+    out = catbox.reconcile_torbox_ids()
+    it = db.get_virtual_item("stuck")
+    assert (it["torbox_id"], it["torbox_account"]) == (9, third)
+    assert "main" in out["skipped"] and "second" in out["skipped"]

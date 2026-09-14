@@ -52,6 +52,8 @@ def _isolated_db(tmp_path, monkeypatch):
     pool.invalidate()
     pool._health.clear()
     catbox.invalidate_url_cache()
+    with catbox._reconcile_lock:
+        catbox._last_reconcile = None
     yield
     _drop_cached_conn()
 
