@@ -196,7 +196,7 @@ def _prepare_stream(token: str) -> dict:
     the CDN liveness check for the MKV redirect.
 
     Returns one of:
-      {"error": 404 | 502, "reason": str}
+      {"error": 404 | 502 | 503, "reason": str}   503 = CDN rate limited
       {"mode": "redirect", "url": cdn_url}                        MKV/other
       {"mode": "cold", "cdn_url": ..., "size": n}                 passthrough
       {"mode": "warm", "cdn_url": ..., "cdn_size": n,
@@ -311,7 +311,7 @@ def _prepare_fast(token: str, cdn_url: str, info: dict) -> dict:
     if info["ftyp_size"] == 0:
         # Non-MP4 sentinel (MKV/other): 302 to CDN, no moov seeking required.
         # catbox's URL cache holds a resolved link for up to 23h, but TorBox's
-        # CDN links can go dead sooner than that -- sending a stale one straight
+        # CDN links can go dead sooner than that. Sending a stale one straight
         # to the client (rather than proxying through mp4_faststart, which does
         # validate) left Jellyfin/ffmpeg following a redirect into a 400 error
         # page with no recovery. Cheaply confirm it's alive first and re-resolve
