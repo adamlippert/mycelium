@@ -18,6 +18,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 sys.modules.pop("settings", None)
 
 import pytest
@@ -102,27 +104,26 @@ def test_overlay_can_override_the_shim_defaults():
 
 def _route_body(src, route):
     m = re.search(
-        rf'@app\.post\(["\']{re.escape(route)}["\']\).*?\n(.*?)\n@app\.', src, re.S)
+        rf'@bp\.post\(["\']{re.escape(route)}["\']\).*?\n(.*?)(?=\n@bp\.|\Z)', src, re.S)
     assert m, route
     return m.group(1)
 
 
 def test_preferences_route_persists_for_the_legacy_login():
-    body = _route_body(_src("app.py"), "/ui/api/me/preferences")
+    body = _route_body(src_for_route("/ui/api/me/preferences"), "/ui/api/me/preferences")
     assert "save_legacy_user_prefs" in body
 
 
 def test_plugin_fields_route_persists_for_the_legacy_login():
-    body = _route_body(_src("app.py"), "/ui/api/me/plugin-fields")
+    body = _route_body(src_for_route("/ui/api/me/plugin-fields"), "/ui/api/me/plugin-fields")
     assert "save_legacy_user_prefs" in body
 
 
 def test_real_users_still_write_to_their_row():
     """The settings blob is only for id=0; a real user row keeps the
     db.update_user path in both handlers."""
-    src = _src("app.py")
     for route in ("/ui/api/me/preferences", "/ui/api/me/plugin-fields"):
-        body = _route_body(src, route)
+        body = _route_body(src_for_route(route), route)
         assert 'db.update_user(rec["id"]' in body
         assert 'if not rec.get("id")' in body
 

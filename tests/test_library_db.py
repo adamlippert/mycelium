@@ -7,6 +7,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import db
@@ -65,7 +67,7 @@ def test_every_activity_caller_that_knows_the_title_passes_its_id():
         calls = [line for line in src.splitlines() if "log_activity(" in line]
         assert calls, name
         assert all("imdb_id=" in line for line in calls), f"{name}: {[c.strip() for c in calls if 'imdb_id=' not in c]}"
-    purge = _src("app.py").split('db.log_activity("purged"', 1)[1][:200]
+    purge = src_for_route("/ui/api/requests/<int:row_id>/purge").split('db.log_activity("purged"', 1)[1][:200]
     assert "imdb_id=" in purge
 
 
@@ -176,7 +178,7 @@ def test_titles_for_hashes_spans_chunks(monkeypatch):
 
 
 def test_blacklist_route_attaches_titles_for_each_hash_in_one_call():
-    src = _src("app.py")
+    src = src_for_route("/ui/api/blacklist")
     route = src.split('def ui_api_blacklist():', 1)[1][:300]
     assert "titles_for_hashes" in route
     assert "titles_for_hash(" not in route

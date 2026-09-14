@@ -317,7 +317,7 @@ def require_role(role: str):
             if not rec:
                 if request.path.startswith("/ui/api/") or request.headers.get("Accept", "").startswith("application/json"):
                     return jsonify(error="unauthorized"), 401
-                return redirect(url_for("login_view", next=request.path))
+                return redirect(url_for("auth.login_view", next=request.path))
             if rec.get("role") != role and role != "user":
                 return jsonify(error="forbidden"), 403
             return view(*args, **kwargs)
@@ -338,7 +338,7 @@ def require_auth(view):
         # Not authenticated
         if request.path.startswith("/ui/api/") or request.headers.get("Accept", "").startswith("application/json"):
             return jsonify(error="unauthorized"), 401
-        return redirect(url_for("login_view", next=request.path))
+        return redirect(url_for("auth.login_view", next=request.path))
     return wrapped
 
 
@@ -403,5 +403,5 @@ def install_before_request(app) -> None:
         if path.startswith("/ui/api/") or request.headers.get("Accept", "").startswith("application/json"):
             return jsonify(error="unauthorized"), 401
         if path.startswith("/admin"):
-            return redirect(url_for("login_view", next=path))
+            return redirect(url_for("auth.login_view", next=path))
         return redirect("/login?next=" + path)

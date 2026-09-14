@@ -6,6 +6,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import db
@@ -218,14 +220,14 @@ def test_page_clamps_to_1_when_the_filtered_set_is_empty():
 
 
 def test_the_routes_exist_and_are_admin_only():
-    src = _src("app.py")
-    for route in ('@app.get("/ui/api/library")', '@app.get("/ui/api/library/views")'):
+    src = src_for_route("/ui/api/library")
+    for route in ('@bp.get("/ui/api/library")', '@bp.get("/ui/api/library/views")'):
         assert route in src
         body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
         assert "auth.is_admin()" in body and "library_admin" in body
-    body = src.split('@app.get("/ui/api/library")', 1)[1].split("\n\n\n", 1)[0]
+    body = src.split('@bp.get("/ui/api/library")', 1)[1].split("\n\n\n", 1)[0]
     assert 'request.args.getlist("status")' in body
-    views_body = src.split('@app.get("/ui/api/library/views")', 1)[1].split("\n\n\n", 1)[0]
+    views_body = src.split('@bp.get("/ui/api/library/views")', 1)[1].split("\n\n\n", 1)[0]
     assert "mirror_on" in views_body
 
 
@@ -279,9 +281,9 @@ def test_series_detail_summarises_seasons_and_lists_episodes(seeded):
 
 
 def test_detail_routes_exist():
-    src = _src("app.py")
-    for route in ('@app.get("/ui/api/library/<imdb_id>")', '@app.get("/ui/api/library/<imdb_id>/season/<int:season>")',
-                  '@app.get("/ui/api/library/<imdb_id>/activity")'):
+    src = src_for_route("/ui/api/library/<imdb_id>")
+    for route in ('@bp.get("/ui/api/library/<imdb_id>")', '@bp.get("/ui/api/library/<imdb_id>/season/<int:season>")',
+                  '@bp.get("/ui/api/library/<imdb_id>/activity")'):
         assert route in src, route
         body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
         assert "auth.is_admin()" in body

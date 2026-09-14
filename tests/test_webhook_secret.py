@@ -8,6 +8,8 @@ import config as cfg
 import db
 import webhook_secret as ws
 
+from _routes import src_for_route
+
 _ROOT = os.path.join(os.path.dirname(__file__), "..")
 
 
@@ -91,14 +93,14 @@ def test_rotate_without_an_existing_secret_has_no_grace_window():
 
 
 def test_routes_and_the_check_go_through_the_module():
-    src = _src("app.py")
-    m = re.search(r'@app\.post\("/ui/api/webhook-secret/rotate"\)(.{0,600})', src, re.S)
+    src = src_for_route("/ui/api/webhook-secret/rotate")
+    m = re.search(r'@bp\.post\("/ui/api/webhook-secret/rotate"\)(.{0,600})', src, re.S)
     assert m, "no rotate route"
     body = m.group(1)
     assert "auth.is_admin()" in body and "webhook_secret.rotate()" in body and "409" in body
-    check = src.split("def _check_auth() -> None:", 1)[1].split("\n\n\n", 1)[0]
+    check = src_for_route("/webhook").split("def _check_auth() -> None:", 1)[1].split("\n\n\n", 1)[0]
     assert "webhook_secret.accepts(provided)" in check
     assert 'matched == "previous"' in check, "a previous-secret use is logged by sender"
     assert "hmac.compare_digest" not in check, "the comparison lives in webhook_secret"
-    show = src.split('@app.get("/ui/api/webhook-secret")', 1)[1].split("\n\n\n", 1)[0]
+    show = src.split('@bp.get("/ui/api/webhook-secret")', 1)[1].split("\n\n\n", 1)[0]
     assert "webhook_secret.status()" in show

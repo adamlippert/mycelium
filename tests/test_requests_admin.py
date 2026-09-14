@@ -5,6 +5,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import db
@@ -156,8 +158,8 @@ def test_the_status_index_exists():
 
 
 def test_the_routes_exist_and_are_admin_only():
-    src = _src("app.py")
-    for route in ('@app.get("/ui/api/admin/requests")', '@app.get("/ui/api/admin/requests/views")'):
+    src = src_for_route("/ui/api/admin/requests")
+    for route in ('@bp.get("/ui/api/admin/requests")', '@bp.get("/ui/api/admin/requests/views")'):
         assert route in src, route
         body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
         assert "auth.is_admin()" in body and "requests_admin" in body

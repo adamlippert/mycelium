@@ -9,6 +9,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import db
@@ -154,9 +156,9 @@ def test_tmdb_imdb_from_tvdb_uses_the_find_endpoint(monkeypatch):
 # -- the route -----------------------------------------------------------------
 
 def _route_body():
-    src = _src("app.py")
-    m = re.search(r'@app\.post\("/webhook/arr"\)\s*\n\s*@_csrf\.exempt\s*\ndef arr_webhook_route\(\):\n(.*?)\n@app\.', src, re.S)
-    assert m, "route /webhook/arr with @_csrf.exempt directly under @app.post not found"
+    src = src_for_route("/webhook/arr")
+    m = re.search(r'@bp\.post\("/webhook/arr"\)\s*\n\s*@_csrf\.exempt\s*\ndef arr_webhook_route\(\):\n(.*?)(?=\n@bp\.|\Z)', src, re.S)
+    assert m, "route /webhook/arr with @_csrf.exempt directly under @bp.post not found"
     return m.group(1)
 
 

@@ -10,6 +10,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import all_route_sources, src_for_route
+
 _ROOT = os.path.join(os.path.dirname(__file__), "..")
 
 
@@ -20,7 +22,7 @@ def _src(name):
 
 def test_the_jinja_ui_is_gone():
     assert not os.path.exists(os.path.join(_ROOT, "templates"))
-    src = _src("app.py")
+    src = all_route_sources()
     assert "render_template" not in src
     # flash() messages were only ever rendered by ui.html; leftover calls
     # would pile up unread in the session cookie forever.
@@ -28,7 +30,7 @@ def test_the_jinja_ui_is_gone():
 
 
 def test_the_classic_routes_are_gone():
-    src = _src("app.py")
+    src = all_route_sources()
     assert "/classic" not in src
     assert "/login/classic" not in _src("auth.py")
 
@@ -38,9 +40,9 @@ def test_the_ui_v2_flag_is_retired():
 
 
 def test_the_bare_routes_serve_the_spa():
-    src = _src("app.py")
-    for fn in ("login_view", "setup_wizard", "ui_dashboard"):
-        m = re.search(rf"def {fn}\(.*?\n(?=@app\.|\ndef )", src, re.S)
+    for fn, path in (("login_view", "/login"), ("setup_wizard", "/setup"), ("ui_dashboard", "/admin")):
+        src = src_for_route(path)
+        m = re.search(rf"def {fn}\(.*?\n(?=@bp\.|\ndef )", src, re.S)
         assert m, fn
         assert "_spa_index()" in m.group(0), f"{fn} does not serve the SPA"
 
@@ -51,8 +53,8 @@ def test_session_endpoint_exposes_login_flags():
     logged-out visitor), so the login page actually reads these from meta
     tags _spa_index() embeds - but the session endpoint carries the same
     flags for any consumer that already holds a session."""
-    src = _src("app.py")
-    m = re.search(r"def ui_api_session\(.*?\n(?=@app\.|\ndef )", src, re.S)
+    src = src_for_route("/ui/api/session")
+    m = re.search(r"def ui_api_session\(.*?\n(?=@bp\.|\ndef )", src, re.S)
     assert m, "ui_api_session"
     for flag in ("oidc_enabled", "oidc_provider", "password_enabled"):
         assert flag in m.group(0), f"ui_api_session does not expose {flag}"
@@ -61,8 +63,8 @@ def test_session_endpoint_exposes_login_flags():
 def test_spa_index_embeds_login_flags_for_the_pre_auth_login_page():
     """_spa_index() must inject the login flags as meta tags: it is the only
     place the SPA gets them before a session cookie exists."""
-    src = _src("app.py")
-    m = re.search(r"def _spa_index\(.*?\n(?=@app\.|\ndef )", src, re.S)
+    src = _src("routes/_common.py")
+    m = re.search(r"def _spa_index\(.*?\n(?=@bp\.|\ndef |\Z)", src, re.S)
     assert m, "_spa_index"
     for meta in ("oidc-enabled", "oidc-provider", "password-enabled", "app-version"):
         assert meta in m.group(0), f"_spa_index does not inject the {meta} meta tag"
@@ -77,8 +79,8 @@ def test_spa_index_placeholders_survive_in_both_built_and_source_html():
     literals from _spa_index() and asserts each appears verbatim in both
     frontend/index.html (the source Vite builds from) and
     static/app/index.html (the checked-in build Docker serves)."""
-    app_src = _src("app.py")
-    m = re.search(r"def _spa_index\(.*?\n(?=@app\.|\ndef )", app_src, re.S)
+    app_src = _src("routes/_common.py")
+    m = re.search(r"def _spa_index\(.*?\n(?=@bp\.|\ndef |\Z)", app_src, re.S)
     assert m, "_spa_index"
     placeholders = re.findall(r"html\.replace\(\s*\n\s*(['\"].*?['\"]),", m.group(0))
     assert len(placeholders) == 6, (
@@ -109,8 +111,8 @@ def test_login_redirects_home_when_auth_is_disabled():
     render a page with no password form and no SSO button. That dead end
     reads as "login is broken" when the truth is "no auth is configured";
     send visitors to the app instead."""
-    src = _src("app.py")
-    m = re.search(r"def login_view\(\):(.*?)\n@app\.", src, re.S)
+    src = src_for_route("/login")
+    m = re.search(r"def login_view\(\):(.*?)\n@bp\.", src, re.S)
     assert m, "login_view not found"
     body = m.group(1)
     assert "auth.is_enabled()" in body, "login_view does not consult auth state"
@@ -123,7 +125,7 @@ def test_releases_json_covers_the_running_version():
     0.10.2 shipped), because nothing tied it to APP_VERSION. Now a release
     that forgets its notes fails here instead of misinforming users."""
     import json
-    app_src = _src("app.py")
+    app_src = _src("version.py")
     m = re.search(r'APP_VERSION\s*=\s*"([^"]+)"', app_src)
     assert m, "APP_VERSION not found"
     version = m.group(1)

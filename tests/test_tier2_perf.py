@@ -25,6 +25,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import db
@@ -225,9 +227,9 @@ def test_overview_force_bypasses_the_cache(tmp_path, monkeypatch):
 # -- 4a. series-episodes endpoint cache ---------------------------------------
 
 def test_series_episodes_route_serves_from_the_cache():
-    src = _src("app.py")
+    src = src_for_route("/ui/api/library/series-episodes")
     m = re.search(
-        r'@app\.get\(["\']/ui/api/library/series-episodes["\']\)\s*\n'
+        r'@bp\.get\(["\']/ui/api/library/series-episodes["\']\)\s*\n'
         r"def ui_api_library_series_episodes\(\):(.*?)\ndef ", src, re.S)
     assert m, "series-episodes route not found"
     body = m.group(1)
@@ -237,8 +239,8 @@ def test_series_episodes_route_serves_from_the_cache():
 
 def test_purge_invalidates_the_series_episodes_cache():
     """Purge deletes .strm files; a cached tree would keep showing them."""
-    src = _src("app.py")
-    m = re.search(r"def ui_api_purge_request\(.*?\n(.*?)\n@app\.", src, re.S)
+    src = src_for_route("/ui/api/requests/<int:row_id>/purge")
+    m = re.search(r"def ui_api_purge_request\(.*?\n(.*?)\n@bp\.", src, re.S)
     assert m
     assert "invalidate_series_episodes_cache()" in m.group(1)
 

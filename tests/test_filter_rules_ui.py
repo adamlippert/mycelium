@@ -2,6 +2,8 @@ import os, sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import all_route_sources, src_for_route
+
 import pytest
 import settings as _s
 
@@ -62,9 +64,9 @@ def test_the_save_endpoint_still_reads_the_setting_prefix():
     import pathlib
     import re
 
-    source = pathlib.Path(__file__).resolve().parent.parent.joinpath("app.py").read_text()
-    match = re.search(r"def ui_save_settings.*?(?=\ndef |\n@app)", source, re.S)
-    assert match, "ui_save_settings not found in app.py"
+    source = src_for_route("/ui/settings")
+    match = re.search(r"def ui_save_settings.*?(?=\ndef |\n@bp)", source, re.S)
+    assert match, "ui_save_settings not found"
     assert 'startswith("setting_")' in match.group(0), (
         "the save endpoint no longer filters on the setting_ prefix; the "
         "rules editor writes hidden inputs with that prefix and would "
@@ -153,7 +155,7 @@ def test_the_series_title_repair_is_reachable_from_the_ui():
     """
     import pathlib
     root = pathlib.Path(__file__).resolve().parent.parent
-    app_src = (root / "app.py").read_text()
+    app_src = src_for_route("/ui/api/repair-tvshow-titles")
     api = (root / "frontend" / "src" / "api.ts").read_text()
 
     assert "/ui/api/repair-tvshow-titles" in app_src, "endpoint disappeared"
@@ -169,9 +171,9 @@ def test_every_spa_url_calls_an_endpoint_that_exists():
     import pathlib
     import re
     root = pathlib.Path(__file__).resolve().parent.parent
-    # Routes are defined in app.py and in plugin route modules (trakt,
-    # webplayer register their own /ui/api/ paths).
-    app_src = (root / "app.py").read_text()
+    # Routes are defined in app.py, in routes/*.py and in plugin route
+    # modules (trakt, webplayer register their own /ui/api/ paths).
+    app_src = all_route_sources()
     for f in (root / "plugins").rglob("*.py"):
         app_src += f.read_text()
 
@@ -187,4 +189,4 @@ def test_every_spa_url_calls_an_endpoint_that_exists():
     assert called, "no /ui/ URLs found in the SPA source at all"
     missing = sorted(u for u in called
                      if f'"{u}"' not in app_src and f"'{u}'" not in app_src)
-    assert not missing, f"the SPA calls routes app.py does not define: {missing}"
+    assert not missing, f"the SPA calls routes nothing defines: {missing}"

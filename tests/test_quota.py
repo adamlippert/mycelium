@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import db
@@ -96,7 +98,6 @@ def test_a_userless_session_gets_the_unlimited_shape():
 
 
 def test_the_endpoint_is_registered():
-    with open(os.path.join(os.path.dirname(__file__), "..", "app.py"), encoding="utf-8") as f:
-        src = f.read()
-    assert '@app.get("/ui/api/me/quota")' in src
+    src = src_for_route("/ui/api/me/quota")
+    assert '@bp.get("/ui/api/me/quota")' in src
     assert "quota.get_quota(" in src

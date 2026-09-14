@@ -10,6 +10,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import db
@@ -67,8 +69,8 @@ def test_last_month_is_excluded():
 
 
 def test_the_report_endpoint_is_loopback_only():
-    src = open(os.path.join(_ROOT, "app.py"), encoding="utf-8").read()
-    m = re.search(r'@app\.post\(["\']/internal/stream-report/<token>["\']\)(.{0,600})',
+    src = src_for_route("/internal/stream-report/<token>")
+    m = re.search(r'@bp\.post\(["\']/internal/stream-report/<token>["\']\)(.{0,600})',
                   src, re.S)
     assert m, "no /internal/stream-report route"
     body = m.group(1)
@@ -134,7 +136,7 @@ def test_stale_tokens_are_pruned_from_the_play_map():
 
 
 def test_the_redirect_branch_records_an_estimate_and_stats_reports_it():
-    src = open(os.path.join(_ROOT, "app.py"), encoding="utf-8").read()
+    src = src_for_route("/spore-stream/<token>")
     branch = src.split('return {"mode": "redirect", "url": cdn_url}', 1)[0][-600:]
     assert 'egress_estimate.note_redirect(token, info["cdn_size"])' in branch
     stats = open(os.path.join(_ROOT, "stats.py"), encoding="utf-8").read()

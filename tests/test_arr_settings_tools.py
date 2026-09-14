@@ -8,6 +8,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 _ROOT = os.path.join(os.path.dirname(__file__), "..")
@@ -74,10 +76,10 @@ def test_system_status_is_none_when_unreachable(arr, monkeypatch):
 
 # -- routes ------------------------------------------------------------------
 
-def _route(path_re):
-    src = _src("app.py")
-    m = re.search(r'@app\.post\("' + path_re + r'"\)\s*\ndef (\w+)\(.*?\):\n(.*?)\n@app\.', src, re.S)
-    assert m, f"route {path_re} not found"
+def _route(path):
+    src = src_for_route(path)
+    m = re.search(r'@bp\.post\("' + re.escape(path) + r'"\)\s*\ndef (\w+)\(.*?\):\n(.*?)(?=\n@bp\.|\Z)', src, re.S)
+    assert m, f"route {path} not found"
     return m.group(2)
 
 
@@ -108,4 +110,4 @@ def test_test_routes_report_the_arr_version():
         body = _route(rf"/ui/api/arr-import/test-{kind}")
         assert f'service_tests.run("{kind}"' in body
         assert "version=" in body
-    assert "def _arr_test" not in _src("app.py")
+    assert "def _arr_test" not in src_for_route("/ui/api/arr-import/test-radarr")

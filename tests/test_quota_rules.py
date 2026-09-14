@@ -6,6 +6,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import all_route_sources, src_for_route
+
 import pytest
 
 import db
@@ -67,9 +69,9 @@ def test_a_capped_user_is_refused_at_the_cap_with_the_numbers():
 
 
 def test_the_add_route_refuses_with_409_and_downgrades_auto_approve():
-    src = _src("app.py")
+    src = src_for_route("/ui/api/discover/add")
     assert '_QUOTA_PAUSE_NOTE = "auto-approve paused: monthly quota reached"' in src
-    body = src.split('@app.post("/ui/api/discover/add")', 1)[1].split("\n\n\n", 1)[0]
+    body = src.split('@bp.post("/ui/api/discover/add")', 1)[1].split("\n\n\n", 1)[0]
     assert "quota.allows(user_rec)" in body
     assert "409" in body and '"quota reached"' in body
     assert "_QUOTA_PAUSE_NOTE" in body
@@ -114,8 +116,8 @@ def test_approve_route_clears_the_pause_note_on_source():
     clear it, so the row does not keep advertising a pause that is over,
     while a deny note (a different code path, a different reason) is left
     alone by update_user_request_status's own COALESCE."""
-    src = _src("app.py")
-    body = src.split('@app.post("/ui/api/user-requests/<int:req_id>/approve")', 1)[1].split("\n\n\n", 1)[0]
+    src = src_for_route("/ui/api/user-requests/<int:req_id>/approve")
+    body = src.split('@bp.post("/ui/api/user-requests/<int:req_id>/approve")', 1)[1].split("\n\n\n", 1)[0]
     assert "db.clear_user_request_note(req_id)" in body
     # The clear is gated on the exact pause note, so a deny note is never wiped.
     assert 'if r.get("note") == _QUOTA_PAUSE_NOTE:' in body
@@ -143,10 +145,10 @@ def test_a_deny_note_is_unaffected_by_the_pause_note_clearing_path():
 
 
 def test_reopen_and_quota_routes_exist_and_the_orphan_is_gone():
-    src = _src("app.py")
-    for route in ('@app.post("/ui/api/user-requests/<int:req_id>/reopen")', '@app.get("/ui/api/admin/quotas")'):
+    src = src_for_route("/ui/api/user-requests/<int:req_id>/reopen")
+    for route in ('@bp.post("/ui/api/user-requests/<int:req_id>/reopen")', '@bp.get("/ui/api/admin/quotas")'):
         assert route in src, route
         body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
         assert "auth.is_admin()" in body
-    assert '"/ui/api/requests/all"' not in src
+    assert '"/ui/api/requests/all"' not in all_route_sources()
     assert "requestsAll" not in _src("frontend/src/api.ts")

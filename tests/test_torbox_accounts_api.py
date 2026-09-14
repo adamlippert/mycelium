@@ -6,6 +6,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import all_route_sources, src_for_route
+
 import pytest
 
 import db
@@ -52,13 +54,13 @@ def _item(token, account_id, torbox_id=5):
 
 
 def test_routes_exist_and_are_admin_only():
-    src = _src("app.py")
-    for route in ('@app.get("/ui/api/torbox-accounts")', '@app.post("/ui/api/torbox-accounts")',
-                  '@app.post("/ui/api/torbox-accounts/<int:account_id>")',
-                  '@app.delete("/ui/api/torbox-accounts/<int:account_id>")',
-                  '@app.post("/ui/api/torbox-accounts/<int:account_id>/test")'):
+    src = src_for_route("/ui/api/torbox-accounts")
+    for route in ('@bp.get("/ui/api/torbox-accounts")', '@bp.post("/ui/api/torbox-accounts")',
+                  '@bp.post("/ui/api/torbox-accounts/<int:account_id>")',
+                  '@bp.delete("/ui/api/torbox-accounts/<int:account_id>")',
+                  '@bp.post("/ui/api/torbox-accounts/<int:account_id>/test")'):
         assert route in src
-        body = src.split(route)[1].split("\n@app.")[0]
+        body = src.split(route)[1].split("\n@bp.")[0]
         assert "auth.is_admin()" in body and "torbox_accounts_api." in body
 
 
@@ -105,9 +107,9 @@ def test_app_torbox_endpoints_guard_an_empty_account_pool():
     """Important 4: torbox_pool.accounts()[0] used to be indexed unguarded
     in /ui/torbox-delete and /ui/api/torbox-usage, an IndexError (500) with
     no enabled account. Both must check first and answer 503."""
-    src = _src("app.py")
+    src = all_route_sources()
     assert "torbox_pool.accounts()[0]" not in src, \
-        "app.py must guard an empty pool before indexing accounts()[0]"
+        "the routes must guard an empty pool before indexing accounts()[0]"
 
 
 def test_add_narrows_the_exception_catch_to_integrity_error(monkeypatch):

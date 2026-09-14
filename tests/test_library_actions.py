@@ -6,6 +6,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import threading
 import time
 
@@ -97,14 +99,14 @@ def test_blacklist_playability_and_override():
 
 
 def test_the_routes_exist_and_delegate():
-    src = _src("app.py")
-    for route in ('@app.post("/ui/api/library/<imdb_id>/mirror")', '@app.post("/ui/api/library/<imdb_id>/unmirror")',
-                  '@app.post("/ui/api/library/<imdb_id>/drop-retry")', '@app.post("/ui/api/library/<imdb_id>/retry-now")',
-                  '@app.post("/ui/api/library/<imdb_id>/recheck-series")',
-                  '@app.post("/ui/api/library/<imdb_id>/episodes/<int:season>/<int:episode>/retry")',
-                  '@app.post("/ui/api/library/hash/<info_hash>/blacklist")', '@app.post("/ui/api/library/hash/<info_hash>/unblacklist")',
-                  '@app.post("/ui/api/library/<imdb_id>/playability/reset")',
-                  '@app.route("/ui/api/library/<imdb_id>/override", methods=["POST", "DELETE"])'):
+    src = src_for_route("/ui/api/library/<imdb_id>/mirror")
+    for route in ('@bp.post("/ui/api/library/<imdb_id>/mirror")', '@bp.post("/ui/api/library/<imdb_id>/unmirror")',
+                  '@bp.post("/ui/api/library/<imdb_id>/drop-retry")', '@bp.post("/ui/api/library/<imdb_id>/retry-now")',
+                  '@bp.post("/ui/api/library/<imdb_id>/recheck-series")',
+                  '@bp.post("/ui/api/library/<imdb_id>/episodes/<int:season>/<int:episode>/retry")',
+                  '@bp.post("/ui/api/library/hash/<info_hash>/blacklist")', '@bp.post("/ui/api/library/hash/<info_hash>/unblacklist")',
+                  '@bp.post("/ui/api/library/<imdb_id>/playability/reset")',
+                  '@bp.route("/ui/api/library/<imdb_id>/override", methods=["POST", "DELETE"])'):
         assert route in src, route
         body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
         assert "_lib_action(" in body, route
@@ -116,8 +118,8 @@ def test_retry_and_purge_routes_resolve_the_row_directly():
     """Both routes used to look the row up via db.get_recent(1000), which
     silently 404s for any title outside the 1,000 most recently created
     requests. They must resolve the row by id instead."""
-    src = _src("app.py")
-    for route in ('@app.post("/ui/api/requests/<int:row_id>/retry")', '@app.post("/ui/api/requests/<int:row_id>/purge")'):
+    src = src_for_route("/ui/api/requests/<int:row_id>/retry")
+    for route in ('@bp.post("/ui/api/requests/<int:row_id>/retry")', '@bp.post("/ui/api/requests/<int:row_id>/purge")'):
         body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
         assert "get_recent(" not in body, route
         assert "db.get_request(row_id)" in body, route

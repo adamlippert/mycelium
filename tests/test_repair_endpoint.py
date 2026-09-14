@@ -12,6 +12,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import db
@@ -41,8 +43,7 @@ def _isolated_db(tmp_path, monkeypatch):
 
 
 def _app_py():
-    with open(os.path.join(_ROOT, "app.py"), encoding="utf-8") as f:
-        return f.read()
+    return src_for_route("/ui/api/repair")
 
 
 # ── the payload ───────────────────────────────────────────────────────────────
@@ -92,14 +93,14 @@ def test_repair_overview_honours_the_limit():
 # ── the endpoint ──────────────────────────────────────────────────────────────
 
 def test_the_repair_endpoint_is_registered():
-    assert re.search(r'@app\.get\(["\']/ui/api/repair["\']\)', _app_py())
+    assert re.search(r'@bp\.get\(["\']/ui/api/repair["\']\)', _app_py())
 
 
 def test_the_repair_endpoint_is_admin_only():
     """Repair items carry filesystem paths. The Maintenance tab is admin
     gated; the endpoint behind it must be too, or the gate is decorative."""
     src = _app_py()
-    m = re.search(r'@app\.get\(["\']/ui/api/repair["\']\)(.{0,400})', src, re.S)
+    m = re.search(r'@bp\.get\(["\']/ui/api/repair["\']\)(.{0,400})', src, re.S)
     assert m, "no /ui/api/repair route"
     assert "auth.is_admin()" in m.group(1)
     assert "403" in m.group(1)

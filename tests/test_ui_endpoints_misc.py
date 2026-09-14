@@ -10,15 +10,16 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 
 def _app_source() -> str:
-    with open(os.path.join(os.path.dirname(__file__), "..", "app.py"), encoding="utf-8") as f:
-        return f.read()
+    return src_for_route("/ui/api/releases")
 
 
 def test_releases_endpoint_is_registered():
     src = _app_source()
-    assert '@app.get("/ui/api/releases")' in src
+    assert '@bp.get("/ui/api/releases")' in src
     assert "RELEASES" in src
 
 

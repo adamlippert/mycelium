@@ -12,6 +12,8 @@ import settings
 import torbox
 import torbox_pool
 
+from _routes import src_for_route
+
 _ROOT = os.path.join(os.path.dirname(__file__), "..")
 
 
@@ -277,8 +279,8 @@ def test_get_caches_for_the_ttl(monkeypatch):
 
 
 def test_route_is_admin_only_and_served_from_the_cache():
-    src = _src("app.py")
-    m = re.search(r'@app\.get\("/ui/api/overview"\)\s*\ndef (\w+)\(\):(.*?)\n\n', src, re.S)
+    src = src_for_route("/ui/api/overview")
+    m = re.search(r'@bp\.get\("/ui/api/overview"\)\s*\ndef (\w+)\(\):(.*?)\n\n', src, re.S)
     assert m and "auth.is_admin()" in m.group(2) and "overview.get()" in m.group(2)
 
 

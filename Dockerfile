@@ -67,6 +67,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY *.py ./
+# The blueprint package: COPY *.py above takes the top level only, so
+# without this line the image would start with no routes registered.
+COPY routes/ ./routes/
 COPY releases.json ./
 COPY plugins/ ./plugins/
 COPY docs/ ./docs/

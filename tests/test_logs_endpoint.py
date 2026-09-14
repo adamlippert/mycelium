@@ -10,6 +10,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import log_buffer
 
 
@@ -53,10 +55,9 @@ def test_limit_takes_the_newest():
 
 
 def test_the_endpoint_is_registered_and_admin_only():
-    with open(os.path.join(os.path.dirname(__file__), "..", "app.py"), encoding="utf-8") as f:
-        src = f.read()
+    src = src_for_route("/ui/api/logs")
     import re
-    m = re.search(r'@app\.get\("/ui/api/logs"\)(.{0,400})', src, re.S)
+    m = re.search(r'@bp\.get\("/ui/api/logs"\)(.{0,400})', src, re.S)
     assert m
     assert "auth.is_admin()" in m.group(1)
     assert "get_structured(" in m.group(1)

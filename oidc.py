@@ -95,7 +95,7 @@ def install(app: Flask) -> None:
             token = _oauth.oidc.authorize_access_token()
         except Exception as exc:
             log.warning("OIDC: token exchange failed: %s", exc)
-            return redirect(url_for("login_view", error="oidc"))
+            return redirect(url_for("auth.login_view", error="oidc"))
 
         user_info = token.get("userinfo")
         if not user_info:
@@ -103,7 +103,7 @@ def install(app: Flask) -> None:
                 user_info = _oauth.oidc.userinfo()
             except Exception as exc:
                 log.warning("OIDC: userinfo fetch failed: %s", exc)
-                return redirect(url_for("login_view", error="oidc"))
+                return redirect(url_for("auth.login_view", error="oidc"))
 
         claim = _s("OIDC_USER_CLAIM") or "preferred_username"
         username = (
@@ -113,7 +113,7 @@ def install(app: Flask) -> None:
         )
         if not username:
             log.warning("OIDC: no usable user claim in userinfo: %s", list((user_info or {}).keys()))
-            return redirect(url_for("login_view", error="oidc"))
+            return redirect(url_for("auth.login_view", error="oidc"))
 
         session["user"] = username
         session["auth_source"] = "oidc"

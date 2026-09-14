@@ -9,6 +9,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 sys.modules.pop("settings", None)
 
 import pytest
@@ -267,16 +269,19 @@ def test_a_picker_failure_is_an_error_not_an_empty_list(http):
 
 
 def test_the_routes_exist_and_the_wizard_and_arr_import_use_the_registry():
-    src = _src("app.py")
-    assert re.search(r'@app\.post\("/ui/api/settings/test/<service>"\)', src)
-    assert re.search(r'@app\.post\("/ui/api/settings/picker/<name>"\)', src)
-    wizard = src.split('@app.post("/setup/test/<kind>")', 1)[1].split("\n\n\n", 1)[0]
+    settings_src = src_for_route("/ui/api/settings/test/<service>")
+    assert re.search(r'@bp\.post\("/ui/api/settings/test/<service>"\)', settings_src)
+    assert re.search(r'@bp\.post\("/ui/api/settings/picker/<name>"\)', settings_src)
+    setup_src = src_for_route("/setup/test/<kind>")
+    wizard = setup_src.split('@bp.post("/setup/test/<kind>")', 1)[1].split("\n\n\n", 1)[0]
     assert "service_tests.run(kind" in wizard and '__import__("requests")' not in wizard
-    arr = src.split('/ui/api/arr-import/test-radarr', 1)[1][:2000]
+    arr_src = src_for_route("/ui/api/arr-import/test-radarr")
+    arr = arr_src.split('/ui/api/arr-import/test-radarr', 1)[1][:2000]
     assert "service_tests" in arr
-    assert "def _arr_test" not in src
-    assert '_settings_mod.get("ARR_SYNC_INTERVAL_MINUTES"' in src
-    assert '_settings_mod.get("DISK_SYNC_INTERVAL_MINUTES"' in src
+    assert "def _arr_test" not in arr_src
+    scheduler = _src("app.py")
+    assert '_settings_mod.get("ARR_SYNC_INTERVAL_MINUTES"' in scheduler
+    assert '_settings_mod.get("DISK_SYNC_INTERVAL_MINUTES"' in scheduler
 
 
 _CAPS = ('<?xml version="1.0" encoding="UTF-8"?><caps><server version="6.1.5" '

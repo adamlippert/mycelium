@@ -18,6 +18,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 sys.modules.pop("settings", None)
 
 import pytest
@@ -34,7 +36,7 @@ def _src(name):
 
 
 def _func_body(src: str, name: str) -> str:
-    m = re.search(rf"def {name}\(.*?\n(?=@app\.|\ndef )", src, re.S)
+    m = re.search(rf"def {name}\(.*?\n(?=@bp\.|\ndef )", src, re.S)
     assert m, name
     return m.group(0)
 
@@ -80,7 +82,7 @@ def test_legacy_user_region_defaults_to_us_when_never_set():
 # ── app.py source: POST /ui/api/me/region persists the shim to settings ──
 
 def test_id_zero_save_writes_legacy_user_region_instead_of_failing():
-    body = _func_body(_src("app.py"), "ui_api_me_region")
+    body = _func_body(src_for_route("/ui/api/me/region"), "ui_api_me_region")
     assert "LEGACY_USER_REGION" in body
     assert '_settings.set("LEGACY_USER_REGION", region)' in body
     # Round 0 shipped a 409 for this case; round 1 replaces it with a
@@ -90,14 +92,14 @@ def test_id_zero_save_writes_legacy_user_region_instead_of_failing():
 
 
 def test_real_user_save_still_goes_through_db_update_user():
-    body = _func_body(_src("app.py"), "ui_api_me_region")
+    body = _func_body(src_for_route("/ui/api/me/region"), "ui_api_me_region")
     assert 'db.update_user(rec["id"], region=region)' in body
 
 
 # ── app.py source: GET /ui/api/session's default chain ──
 
 def test_session_region_prefers_row_value_then_legacy_setting_then_us():
-    body = _func_body(_src("app.py"), "ui_api_session")
+    body = _func_body(src_for_route("/ui/api/session"), "ui_api_session")
     # Real users (id truthy): row value, else "US" - never the old "NL".
     assert 'region = rec.get("region") or "US"' in body
     # Legacy shim (id falsy / 0): row value (never present) falls through to

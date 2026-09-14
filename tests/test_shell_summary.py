@@ -9,6 +9,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import db
@@ -71,9 +73,8 @@ def test_torbox_failures_never_break_the_sidebar(monkeypatch):
 def test_the_endpoint_is_registered_and_authenticated():
     """Auth is a global before_request hook on /ui/api/, so the route needs no
     decorator; this pins that it lives under that prefix."""
-    with open(os.path.join(os.path.dirname(__file__), "..", "app.py"), encoding="utf-8") as f:
-        src = f.read()
-    assert '@app.get("/ui/api/shell-summary")' in src
+    src = src_for_route("/ui/api/shell-summary")
+    assert '@bp.get("/ui/api/shell-summary")' in src
     assert "shell_summary.get_shell_summary(" in src
 
 

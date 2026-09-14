@@ -72,7 +72,7 @@ def test_the_single_worker_pin_is_documented_at_the_cmd():
 
 
 def test_the_login_limiter_documents_its_memory_storage():
-    src = _src("app.py")
+    src = _src("appcore.py")
     m = re.search(r"(.{0,500})storage_uri=\"memory://\"", src, re.S)
     assert m and "--workers 1" in m.group(1)
 

@@ -15,6 +15,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import mp4_faststart
@@ -75,10 +77,10 @@ def test_golden_fsh_is_the_documented_format():
 # -- the resolve seam ---------------------------------------------------------
 
 def test_internal_resolve_is_loopback_only():
-    src = _src("app.py")
+    src = src_for_route("/internal/stream-resolve/<token>")
     m = re.search(
-        r'@app\.get\(["\']/internal/stream-resolve/<token>["\']\)\s*\n'
-        r"def internal_stream_resolve\(.*?\n(.*?)\n@app\.", src, re.S)
+        r'@bp\.get\(["\']/internal/stream-resolve/<token>["\']\)\s*\n'
+        r"def internal_stream_resolve\(.*?\n(.*?)\n@bp\.", src, re.S)
     assert m, "internal resolve endpoint not found"
     body = m.group(1)
     assert '"127.0.0.1"' in body and "403" in body
@@ -95,9 +97,9 @@ def test_internal_paths_skip_session_auth_but_nothing_else_changed():
 def test_flask_route_and_resolve_share_one_decision_function():
     """The Flask route stays a complete fallback (STREAM_FRONT_ENABLED=false)
     and must not fork from what the Go front is told."""
-    src = _src("app.py")
-    route = re.search(r"def spore_stream_proxy\(.*?\n(.*?)\n@app\.", src, re.S)
-    internal = re.search(r"def internal_stream_resolve\(.*?\n(.*?)\n@app\.", src, re.S)
+    src = src_for_route("/spore-stream/<token>")
+    route = re.search(r"def spore_stream_proxy\(.*?\n(.*?)\n@bp\.", src, re.S)
+    internal = re.search(r"def internal_stream_resolve\(.*?\n(.*?)\n@bp\.", src, re.S)
     assert route and "_resolve_stream_mode(" in route.group(1)
     assert internal and "_resolve_stream_mode(" in internal.group(1)
 
@@ -117,7 +119,7 @@ def test_cold_head_validates_the_cdn_status():
     served clients a 162-byte "movie" with a 206. The resolve must check the
     status, retry a 429 once, refuse to cache failures, and answer 503 (rate
     limited) or 502 rather than success."""
-    src = _src("app.py")
+    src = src_for_route("/spore-stream/<token>")
     m = re.search(r"def _resolve_stream_mode\(.*?\n(.*?)\n    # CDN file is", src, re.S)
     assert m, "cold branch of _resolve_stream_mode not found"
     body = m.group(1)

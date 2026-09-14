@@ -9,6 +9,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 sys.modules.pop("settings", None)
 
 import pytest
@@ -167,8 +169,8 @@ def test_the_new_keys_are_typed_and_have_defaults():
 
 
 def test_the_schema_route_exists_and_is_admin_only():
-    src = _src("app.py")
-    m = re.search(r'@app\.get\("/ui/api/settings/schema"\)\s*\ndef (\w+)\(\):(.*?)\n\n', src, re.S)
+    src = src_for_route("/ui/api/settings/schema")
+    m = re.search(r'@bp\.get\("/ui/api/settings/schema"\)\s*\ndef (\w+)\(\):(.*?)\n\n', src, re.S)
     assert m and "is_admin()" in m.group(2) and "schema_for_ui()" in m.group(2)
 
 
@@ -239,8 +241,8 @@ def test_settings_and_setup_save_routes_clear_any_empty_posted_value():
     """Both save routes must treat an empty posted value as "clear this
     key's override" without carving secrets out of that path, since the
     Settings page's Clear button relies on it posting setting_<KEY>=""."""
-    for name, route in (("app.py", '@app.post("/ui/settings")'), ("app.py", '@app.post("/setup/save")')):
-        src = _src(name)
+    for path, route in (("/ui/settings", '@bp.post("/ui/settings")'), ("/setup/save", '@bp.post("/setup/save")')):
+        src = src_for_route(path)
         idx = src.index(route)
         body = src[idx:idx + 1800]
         assert 'value == ""' in body

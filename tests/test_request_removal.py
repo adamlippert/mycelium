@@ -12,6 +12,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import db
@@ -189,8 +191,8 @@ def test_a_seerr_outage_during_purge_never_raises(seerr_env, monkeypatch):
 def test_purge_title_reports_to_seerr_but_delete_does_not():
     cleanup_src = _src("cleanup.py")
     assert "seerr_report.on_purged(imdb_id, tmdb_id, media_type)" in cleanup_src.split("def purge_title(", 1)[1]
-    app_src = _src("app.py")
-    delete_route = app_src.split("def ui_api_delete_request(", 1)[1].split("\n@app.", 1)[0]
+    app_src = src_for_route("/ui/api/requests/<int:row_id>/delete")
+    delete_route = app_src.split("def ui_api_delete_request(", 1)[1].split("\n@bp.", 1)[0]
     assert "seerr_report" not in delete_route, "Delete keeps the files, so Seerr must not be told"
 
 

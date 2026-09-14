@@ -20,6 +20,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import db
@@ -129,8 +131,8 @@ def test_movie_page_counts_respect_search():
 
 def test_library_movies_route_paginates_not_get_recent():
     """The route must not go back to the truncating get_recent(10000)."""
-    src = _src("app.py")
-    m = re.search(r"def ui_api_library_movies\(\):(.*?)\n@app\.", src, re.S)
+    src = src_for_route("/ui/api/library/movies")
+    m = re.search(r"def ui_api_library_movies\(\):(.*?)\n@bp\.", src, re.S)
     assert m, "ui_api_library_movies not found"
     body = m.group(1)
     # The docstring mentions the old shape by name; only a call counts.
@@ -203,8 +205,8 @@ def test_get_failed_requests_filters_in_sql():
 
 
 def test_failed_requests_route_uses_the_filtered_query():
-    src = _src("app.py")
-    m = re.search(r"def ui_api_failed_requests\(\):(.*?)\n@app\.", src, re.S)
+    src = src_for_route("/ui/api/requests/failed")
+    m = re.search(r"def ui_api_failed_requests\(\):(.*?)\n@bp\.", src, re.S)
     assert m
     assert "get_failed_requests" in m.group(1)
     assert "get_recent" not in m.group(1)

@@ -95,9 +95,15 @@ def test_gate_allows_setup_and_create_user_when_bricked_denies_others(monkeypatc
     def admin_route():
         return "ok"
 
-    @app.get("/login")
+    # auth.py redirects to url_for("auth.login_view"), so the stand-in has to
+    # sit on a blueprint named auth like the real one in routes/auth.py.
+    auth_bp = flask.Blueprint("auth", __name__)
+
+    @auth_bp.get("/login")
     def login_view():
         return "login"
+
+    app.register_blueprint(auth_bp)
 
     # Monkeypatch settings.get to simulate AUTH_ENABLED=true, no password
     # The fixture _isolated_db ensures a fresh database with zero users

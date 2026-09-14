@@ -10,6 +10,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import scraper_metrics
@@ -86,9 +88,8 @@ def test_the_wrapper_records_and_reraises():
 
 
 def test_the_endpoint_is_registered():
-    with open(os.path.join(os.path.dirname(__file__), "..", "app.py"), encoding="utf-8") as f:
-        src = f.read()
-    assert '@app.get("/ui/api/scraper-health")' in src
+    src = src_for_route("/ui/api/scraper-health")
+    assert '@bp.get("/ui/api/scraper-health")' in src
     # The endpoint now serves scrapers.health_rows(), which wraps get_health
     # per scraper and adds the disabled/probe states the admin page shows.
     assert "health_rows()" in src

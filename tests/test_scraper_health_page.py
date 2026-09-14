@@ -14,6 +14,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import scrapers
@@ -148,10 +150,9 @@ def test_the_app_warms_the_scraper_probes_after_boot():
 
 
 def test_the_endpoint_uses_health_rows_not_active():
-    with open(os.path.join(os.path.dirname(__file__), "..", "app.py")) as f:
-        src = f.read()
+    src = src_for_route("/ui/api/scraper-health")
     import re
-    m = re.search(r"def ui_api_scraper_health\(.*?\n(.*?)\n@app\.", src, re.S)
+    m = re.search(r"def ui_api_scraper_health\(.*?\n(.*?)\n@bp\.", src, re.S)
     assert m
     assert "health_rows()" in m.group(1)
     assert "_active()" not in m.group(1)

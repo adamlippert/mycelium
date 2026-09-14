@@ -13,6 +13,8 @@ import time
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import all_route_sources, src_for_route
+
 import pytest
 
 import auth
@@ -53,7 +55,7 @@ def test_the_stream_report_route_is_csrf_exempt():
     rejected every report, the front ignored the status, and the tile read
     zero forever. Nothing else can catch this: tests may not import app.py
     and the Go tests use their own stub upstream."""
-    src = _src("app.py")
+    src = src_for_route("/internal/stream-report/<token>")
     m = re.search(
         r'((?:@[\w.]+(?:\([^)]*\))?\s*\n|\s*#[^\n]*\n)*)'
         r'def internal_stream_report\(', src)
@@ -62,15 +64,15 @@ def test_the_stream_report_route_is_csrf_exempt():
     assert "@_csrf.exempt" in decorators, (
         "the egress report endpoint lost its CSRF exemption; every report "
         "will 400 and the Overview tile will silently read zero")
-    assert '@app.post("/internal/stream-report/<token>")' in decorators
+    assert '@bp.post("/internal/stream-report/<token>")' in decorators
 
 
 def test_the_only_csrf_exemptions_are_the_machine_callers():
     """An exemption is a hole in a global protection; the set of them should
     change deliberately, not by accident."""
-    src = _src("app.py")
+    src = all_route_sources()
     exempted = re.findall(
-        r'@app\.(?:post|route)\(["\']([^"\']+)["\'][^)]*\)\s*\n'
+        r'@bp\.(?:post|route)\(["\']([^"\']+)["\'][^)]*\)\s*\n'
         r'(?:\s*#[^\n]*\n)*\s*@_csrf\.exempt', src)
     assert sorted(exempted) == sorted([
         "/webhook", "/torbox-webhook", "/webhook/arr",
@@ -79,8 +81,8 @@ def test_the_only_csrf_exemptions_are_the_machine_callers():
 
 
 def test_a_falsy_non_dict_body_is_refused_not_recorded_as_zero():
-    src = _src("app.py")
-    m = re.search(r"def internal_stream_report\(.*?\n(.*?)\n@app\.", src, re.S)
+    src = src_for_route("/internal/stream-report/<token>")
+    m = re.search(r"def internal_stream_report\(.*?\n(.*?)\n@bp\.", src, re.S)
     assert m
     body = m.group(1)
     assert "request.get_json(silent=True)\n" in body, (
@@ -174,8 +176,8 @@ def test_no_credentials_when_oidc_is_off_and_nothing_else_exists(isolated_db, mo
 def test_needs_first_admin_only_when_auth_is_on_and_nothing_can_log_in(isolated_db, monkeypatch):
     """A no-auth single-user install has no credential either, and must not be
     forced to create an account."""
-    src = _src("app.py")
-    m = re.search(r"def _needs_first_admin\(\).*?\n(.*?)\n\n@app\.", src, re.S)
+    src = _src("routes/_common.py")
+    m = re.search(r"def _needs_first_admin\(\).*?\n(.*?)\n\n\n", src, re.S)
     assert m, "_needs_first_admin not found"
     body = m.group(1)
     assert "auth.is_enabled()" in body, "the predicate ignores whether auth is even on"
@@ -186,8 +188,8 @@ def test_setup_save_defers_completion_until_an_admin_exists():
     """Completing setup closes the first-admin window inside
     /ui/api/users/create, so an install with auth on and no credential would
     finish the wizard with no way to log in."""
-    src = _src("app.py")
-    m = re.search(r"def setup_save\(\).*?\n(.*?)\n@app\.", src, re.S)
+    src = src_for_route("/setup/save")
+    m = re.search(r"def setup_save\(\).*?\n(.*?)\n@bp\.", src, re.S)
     assert m, "setup_save not found"
     body = m.group(1)
     assert "_needs_first_admin()" in body
@@ -199,8 +201,8 @@ def test_setup_save_defers_completion_until_an_admin_exists():
 
 def test_setup_skip_defers_completion_too():
     """Skipping the wizard is the same trap by a shorter route."""
-    src = _src("app.py")
-    m = re.search(r"def setup_skip\(\).*?\n(.*?)\n\n@app\.", src, re.S)
+    src = src_for_route("/setup/skip")
+    m = re.search(r"def setup_skip\(\).*?\n(.*?)\n\n@bp\.", src, re.S)
     assert m, "setup_skip not found"
     body = m.group(1)
     assert "_needs_first_admin()" in body
@@ -212,7 +214,7 @@ def test_setup_skip_defers_completion_too():
 def test_creating_the_first_admin_is_what_completes_setup():
     """The bootstrap branch already sets SETUP_COMPLETE; that is why the
     wizard can safely leave it unset."""
-    src = _src("app.py")
+    src = src_for_route("/ui/api/users/create")
     m = re.search(r"def ui_api_users_create\(\).*?\n(.*?)\n    if not auth\.is_admin\(\)", src, re.S)
     assert m, "the bootstrap branch of ui_api_users_create not found"
     assert '_settings.set("SETUP_COMPLETE", True)' in m.group(1)
@@ -221,7 +223,7 @@ def test_creating_the_first_admin_is_what_completes_setup():
 def test_the_wizard_is_told_whether_an_admin_is_needed():
     """The wizard renders pre-auth, so it reads this from the injected meta
     tag rather than an API call."""
-    src = _src("app.py")
+    src = _src("routes/_common.py")
     assert '<meta name="needs-first-admin" content="false" />' in src
     assert "_needs_first_admin()" in src
     for shell in ("frontend/index.html", "static/app/index.html"):
@@ -234,8 +236,8 @@ def test_restore_reports_failure_instead_of_redirecting_either_way():
     """Both branches used to redirect to the same page, so a restore that did
     nothing was indistinguishable from one that worked. An operator walks
     away believing their data is back."""
-    src = _src("app.py")
-    m = re.search(r"def ui_backup_restore\(\).*?\n(.*?)\n\n@app\.", src, re.S)
+    src = src_for_route("/ui/backup-restore")
+    m = re.search(r"def ui_backup_restore\(\).*?\n(.*?)\n\n\n", src, re.S)
     assert m, "ui_backup_restore not found"
     body = m.group(1)
     assert "400" in body, "a failed restore does not report an error status"

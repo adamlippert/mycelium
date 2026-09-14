@@ -15,6 +15,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import db
@@ -153,7 +155,7 @@ def test_the_prune_job_is_scheduled():
 def test_the_clear_button_is_reachable():
     import pathlib
     root = pathlib.Path(__file__).resolve().parent.parent
-    assert "/ui/api/retry-queue/clear" in (root / "app.py").read_text()
+    assert "/ui/api/retry-queue/clear" in src_for_route("/ui/api/retry-queue/clear")
     api = (root / "frontend" / "src" / "api.ts").read_text()
     assert "/ui/api/retry-queue/clear" in api
 

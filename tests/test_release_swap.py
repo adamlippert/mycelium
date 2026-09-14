@@ -6,6 +6,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import src_for_route
+
 import pytest
 
 import db
@@ -190,8 +192,8 @@ def test_find_item_movie_and_episode():
 
 
 def test_candidates_route_exists_and_is_admin_only():
-    src = _src("app.py")
-    route = '@app.get("/ui/api/library/<imdb_id>/candidates")'
+    src = src_for_route("/ui/api/library/<imdb_id>/candidates")
+    route = '@bp.get("/ui/api/library/<imdb_id>/candidates")'
     assert route in src
     body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
     assert "auth.is_admin()" in body and "release_swap" in body and "502" in body
@@ -436,8 +438,8 @@ def test_set_request_release_keeps_status_and_error():
 
 
 def test_swap_route_exists_and_delegates():
-    src = _src("app.py")
-    route = '@app.post("/ui/api/library/<imdb_id>/swap")'
+    src = src_for_route("/ui/api/library/<imdb_id>/swap")
+    route = '@bp.post("/ui/api/library/<imdb_id>/swap")'
     assert route in src
     body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
     assert "auth.is_admin()" in body and "release_swap.swap_by_hash(" in body and "blacklist_old" in body
@@ -449,8 +451,8 @@ def test_candidates_route_rejects_a_negative_season_or_episode_like_swap_does():
     a live scrape without validating them; a negative value now gets the
     same {ok: false, message} rejection the swap route already used for an
     invalid ref, via the same parse_episode_ref helper."""
-    src = _src("app.py")
-    route = '@app.get("/ui/api/library/<imdb_id>/candidates")'
+    src = src_for_route("/ui/api/library/<imdb_id>/candidates")
+    route = '@bp.get("/ui/api/library/<imdb_id>/candidates")'
     assert route in src
     body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
     assert "release_swap.parse_episode_ref(" in body
@@ -686,7 +688,7 @@ def test_season_swap_onto_the_current_pack_only_fills_in_file_ids(season_fake):
 
 
 def test_swap_route_accepts_a_season_without_an_episode():
-    src = _src("app.py")
+    src = src_for_route("/ui/api/library/<imdb_id>/swap")
     body = src.split("def ui_api_library_swap(")[1].split("\ndef ")[0]
     assert "release_swap.parse_episode_ref(p.get(\"season\"), p.get(\"episode\"))" in body
     assert "swap_by_hash(" in body

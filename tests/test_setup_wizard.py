@@ -9,6 +9,8 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from _routes import all_route_sources, src_for_route
+
 sys.modules.pop("settings", None)
 
 import pytest
@@ -104,9 +106,9 @@ def test_the_retired_translator_is_gone_and_save_accepts_rule_keys():
     assert not hasattr(migrate_filters, "translate_wizard_keys")
     assert not hasattr(migrate_filters, "WIZARD_KEYS")
     assert hasattr(migrate_filters, "RETIRED"), "the .env warning keeps its map"
-    src = _src("app.py")
-    assert "translate_wizard_keys" not in src and "WIZARD_KEYS" not in src
-    body = re.search(r"def setup_save\(\).*?\n(.*?)\n@app\.", src, re.S).group(1)
+    assert "translate_wizard_keys" not in all_route_sources() and "WIZARD_KEYS" not in all_route_sources()
+    src = src_for_route("/setup/save")
+    body = re.search(r"def setup_save\(\).*?\n(.*?)\n@bp\.", src, re.S).group(1)
     assert "fields_by_key()" in body
     assert '!= "custom"' in body
     # The rule keys are accepted by the allow-list and validated by settings.set.
@@ -117,17 +119,17 @@ def test_the_retired_translator_is_gone_and_save_accepts_rule_keys():
 
 
 def test_the_setup_routes_share_one_gate():
-    src = _src("app.py")
+    src = src_for_route("/setup/schema")
     gate = re.search(r"def _setup_gate\(\).*?\n(.*?)\n\n\n", src, re.S)
     assert gate and "auth.may_use_setup()" in gate.group(1) and "SETUP_COMPLETE" not in gate.group(1)
-    for route in ('@app.get("/setup/schema")', '@app.post("/setup/picker/<name>")', '@app.post("/setup/test/<kind>")'):
+    for route in ('@bp.get("/setup/schema")', '@bp.post("/setup/picker/<name>")', '@bp.post("/setup/test/<kind>")'):
         assert route in src, route
         body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
         assert "_setup_gate()" in body, route
-    schema = src.split('@app.get("/setup/schema")', 1)[1].split("\n\n\n", 1)[0]
+    schema = src.split('@bp.get("/setup/schema")', 1)[1].split("\n\n\n", 1)[0]
     assert "wizard_schema_for_ui()" in schema and "_needs_first_admin()" in schema
-    picker = src.split('@app.post("/setup/picker/<name>")', 1)[1].split("\n\n\n", 1)[0]
+    picker = src.split('@bp.post("/setup/picker/<name>")', 1)[1].split("\n\n\n", 1)[0]
     assert "service_tests.PICKERS" in picker and "service_tests.pick(name" in picker
-    test = src.split('@app.post("/setup/test/<kind>")', 1)[1].split("\n\n\n", 1)[0]
+    test = src.split('@bp.post("/setup/test/<kind>")', 1)[1].split("\n\n\n", 1)[0]
     assert "get_json(silent=True)" in test and "service_tests.run(kind" in test
     assert 'jsonify(ok=True, detail=' in test, "the form shape the old wizard used stays"
