@@ -15,6 +15,15 @@ All notable changes to Mycelium are documented in this file.
 - A startup warning for a deprecated environment variable still set:
   `deprecations.warn_deprecated_env()`, logged once next to the existing
   filter-migration warning. The deprecation map is empty at 1.0.
+- A pre-upgrade backup and a recorded schema version. At startup, before
+  any migration runs, Mycelium reads the last recorded `SCHEMA_VERSION`
+  through a raw connection; when it differs from the version now booting,
+  `backup.run()` takes a backup first (a failure is logged and never
+  blocks startup), and the new version is recorded once startup
+  completes. The startup log now reads `Mycelium <version>, database
+  schema from <previous version or "fresh">`. `docs/RECOVERY.md` documents
+  the upgrade and rollback procedure, with a table of what each release
+  since 0.17.0 added to the database.
 
 ### Removed
 

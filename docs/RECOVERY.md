@@ -10,6 +10,121 @@ makes a recoverable situation worse.
 
 ---
 
+## Upgrading
+
+A release is a new image tag (`vX.Y.Z`), built and published by CI after a
+version bump and a git tag. Deploying it locally looks like:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+On the VPS, Dokploy does the same thing on a redeploy: pull the new tag,
+recreate the container.
+
+**Watch the startup log:**
+
+```bash
+docker logs -f mycelium
+```
+
+The first line names the version and the schema it found:
+
+```
+Mycelium 1.0.0, database schema from 0.29.0
+```
+
+`database schema from fresh` means there was no `SCHEMA_VERSION` setting
+yet: a first install, not an upgrade. Any `Migration: ...` lines that
+follow come from `db._migrate()`, adding the columns and tables this
+version needs. Migrations are additive and safe to run on every boot;
+against a database that already has them, each guard finds nothing to do.
+
+## Before you upgrade
+
+Mycelium takes a backup automatically the first time it boots on a new
+version. At startup, before `db.init()` touches anything, it reads the
+stored `SCHEMA_VERSION` setting through a raw connection and compares it
+with the version that is booting. When the two differ, `backup.run()`
+copies the live database to `/data/backups/requests_<timestamp>.db`
+before migrations run; the new version is then recorded once startup
+completes, so a second restart on the same version takes no further
+backup. A fresh install, with no database file yet, takes no backup:
+there is nothing to protect. A failing backup (disk full, `/data`
+unwritable) is logged as a warning and never blocks startup; migrations
+still run.
+
+This is separate from the scheduled backup (`BACKUP_INTERVAL_HOURS`,
+24 hours by default): the scheduled one runs on a timer regardless of
+whether a migration is about to happen, while the startup one is tied to
+the version change itself, so there is always a backup from just before
+that specific migration, not from up to a day earlier.
+
+The automatic backup only fires once, on the version change. Take one by
+hand before a deploy you are unsure about:
+
+```bash
+# Admin UI: Maintenance -> Backup now.
+
+# Or on the host:
+docker exec mycelium python3 -c "import backup; print(backup.run())"
+```
+
+## Rolling back one version
+
+Restoring the previous image tag is the rollback: redeploy `vX.Y.(Z-1)`
+(or whichever earlier tag) the same way you deployed the new one, in
+Dokploy or with `docker compose`. Nothing has to be undone in the
+database by hand, because `db._migrate()` never removes a column, drops a
+table, or narrows a type; every schema change is one of `ALTER TABLE ...
+ADD COLUMN`, `CREATE TABLE IF NOT EXISTS`, or `CREATE INDEX IF NOT
+EXISTS`. Code from before a column existed simply never reads or writes
+it, so an older build runs unmodified against a newer database.
+
+What each release since 0.17.0 added, from `db._migrate()` and the base
+schema (`db._DDL`), dated from the commit that introduced the guard and
+matched against `CHANGELOG.md`:
+
+| Release | Date | Added |
+|---|---|---|
+| 0.19.0 | 2026-09-08 | `activity_log.imdb_id` column; indexes `idx_activity_imdb`, `idx_user_requests_imdb`, `idx_wanted_episodes_imdb_status`, `idx_requests_info_hash` |
+| 0.22.0 | 2026-09-08 | `egress_log.estimated` column |
+| 0.23.1 | 2026-09-08 | `createtorrent_log.cached` column |
+| 0.25.4 | 2026-09-13 | `wanted_episodes.excluded_hashes` column |
+| 0.29.0 | 2026-09-14 | `torbox_accounts` table; `virtual_items.torbox_account` column; `createtorrent_log.account` column |
+
+Everything else `_migrate()` and `_DDL` add predates 0.17.0, so it exists
+on every install already and needs no entry here. The oldest and largest
+batch (`monitored_series.monitor_mode`/`added_at_date`, the base
+`virtual_items` columns, `users.region` and its siblings, and the
+`favorite_actors` table) dates to 0.6.0; the `retry_queue` unique index to
+0.7.5; `wanted_movies.seerr_reported` to 0.14.0; `requests.arr_mirrored_at`
+to 0.16.0; `idx_virtual_items_imdb_media` to 0.8.6.
+
+A rollback older than 0.17.0 is not covered here in the same detail; the
+same rule still applies, since every guard in `_migrate()` is additive.
+
+## What cannot be rolled back
+
+Nothing today causes data loss on a rollback. Every schema change since
+0.17.0 is additive, never a column whose stored values are reinterpreted,
+so restoring an older image against a newer database is safe as far as
+SQLite is concerned. This section is kept per release in case that
+changes.
+
+One caveat, not a blocker: 0.21.1 changed what `virtual_items.source` and
+`requests.source` mean, from the scraper name (`torrentio`, `zilean`) to a
+release label (`WEB-DL`, `BluRay`, `REMUX`). A row written before 0.21.1
+keeps the scraper name until its title is reprocessed or swapped; a row
+written on 0.21.1 or later holds a label. Code from before 0.21.1 reads
+either value the same way, as a scraper name, so a rolled-back build shows
+a release label in a place that expects `torrentio` or `zilean`. This is
+cosmetic only, a display string nothing branches on, and it resolves
+itself the next time the title is processed. No other column has changed
+meaning since 0.17.0.
+
+---
+
 ## Stop before you touch anything
 
 **If the library looks empty, stop the container first.**
