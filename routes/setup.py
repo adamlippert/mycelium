@@ -162,7 +162,7 @@ def ui_sync_movies():
 @bp.get("/ui/logs")
 def ui_logs():
     if not auth.is_admin():
-        abort(403)
+        return jsonify(error="admin required"), 403
     return jsonify(lines=log_buffer.get_lines(100))
 
 

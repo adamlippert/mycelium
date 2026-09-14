@@ -67,9 +67,15 @@ def test_the_legacy_ui_logs_route_is_admin_only_too():
     """/ui/logs served the last 100 raw log lines - scraper URLs, CDN URLs,
     tokens, exception text - to any logged-in user, not just admins, while
     its sibling /ui/api/logs already checked auth.is_admin(). Item 4 of the
-    1.0 readiness blocker pass closes that gap."""
+    1.0 readiness blocker pass closes that gap.
+
+    Fix round 1, item 3: the rejection answers with the same JSON shape as
+    the sibling route (jsonify(error=...), 403), not a bare abort(403)."""
     src = src_for_route("/ui/logs")
     import re
     m = re.search(r'@bp\.get\("/ui/logs"\)\n(.*?)(?=\n@(?:bp|app)\.|\Z)', src, re.S)
     assert m
-    assert "auth.is_admin()" in m.group(1)
+    body = m.group(1)
+    assert "auth.is_admin()" in body
+    assert 'jsonify(error="admin required"), 403' in body
+    assert "abort(403)" not in body
