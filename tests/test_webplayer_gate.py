@@ -24,7 +24,13 @@ def test_disabled_auth_allows_the_request_even_with_no_user_record(monkeypatch):
 
     app = flask.Flask(__name__)
     with app.test_request_context("/anything"):
-        webplayer_routes._check_enabled()  # must not raise/abort
+        try:
+            result = webplayer_routes._check_enabled()
+        except werkzeug.exceptions.HTTPException as exc:
+            pytest.fail(f"the gate refused a no-auth install with {exc}")
+
+    # The gate is a guard, not a filter: passing means it returns nothing.
+    assert result is None
 
 
 def test_enabled_auth_with_no_record_still_aborts_403(monkeypatch):
