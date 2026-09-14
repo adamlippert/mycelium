@@ -172,10 +172,12 @@ describe('drawer cards', () => {
     const movie = {
       ...base,
       request: { ...base.request, media_type: 'movie', info_hash: 'e'.repeat(40) },
-      items: [{ token: 't1', info_hash: 'e'.repeat(40), strm_path: '/m/film.strm', torbox_id: 1, last_played: null,
-        play_count: 0, season: null, episode: null, debrid_provider: 'torbox', quality: '1080p' }],
+      items: [{ token: 't1', info_hash: 'e'.repeat(40), strm_path: '/m/film.strm', torbox_id: 5, last_played: null,
+        play_count: 0, season: null, episode: null, debrid_provider: 'torbox', quality: '1080p',
+        torbox_account: 2, torbox_account_label: 'second' }],
     };
     wrap(<ReleaseCard d={movie} onDone={() => {}} />);
+    expect(screen.getByText(/TorBox id 5 \(second\)/)).toBeInTheDocument();
     const button = screen.getByRole('button', { name: 'Pick another release' });
     await userEvent.click(button);
     expect(await screen.findByText('Releases')).toBeInTheDocument();
@@ -184,5 +186,18 @@ describe('drawer cards', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     expect(await screen.findByText('next play uses 2160p REMUX')).toBeInTheDocument();
     expect(screen.queryByText('Releases')).not.toBeInTheDocument();
+  });
+
+  it('Release omits the account label for a single-account install', () => {
+    const movie = {
+      ...base,
+      request: { ...base.request, media_type: 'movie', info_hash: 'e'.repeat(40) },
+      items: [{ token: 't1', info_hash: 'e'.repeat(40), strm_path: '/m/film.strm', torbox_id: 5, last_played: null,
+        play_count: 0, season: null, episode: null, debrid_provider: 'torbox', quality: '1080p',
+        torbox_account: 1, torbox_account_label: null }],
+    };
+    wrap(<ReleaseCard d={movie} onDone={() => {}} />);
+    expect(screen.getByText(/TorBox id 5/)).toBeInTheDocument();
+    expect(screen.queryByText(/\(.*\)/)).not.toBeInTheDocument();
   });
 });

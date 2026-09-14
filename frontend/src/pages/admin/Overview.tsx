@@ -34,7 +34,7 @@ export default function Overview() {
     <div className="space-y-7">
       <Band title="Right now" hint="refreshes every 30 s; quiet rows stay quiet">
         <StatusStrip status={o?.status} services={healthQ.data?.services} servicesLoading={healthQ.isLoading}
-          loading={overviewQ.isLoading} error={overviewQ.isError} errors={o?.errors} />
+          loading={overviewQ.isLoading} error={overviewQ.isError} errors={o?.errors} torboxAccounts={o?.torbox.accounts} />
         {o && <ScraperStrip scrapers={o.status.scrapers} />}
       </Band>
       <Band title="Activity" hint="what people did, and what it cost">
@@ -46,7 +46,7 @@ export default function Overview() {
       </Band>
       <Band title="TorBox">
         <TorboxCard adds={o?.status.torbox_adds} addsLoading={overviewQ.isLoading} byReason={quotaQ.data?.by_reason}
-          usage={torboxUsageQ.data} usageLoading={torboxUsageQ.isLoading}
+          usage={torboxUsageQ.data} usageLoading={torboxUsageQ.isLoading} accounts={o?.torbox.accounts}
           streamFront={healthQ.data?.stream_front} recentStreams={o?.torbox.recent_streams} last429At={o?.torbox.last_429_at} idleMinutes={o?.torbox.idle_minutes ?? null} />
       </Band>
       <Band title="Reference" hint="collapsed by default; state remembered">

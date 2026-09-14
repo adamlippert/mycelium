@@ -242,6 +242,19 @@ def test_title_detail_gathers_every_record(seeded):
     assert d["arr"]["mirrored_at"] is not None
     assert d["retry"] is None and d["playability"] == [] and d["episodes"] is None
     assert la.title_detail("tt404") is None
+    assert d["items"][0]["torbox_account"] is None and d["items"][0]["torbox_account_label"] is None
+
+
+def test_title_detail_carries_the_torbox_account_label(seeded):
+    import torbox_pool
+    db.insert_torbox_account("second", "k2")
+    torbox_pool.invalidate()
+    with db._connect() as conn:
+        conn.execute("UPDATE virtual_items SET torbox_account=2 WHERE token='t1'")
+        conn.commit()
+    d = la.title_detail("tt1")
+    assert d["items"][0]["torbox_account"] == 2
+    assert d["items"][0]["torbox_account_label"] == "second"
 
 
 def test_title_detail_reports_mirror_on_from_arr_sync(seeded, monkeypatch):

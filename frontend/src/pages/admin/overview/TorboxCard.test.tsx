@@ -6,7 +6,7 @@ const usage = { usage: { torrent_count: 128, total_bytes: 3_400_000_000_000, tot
 
 describe('TorboxCard', () => {
   it('merges budget, library and streaming into one card', () => {
-    render(<TorboxCard adds={{ uncached: 3, cached: 41, limit: 60, resets_in_sec: 2520 }} addsLoading={false}
+    render(<TorboxCard adds={{ uncached: 3, cached: 41, limit: 60, resets_in_sec: 2520, over: null }} addsLoading={false}
       byReason={{ 'catbox-search': 2, processor: 1 }}
       usage={usage} usageLoading={false} streamFront recentStreams={2} last429At={null} idleMinutes={90} />);
     expect(screen.getByText('3 / 60')).toBeInTheDocument();
@@ -34,5 +34,31 @@ describe('TorboxCard', () => {
       streamFront={false} recentStreams={0} last429At={null} idleMinutes={null} />);
     expect(screen.queryByText('unavailable')).not.toBeInTheDocument();
     expect(screen.getAllByText('-').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('renders one adds column per account, with its own budget and torrent count', () => {
+    render(<TorboxCard adds={{ uncached: 49, cached: 41, limit: 120, resets_in_sec: 2520, over: 'second' }} addsLoading={false}
+      byReason={undefined}
+      accounts={[
+        { id: 1, label: 'main', adds: { uncached: 3, cached: 41, limit: 60, resets_in_sec: 2520 }, torrents: 40, last_429_at: null },
+        { id: 2, label: 'second', adds: { uncached: 46, cached: 0, limit: 60, resets_in_sec: 300 }, torrents: 12, last_429_at: null },
+      ]}
+      usage={usage} usageLoading={false} streamFront recentStreams={2} last429At={null} idleMinutes={90} />);
+    expect(screen.getByText('main')).toBeInTheDocument();
+    expect(screen.getByText('second')).toBeInTheDocument();
+    expect(screen.getByText('3 / 60')).toBeInTheDocument();
+    expect(screen.getByText('46 / 60')).toBeInTheDocument();
+    expect(screen.getByText(/40 torrents/)).toBeInTheDocument();
+    expect(screen.getByText(/12 torrents/)).toBeInTheDocument();
+  });
+
+  it('keeps the single summed column when there is only one account', () => {
+    render(<TorboxCard adds={{ uncached: 3, cached: 41, limit: 60, resets_in_sec: 2520, over: null }} addsLoading={false}
+      byReason={undefined}
+      accounts={[{ id: 1, label: 'main', adds: { uncached: 3, cached: 41, limit: 60, resets_in_sec: 2520 }, torrents: 40, last_429_at: null }]}
+      usage={usage} usageLoading={false} streamFront recentStreams={2} last429At={null} idleMinutes={90} />);
+    expect(screen.getByText('Uncached adds this hour')).toBeInTheDocument();
+    expect(screen.queryByText('main')).not.toBeInTheDocument();
+    expect(screen.queryByText(/torrents\./)).not.toBeInTheDocument();
   });
 });

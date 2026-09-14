@@ -10,7 +10,7 @@ const status: OverviewPayload['status'] = {
     { name: 'comet', state: 'down', latency_ms: null },
     { name: 'debridio', state: 'disabled', latency_ms: null },
   ],
-  torbox_adds: { uncached: 3, cached: 41, limit: 60, resets_in_sec: 2520 },
+  torbox_adds: { uncached: 3, cached: 41, limit: 60, resets_in_sec: 2520, over: null },
   failures_7d: 2,
   queue: { retry: 0, wanted: 7 },
   attention: 3,
@@ -73,11 +73,24 @@ describe('StatusStrip', () => {
     expect(within(screen.getByRole('group', { name: 'Services: unavailable' })).getByText('unavailable')).toBeInTheDocument();
   });
 
-  it('turns TorBox adds amber from 45 uncached and queue amber with retries', () => {
-    renderIt({ status: { ...status, torbox_adds: { ...status.torbox_adds, uncached: 45 }, queue: { retry: 2, wanted: 1 } } });
+  it('turns TorBox adds amber when an account is named as over, and queue amber with retries', () => {
+    renderIt({
+      status: { ...status, torbox_adds: { uncached: 49, cached: 41, limit: 120, resets_in_sec: 2520, over: 'second' }, queue: { retry: 2, wanted: 1 } },
+      torboxAccounts: [
+        { id: 1, label: 'main', adds: { uncached: 3, cached: 41, limit: 60, resets_in_sec: 2520 }, torrents: 10, last_429_at: null },
+        { id: 2, label: 'second', adds: { uncached: 46, cached: 0, limit: 60, resets_in_sec: 300 }, torrents: 4, last_429_at: null },
+      ],
+    });
     expect(screen.getByRole('group', { name: 'TorBox adds: warning' })).toBeInTheDocument();
+    expect(screen.getByText('second at 46 / 60')).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Queue: warning' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open queue' })).toHaveAttribute('href', expect.stringContaining('library?view=queue'));
+  });
+
+  it('falls back to naming just the account when its own figures have not loaded yet', () => {
+    renderIt({ status: { ...status, torbox_adds: { ...status.torbox_adds, over: 'second' } } });
+    expect(screen.getByRole('group', { name: 'TorBox adds: warning' })).toBeInTheDocument();
+    expect(screen.getByText('second over the limit')).toBeInTheDocument();
   });
 
   it('shows unavailable cells when the payload failed', () => {

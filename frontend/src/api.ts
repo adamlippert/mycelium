@@ -45,7 +45,7 @@ export type StatsOverview = {
 export type OverviewPayload = {
   status: {
     scrapers: { name: string; state: 'ok' | 'slow' | 'down' | 'unknown' | 'disabled'; latency_ms: number | null }[];
-    torbox_adds: { uncached: number; cached: number; limit: number; resets_in_sec: number };
+    torbox_adds: { uncached: number; cached: number; limit: number; resets_in_sec: number; over: string | null };
     failures_7d: number;
     queue: { retry: number; wanted: number };
     attention: number;
@@ -67,11 +67,16 @@ export type OverviewPayload = {
       torbox_ids?: { ran_at: string; checked: number; cleared: number; repointed: number; skipped: string | null } | null;
     };
   };
-  torbox: { recent_streams: number; last_429_at: string | null; idle_minutes?: number | null };
+  torbox: {
+    recent_streams: number; last_429_at: string | null; idle_minutes?: number | null;
+    accounts: { id: number; label: string;
+      adds: { uncached: number; cached: number; limit: number; resets_in_sec: number };
+      torrents: number; last_429_at: string | null }[];
+  };
   /** Names of the blocks whose backend source failed and fell back to a
-   * neutral default: base, scrapers, torbox_adds, attention, approvals,
-   * consistency, plays, last_429. Cells that read from a failed block show
-   * "unavailable" instead of the (fake) default value. */
+   * neutral default: base, scrapers, torbox_adds, torbox_accounts, attention,
+   * approvals, consistency, plays, last_429. Cells that read from a failed
+   * block show "unavailable" instead of the (fake) default value. */
   errors: string[];
 };
 
@@ -878,7 +883,8 @@ export interface RequestRow {
 export interface LibraryDetail {
   request: RequestRow & { tmdb_id: number | null; arr_mirrored_at: string | null };
   items: { token: string; info_hash: string; strm_path: string | null; torbox_id: number | null; last_played: string | null;
-    play_count: number; season: number | null; episode: number | null; debrid_provider: string | null; quality: string | null }[];
+    play_count: number; season: number | null; episode: number | null; debrid_provider: string | null; quality: string | null;
+    torbox_account: number | null; torbox_account_label: string | null }[];
   playability: { content_key: string; status: string; last_ok_provider: string | null; last_ok_at: string | null;
     last_fail_reason: string | null; consecutive_failures: number; updated_at: string }[];
   episodes: { season: number; present: number; wanted: number }[] | null;

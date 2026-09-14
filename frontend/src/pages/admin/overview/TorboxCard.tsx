@@ -13,14 +13,36 @@ function ago(iso: string): string {
 
 const STATE_LABEL: Record<string, string> = { completed: 'Ready', cached: 'Ready', downloading: 'Downloading', stalled: 'Stalled', meta_dl: 'Fetching metadata', uploading: 'Seeding', paused: 'Paused' };
 
-export function TorboxCard({ adds, addsLoading, byReason, usage, usageLoading, streamFront, recentStreams, last429At, idleMinutes }: {
+type AddsFigures = { uncached: number; cached: number; limit: number; resets_in_sec: number };
+
+function AddsBar({ label, adds, torrents }: { label?: string; adds: AddsFigures; torrents?: number }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between">
+        <span className="text-muted">{label ?? 'Uncached adds this hour'}</span>
+        <span className="font-mono text-body">{adds.uncached} / {adds.limit}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, Math.round((100 * adds.uncached) / (adds.limit || 1)))}%` }} /></div>
+      <p className="mt-1.5 text-[11px] text-white/30">
+        {adds.cached} cached adds this hour, not limited by TorBox.
+        {torrents !== undefined && ` ${torrents} torrents.`} Resets in {formatCountdown(adds.resets_in_sec)}.
+      </p>
+    </div>
+  );
+}
+
+export function TorboxCard({ adds, addsLoading, byReason, usage, usageLoading, accounts, streamFront, recentStreams, last429At, idleMinutes }: {
   adds: OverviewPayload['status']['torbox_adds'] | undefined; addsLoading: boolean;
   byReason: Record<string, number> | undefined;
   usage: TorBoxUsage | undefined; usageLoading: boolean;
+  /** Per-account adds and torrent counts; a single-account install (0 or 1
+   * entries) keeps the one summed column it has always had. */
+  accounts?: OverviewPayload['torbox']['accounts'];
   streamFront: boolean | undefined; recentStreams: number | undefined;
   last429At: string | null | undefined; idleMinutes: number | null;
 }) {
   const states = Object.entries(usage?.usage.states ?? {}).sort((a, b) => b[1] - a[1]);
+  const multi = (accounts?.length ?? 0) > 1;
   return (
     <Card>
       <div className="mb-3 text-sm font-semibold text-body">TorBox</div>
@@ -28,11 +50,13 @@ export function TorboxCard({ adds, addsLoading, byReason, usage, usageLoading, s
         <div>
           {addsLoading ? (
             <p className="text-muted">-</p>
+          ) : multi ? (
+            <div className="space-y-3">
+              {accounts!.map((a) => <AddsBar key={a.id} label={a.label} adds={a.adds} torrents={a.torrents} />)}
+            </div>
           ) : adds ? (
             <>
-              <div className="mb-2 flex items-baseline justify-between"><span className="text-muted">Uncached adds this hour</span><span className="font-mono text-body">{adds.uncached} / {adds.limit}</span></div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, Math.round((100 * adds.uncached) / (adds.limit || 1)))}%` }} /></div>
-              <p className="mt-1.5 text-[11px] text-white/30">{adds.cached} cached adds this hour, not limited by TorBox. Resets in {formatCountdown(adds.resets_in_sec)}.</p>
+              <AddsBar adds={adds} />
               {byReason && Object.keys(byReason).length > 0 && (
                 <div className="mt-2.5 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
                   {Object.entries(byReason).sort((a, b) => b[1] - a[1]).map(([k, n]) => <Row key={k} k={k} v={String(n)} />)}

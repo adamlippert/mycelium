@@ -170,3 +170,52 @@ def test_add_budget_row_survives_a_counter_failure(env, monkeypatch):
 
     monkeypatch.setattr(torbox, "createtorrent_usage", boom)
     assert _row("TorBox adds this hour") is None
+
+
+# -- Multiple accounts ------------------------------------------------------
+
+def test_two_accounts_get_their_own_labelled_row_key_and_a_403_marks_only_that_one(env, monkeypatch):
+    """With two enabled accounts, each gets its own ping (its own key in the
+    Authorization header) and its own add-budget row; a 403 from TorBox for
+    one account's key must not sink the other's row."""
+    import health
+    import torbox_pool
+
+    values, state = env
+    # Set account 1's key both ways: torbox_pool's `settings.get` may be
+    # `env`'s patched dict lookup (same module object as health.settings,
+    # the common case) or the real settings.get reading the DB (when
+    # another test file's sys.modules.pop("settings") has split module
+    # identity apart before this file's own import - see test_debridio.py's
+    # test_health_error_truncation_does_not_leak_a_token_fragment for the
+    # same caveat). Covering both keeps this test order-independent.
+    values["TORBOX_API_KEY"] = "k1"
+    db.set_setting("TORBOX_API_KEY", "k1")
+    db.insert_torbox_account("second", "k2")
+    torbox_pool.invalidate()
+    torbox_pool._health.clear()
+
+    seen_auth = []
+
+    def fake_get(url, headers=None, timeout=None):
+        if url.endswith("/torrents/mylist"):
+            auth = (headers or {}).get("Authorization", "")
+            seen_auth.append(auth)
+            if auth.endswith("k2"):
+                return FakeResp(403, {})
+            return FakeResp(200, {})
+        if url.endswith("/Library/VirtualFolders"):
+            return FakeResp(200, state["libraries"])
+        return FakeResp(200, {})
+
+    monkeypatch.setattr(health.requests, "get", fake_get)
+    rows = health.check_all()
+    by_name = {r["name"]: r for r in rows}
+    assert "TorBox main" in by_name and "TorBox second" in by_name
+    assert by_name["TorBox main"]["status"] == "ok"
+    assert by_name["TorBox second"]["status"] == "down"
+    assert any(a.endswith("k1") for a in seen_auth)
+    assert any(a.endswith("k2") for a in seen_auth)
+    assert "TorBox adds this hour (main)" in by_name
+    assert "TorBox adds this hour (second)" in by_name
+    assert "TorBox adds this hour" not in by_name, "the plain name is only for a single-account install"

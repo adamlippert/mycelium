@@ -204,13 +204,24 @@ def title_detail(imdb_id: str) -> dict | None:
     req = db.get_request_by_imdb(imdb_id)
     if not req:
         return None
+    import torbox_pool
     is_series = req["media_type"] != "movie"
     items = db.get_virtual_items_by_imdb(imdb_id)
+    # A single-key install shows no account label at all (nothing new to
+    # explain); the label only earns its place once there is more than one
+    # enabled account to tell apart.
+    multi_accounts = len(torbox_pool.accounts()) > 1
+    out_items = []
+    for i in items:
+        row = {k: i.get(k) for k in ("token", "info_hash", "strm_path", "torbox_id", "last_played",
+                                     "play_count", "season", "episode", "debrid_provider", "quality",
+                                     "torbox_account")}
+        acct = torbox_pool.account(row["torbox_account"]) if row["torbox_account"] is not None else None
+        row["torbox_account_label"] = acct.label if (acct and multi_accounts) else None
+        out_items.append(row)
     return {
         "request": req,
-        "items": [{k: i.get(k) for k in ("token", "info_hash", "strm_path", "torbox_id", "last_played",
-                                         "play_count", "season", "episode", "debrid_provider", "quality")}
-                  for i in items],
+        "items": out_items,
         "playability": db.get_playability_for_title(imdb_id),
         "episodes": _seasons_summary(imdb_id) if is_series else None,
         "monitored": db.get_monitored_series_by_imdb(imdb_id) if is_series else None,

@@ -71,11 +71,39 @@ def _scrapers() -> list[dict]:
             for r in scrapers.health_rows(probe=False)]
 
 
-def _torbox_adds() -> dict:
+def _torbox_accounts() -> list[dict]:
+    """Per-account add budget, torrent count and last 429, in account-id
+    order (torbox_pool.accounts() already sorts that way)."""
     import torbox
-    u = torbox.createtorrent_usage()
-    return {"uncached": int(u.get("count", 0)), "cached": int(u.get("cached_count", 0) or 0),
-            "limit": int(u.get("limit", 60) or 60), "resets_in_sec": int(u.get("resets_in_sec", 0) or 0)}
+    import torbox_pool
+    counts = db.count_items_by_account()
+    out = []
+    for a in torbox_pool.accounts():
+        u = torbox.createtorrent_usage(a.id)
+        last = torbox.last_429_at(a.id)
+        out.append({
+            "id": a.id, "label": a.label,
+            "adds": {"uncached": int(u.get("count", 0)), "cached": int(u.get("cached_count", 0) or 0),
+                     "limit": int(u.get("limit", 60) or 60), "resets_in_sec": int(u.get("resets_in_sec", 0) or 0)},
+            "torrents": counts.get(a.id, 0),
+            "last_429_at": (datetime.fromtimestamp(last, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                            if last else None),
+        })
+    return out
+
+
+def _torbox_adds() -> dict:
+    """Summed across every enabled account: limit is 60 per account, uncached
+    and cached are sums, resets_in_sec the latest of any account's window.
+    `over` names the first account (lowest id) at 45 or more uncached adds,
+    so the status strip can point at the one that needs attention."""
+    accts = _torbox_accounts()
+    uncached = sum(a["adds"]["uncached"] for a in accts)
+    cached = sum(a["adds"]["cached"] for a in accts)
+    resets_in_sec = max((a["adds"]["resets_in_sec"] for a in accts), default=0)
+    over = next((a["label"] for a in accts if a["adds"]["uncached"] >= 45), None)
+    return {"uncached": uncached, "cached": cached, "limit": 60 * len(accts),
+            "resets_in_sec": resets_in_sec, "over": over}
 
 
 def _approvals() -> dict:
@@ -134,7 +162,7 @@ def build() -> dict:
     return {
         "status": {
             "scrapers": _safe(_scrapers, [], name="scrapers", errors=errors),
-            "torbox_adds": _safe(_torbox_adds, {"uncached": 0, "cached": 0, "limit": 60, "resets_in_sec": 0},
+            "torbox_adds": _safe(_torbox_adds, {"uncached": 0, "cached": 0, "limit": 60, "resets_in_sec": 0, "over": None},
                                   name="torbox_adds", errors=errors),
             "failures_7d": failed_7d,
             "queue": {"retry": len(_safe(db.get_pending_retries, [])), "wanted": wanted_active},
@@ -168,6 +196,7 @@ def build() -> dict:
                             if last_429 else None),
             "idle_minutes": _safe(lambda: int(settings.get("CATBOX_IDLE_MINUTES", config.CATBOX_IDLE_MINUTES) or 0),
                                   None, name="idle_minutes", errors=errors),
+            "accounts": _safe(_torbox_accounts, [], name="torbox_accounts", errors=errors),
         },
         "errors": errors,
     }

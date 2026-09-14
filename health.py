@@ -78,49 +78,66 @@ def _jellyfin_libraries_row(jellyfin_url: str, jellyfin_key: str) -> dict | None
             "note": f"{n} librar{'y' if n == 1 else 'ies'}, extraction off"}
 
 
-def _torbox_budget_row() -> dict | None:
-    """Uncached TorBox adds used this hour against the 60/hour limit. Cached
-    adds are shown but do not count: TorBox only limits uncached ones."""
+def _torbox_budget_row(account, multi: bool) -> dict | None:
+    """Uncached TorBox adds used this hour against the 60/hour limit, for one
+    account. Cached adds are shown but do not count: TorBox only limits
+    uncached ones. With a single enabled account the row keeps the name it
+    has always had ("TorBox adds this hour"); with two or more, the label
+    is appended so each account gets its own row."""
     try:
         import torbox
-        usage = torbox.createtorrent_usage()
+        usage = torbox.createtorrent_usage(account.id)
         count, limit = int(usage.get("count", 0)), int(usage.get("limit", 60) or 60)
         cached = int(usage.get("cached_count", 0) or 0)
     except Exception as exc:
-        log.debug("TorBox add budget unavailable: %s", exc)
+        log.debug("TorBox add budget unavailable (%s): %s", account.label, exc)
         return None
+    name = f"TorBox adds this hour ({account.label})" if multi else "TorBox adds this hour"
     note = f"{count}/{limit} uncached"
     if cached:
         note += f", {cached} cached (not limited)"
     if count >= _ADD_BUDGET_WARN_AT:
         note += " used; auto-requesters (Suggestarr, Trakt, MDBList, auto-approve) share this budget"
-        return {"name": "TorBox adds this hour", "status": "warn", "note": note}
-    return {"name": "TorBox adds this hour", "status": "ok", "note": note}
+        return {"name": name, "status": "warn", "note": note}
+    return {"name": name, "status": "ok", "note": note}
 
 
-def _torbox_ping_headers() -> dict:
-    """Account 1 for now; Task 6 pings every account. Falls back to an
-    empty header (a doomed ping, not a crash) when the account pool can't
-    be read at all, the way settings.get() already degrades elsewhere."""
+def _account_ping_headers(account) -> dict:
+    """Falls back to an empty header (a doomed ping, not a crash) when the
+    key can't be read at all, the way settings.get() already degrades
+    elsewhere."""
     try:
         import torbox
-        import torbox_pool
-        return torbox._headers(torbox_pool.accounts()[0].id)
+        return torbox._headers(account.id)
     except Exception as exc:
-        log.debug("TorBox ping headers unavailable: %s", exc)
+        log.debug("TorBox ping headers unavailable (%s): %s", account.label, exc)
         return {}
 
 
 def check_all() -> list[dict]:
     services = []
-    services.append(_ping(
-        "TorBox",
-        f"{_s('TORBOX_BASE_URL').rstrip('/')}/torrents/mylist",
-        headers=_torbox_ping_headers(),
-    ))
-    budget = _torbox_budget_row()
-    if budget:
-        services.append(budget)
+    import torbox_pool
+    try:
+        accounts = torbox_pool.accounts()
+    except Exception as exc:
+        log.debug("TorBox account pool unavailable: %s", exc)
+        accounts = []
+    # A single-key install keeps the plain "TorBox" name it has always had;
+    # two or more enabled accounts each get their own labelled row, pinged
+    # with their own key, so one account's 401/403 does not hide behind the
+    # others' green pings.
+    multi = len(accounts) > 1
+    for account in accounts:
+        name = f"TorBox {account.label}" if multi else "TorBox"
+        services.append(_ping(
+            name,
+            f"{_s('TORBOX_BASE_URL').rstrip('/')}/torrents/mylist",
+            headers=_account_ping_headers(account),
+            down_codes=(401, 403),
+        ))
+        budget = _torbox_budget_row(account, multi)
+        if budget:
+            services.append(budget)
     if settings.get("ZILEAN_ENABLED", False):
         if settings.get("ZILEAN_MODE", "external") == "native":
             # Built-in SQLite index: nothing to ping. Down means the index

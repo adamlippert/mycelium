@@ -8,7 +8,9 @@ import pytest
 import db
 import egress_estimate
 import overview
+import settings
 import torbox
+import torbox_pool
 
 _ROOT = os.path.join(os.path.dirname(__file__), "..")
 
@@ -27,8 +29,12 @@ def _drop_cached_conn():
 def _isolated_db(tmp_path, monkeypatch):
     _drop_cached_conn()
     monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("TORBOX_API_KEY", "k1")
     _drop_cached_conn()
     db.init()
+    settings.set("TORBOX_API_KEY", "k1")
+    torbox_pool.invalidate()
+    torbox_pool._health.clear()
     egress_estimate._reset()
     overview._cache["data"] = None
     overview._orphans_cache["data"] = None
@@ -138,7 +144,7 @@ def test_build_has_the_documented_shape(monkeypatch):
     s = out["status"]
     assert s["scrapers"] == [{"name": "torrentio", "state": "ok", "latency_ms": 640.0},
                              {"name": "comet", "state": "down", "latency_ms": None}]
-    assert s["torbox_adds"] == {"uncached": 3, "cached": 41, "limit": 60, "resets_in_sec": 2520}
+    assert s["torbox_adds"] == {"uncached": 3, "cached": 41, "limit": 60, "resets_in_sec": 2520, "over": None}
     assert s["failures_7d"] == 0 and s["queue"] == {"retry": 0, "wanted": 0}
     assert s["attention"] == 0 and s["approvals"] == {"pending": 0, "oldest_age_sec": None}
     a = out["activity"]
@@ -150,8 +156,31 @@ def test_build_has_the_documented_shape(monkeypatch):
     assert lib["qualities"] == {"1080p": 1}
     assert lib["consistency"] == {"db_items": 295, "strm_without_db": 5, "db_without_strm": 0,
                                   "arr_mirrored": 0, "arr_total": 1, "last_cleanup": None, "torbox_ids": None}
-    assert out["torbox"] == {"recent_streams": 0, "last_429_at": None, "idle_minutes": 1440}
+    assert out["torbox"] == {"recent_streams": 0, "last_429_at": None, "idle_minutes": 1440,
+                             "accounts": [{"id": 1, "label": "main",
+                                          "adds": {"uncached": 3, "cached": 41, "limit": 60, "resets_in_sec": 2520},
+                                          "torrents": 0, "last_429_at": None}]}
     assert out["errors"] == []
+
+
+def test_overview_lists_torbox_accounts_and_names_the_one_over_the_warn_line():
+    """torbox.accounts carries one row per enabled account, in id order;
+    status.torbox_adds sums them and names the first account at 45 or more
+    uncached adds this hour. reserve_createtorrent_slot's own per-minute
+    burst guard (10/min) would otherwise cap a tight loop at 9 successful
+    reservations, so the 46 calls are spread across ten-second steps -
+    still all inside the hourly window the usage query reads."""
+    import torbox_pool as pool
+    db.insert_torbox_account("second", "k2")
+    pool.invalidate()
+    base = time.time()
+    for i in range(46):
+        db.reserve_createtorrent_slot(base + i * 10, "x", 60, 10, account_id=2)
+    out = overview.build()
+    accts = out["torbox"]["accounts"]
+    assert [a["label"] for a in accts] == ["main", "second"]
+    assert accts[1]["adds"]["uncached"] == 46 and accts[0]["adds"]["uncached"] == 0
+    assert out["status"]["torbox_adds"]["uncached"] == 46 and out["status"]["torbox_adds"]["over"] == "second"
 
 
 def test_build_survives_a_failing_source(monkeypatch):

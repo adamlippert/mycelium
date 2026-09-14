@@ -18,7 +18,7 @@ vi.mock('../../api', async () => {
             { name: 'Zilean', state: 'ok', latency_ms: 120 },
             { name: 'Torrentio', state: 'down', latency_ms: null },
           ],
-          torbox_adds: { uncached: 3, cached: 41, limit: 60, resets_in_sec: 2520 },
+          torbox_adds: { uncached: 3, cached: 41, limit: 60, resets_in_sec: 2520, over: null },
           failures_7d: 2,
           queue: { retry: 1, wanted: 4 },
           attention: 0,
@@ -38,7 +38,10 @@ vi.mock('../../api', async () => {
             last_cleanup: null,
           },
         },
-        torbox: { recent_streams: 2, last_429_at: null },
+        torbox: {
+          recent_streams: 2, last_429_at: null,
+          accounts: [{ id: 1, label: 'main', adds: { uncached: 3, cached: 41, limit: 60, resets_in_sec: 2520 }, torrents: 77, last_429_at: null }],
+        },
         errors: [],
       }),
       health: () => Promise.resolve({

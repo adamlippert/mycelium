@@ -60,10 +60,22 @@ request_duration_seconds = Histogram(
 torbox_torrent_count = Gauge(
     "mycelium_torbox_torrent_count",
     "Number of torrents currently in the TorBox mylist",
+    ["account"],
 )
 torbox_total_bytes = Gauge(
     "mycelium_torbox_total_bytes",
     "Total size of torrents in the TorBox mylist (bytes)",
+    ["account"],
+)
+torbox_createtorrent_used = Gauge(
+    "mycelium_torbox_createtorrent_used",
+    "Uncached createtorrent calls used this hour, per TorBox account",
+    ["account"],
+)
+torbox_account_up = Gauge(
+    "mycelium_torbox_account_up",
+    "Whether a TorBox account is currently excluded by an auth failure (1=up, 0=down)",
+    ["account"],
 )
 library_strm_files = Gauge(
     "mycelium_library_strm_files",
@@ -77,6 +89,7 @@ catbox_virtual_items = Gauge(
 catbox_active_in_torbox = Gauge(
     "mycelium_catbox_active_in_torbox",
     "Catbox items currently materialised in TorBox",
+    ["account"],
 )
 retry_queue_depth = Gauge(
     "mycelium_retry_queue_depth",
@@ -109,14 +122,26 @@ def refresh_gauges() -> None:
     from pathlib import Path
     from datetime import datetime
 
-    # TorBox usage
+    # TorBox usage, per account: torrent count/bytes, uncached adds used this
+    # hour, active-in-torbox items, and whether the account is currently
+    # excluded by an auth failure. No network call of its own beyond what
+    # get_usage_summary()'s (cached) mylist already does.
     try:
+        import time as _time
         import torbox
         import torbox_pool
-        # Account 1 for now; Task 6 reports usage per account.
-        summary = torbox.get_usage_summary(torbox_pool.accounts()[0].id)
-        torbox_torrent_count.set(summary["torrent_count"])
-        torbox_total_bytes.set(summary["total_bytes"])
+        item_counts = db.count_items_by_account()
+        for acct in torbox_pool.accounts():
+            summary = torbox.get_usage_summary(acct.id)
+            torbox_torrent_count.labels(account=acct.label).set(summary["torrent_count"])
+            torbox_total_bytes.labels(account=acct.label).set(summary["total_bytes"])
+            catbox_active_in_torbox.labels(account=acct.label).set(item_counts.get(acct.id, 0))
+            torbox_createtorrent_used.labels(account=acct.label).set(
+                torbox.createtorrent_usage(acct.id)["count"])
+            h = torbox_pool.health(acct.id)
+            auth_failed = h.get("auth_failed_at")
+            up = 0 if auth_failed and (_time.time() - auth_failed) < torbox_pool.EXCLUDE_WINDOW_SEC else 1
+            torbox_account_up.labels(account=acct.label).set(up)
     except Exception as exc:
         log.debug("metrics: torbox usage failed: %s", exc)
 
@@ -134,7 +159,6 @@ def refresh_gauges() -> None:
     try:
         items = db.get_all_virtual_items()
         catbox_virtual_items.set(len(items))
-        catbox_active_in_torbox.set(sum(1 for i in items if i.get("torbox_id")))
     except Exception:
         pass
 

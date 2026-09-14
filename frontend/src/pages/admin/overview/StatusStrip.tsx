@@ -3,17 +3,19 @@ import { StatusCell } from '../../../components/primitives';
 import type { StatusTone } from '../../../components/primitives';
 import { relativeAge } from './format';
 
-const ADD_WARN_AT = 45;
-
 type Cell = { tone: StatusTone; value: string; sub?: string };
 
-export function StatusStrip({ status, services, servicesLoading, loading, error, errors }: {
+export function StatusStrip({ status, services, servicesLoading, loading, error, errors, torboxAccounts }: {
   status: OverviewPayload['status'] | undefined;
   services: HealthService[] | undefined;
   servicesLoading: boolean;
   loading: boolean;
   error: boolean;
   errors: string[] | undefined;
+  /** Per-account adds, for the "<label> at n / limit" reason line when
+   * torbox_adds.over names an account; the cell still works (with a plainer
+   * reason) when this hasn't loaded yet. */
+  torboxAccounts?: OverviewPayload['torbox']['accounts'];
 }) {
   const off = error || (!loading && !status);
   const failed = (name: string) => (errors ?? []).includes(name);
@@ -48,9 +50,12 @@ export function StatusStrip({ status, services, servicesLoading, loading, error,
     scrapersDown.length ? `${scrapersDown.map((s) => s.name).join(', ')} down` : undefined);
 
   const adds = status?.torbox_adds;
-  const torboxAdds = cell(failed('torbox_adds'), adds && adds.uncached >= ADD_WARN_AT ? 'warn' : 'ok',
+  const overAccount = adds?.over ? torboxAccounts?.find((a) => a.label === adds.over) : undefined;
+  const torboxAdds = cell(failed('torbox_adds'), adds?.over ? 'warn' : 'ok',
     adds ? `${adds.uncached} / ${adds.limit}` : '-',
-    adds ? `uncached this hour, ${adds.cached} cached` : undefined);
+    adds?.over
+      ? (overAccount ? `${overAccount.label} at ${overAccount.adds.uncached} / ${overAccount.adds.limit}` : `${adds.over} over the limit`)
+      : (adds ? `uncached this hour, ${adds.cached} cached` : undefined));
 
   // Failures and queue read straight off the base payload: no block of
   // their own, so a base failure is what takes them off.
