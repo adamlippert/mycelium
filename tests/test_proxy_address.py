@@ -104,6 +104,32 @@ def test_client_address_without_the_front_behind_a_trusted_proxy(monkeypatch):
         assert auth.client_address() == "203.0.113.9"
 
 
+def test_client_address_on_a_default_install_is_the_outer_proxy_container_ip(monkeypatch):
+    """Fix round 1, item 1. On a default install the outer proxy (Traefik/
+    Dokploy) runs in its own container: the front's own peer, appended
+    last, is that container's Docker-network IP, not the internet client.
+    With the default TRUSTED_PROXY_NETWORKS (127.0.0.1/32) that IP is not
+    trusted, so client_address() falls back to treating it as the client
+    itself - one constant address for every real visitor. This is the
+    reviewer's exact measured case."""
+    monkeypatch.setattr(auth.settings, "get", lambda k, d=None: d)
+    headers = {"X-Forwarded-For": "198.51.100.7, 172.18.0.3", "X-Stream-Front": "1"}
+    with _ctx("127.0.0.1", headers):
+        assert auth.client_address() == "172.18.0.3"
+
+
+def test_client_address_with_the_proxy_network_configured_is_the_real_client(monkeypatch):
+    """Same request as above, but with the operator listing the proxy's own
+    Docker network in TRUSTED_PROXY_NETWORKS (the fix this item documents
+    via the settings help text): the outer proxy is now a trusted hop, and
+    client_address() recovers the real internet client behind it."""
+    values = {"TRUSTED_PROXY_NETWORKS": "172.16.0.0/12"}
+    monkeypatch.setattr(auth.settings, "get", lambda k, d=None: values.get(k, d))
+    headers = {"X-Forwarded-For": "198.51.100.7, 172.18.0.3", "X-Stream-Front": "1"}
+    with _ctx("127.0.0.1", headers):
+        assert auth.client_address() == "198.51.100.7"
+
+
 # ── the limiter key_func no longer keys every caller into one bucket ───────
 
 def test_the_limiter_no_longer_uses_get_remote_address():

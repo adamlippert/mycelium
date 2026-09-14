@@ -252,3 +252,15 @@ def test_the_torznab_scraper_keys_are_typed_placed_and_hot():
     assert config.COMET_ENABLED is False and config.COMET_URL == ""
     assert config.MEDIAFUSION_ENABLED is False and config.MEDIAFUSION_URL == "https://mediafusion.elfhosted.com"
     assert config.MEDIAFUSION_API_KEY == ""
+
+
+def test_trusted_proxy_networks_is_not_gated_behind_trusted_proxy_auth():
+    """Fix round 1, item 1. TRUSTED_PROXY_NETWORKS also decides which
+    forwarded address the login rate limiter keys on (auth.client_address),
+    a purpose that has nothing to do with TRUSTED_PROXY_AUTH. Hiding the
+    field behind that toggle (depends_on) would stop an operator who never
+    turns on proxy-header auth from configuring it for the rate limiter's
+    sake - the exact gap the reviewer's default-install case exposed."""
+    field = settings.fields_by_key()["TRUSTED_PROXY_NETWORKS"]
+    assert field.get("depends_on") is None
+    assert "rate limiter" in field["help"]

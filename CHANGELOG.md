@@ -7,12 +7,18 @@ All notable changes to Mycelium are documented in this file.
 ### Security
 
 - The Go streaming front now appends its own peer address to
-  X-Forwarded-For instead of passing it through untouched, and the
-  trusted-proxy header check and the login rate limiter now derive the
-  real client address from that chain. Previously every request behind
-  the front reached Flask as if it came from loopback, which made
-  TRUSTED_PROXY_AUTH accept a forwarded admin username from any caller
-  and made the login rate limiter one shared bucket for every visitor.
+  X-Forwarded-For instead of passing it through untouched. Previously
+  every request behind the front reached Flask as if it came from
+  loopback, which made TRUSTED_PROXY_AUTH accept a forwarded admin
+  username from any caller and made the login rate limiter one shared
+  bucket for every visitor. The trusted-proxy header check now uses the
+  real peer address unconditionally. The login rate limiter keys on the
+  real client address only when the proxy sitting in front of Mycelium
+  (the outer reverse proxy, or the streaming front itself) is listed in
+  Settings, Security, Trusted networks; without that, it keys on the
+  proxy's own address, same as before this fix. On a default install the
+  outer proxy runs in its own container, so operators who want the
+  limiter to key per visitor need to list that proxy's network there.
 - torrentio.py no longer logs the full Torrentio request URL at INFO.
   TORRENTIO_OPTS, appended into that URL, is a config segment users paste
   from Torrentio's own configure page and can carry a debrid API key; the
