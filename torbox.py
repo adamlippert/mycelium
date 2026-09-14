@@ -66,20 +66,23 @@ def _release_createtorrent_slot(entry: int) -> None:
         log.debug("Could not release createtorrent slot %s: %s", entry, exc)
 
 
-def createtorrent_usage(window_sec: int = 3600) -> dict:
+def createtorrent_usage(account_id: int | None = None, window_sec: int = 3600) -> dict:
     """Return how many createtorrent calls happened in the last `window_sec`,
-    broken down by reason. Used by the UI to explain rate-limit hits."""
+    broken down by reason. Used by the UI to explain rate-limit hits.
+
+    Temporary signature until Task 2 makes the client account-aware; kept
+    compatible with the four-tuple `get_createtorrent_log` now returns."""
     import db as _db
     cutoff = time.time() - window_sec
-    recent = _db.get_createtorrent_log(cutoff)
+    recent = _db.get_createtorrent_log(cutoff, account_id)
     by_reason: dict[str, int] = {}
     cached_count = 0
-    for _, reason, cached in recent:
+    for _, reason, cached, _account in recent:
         if cached:
             cached_count += 1
             continue
         by_reason[reason] = by_reason.get(reason, 0) + 1
-    uncached = [ts for ts, _, cached in recent if not cached]
+    uncached = [ts for ts, _, cached, _account in recent if not cached]
     oldest = min(uncached, default=None)
     return {
         # `count` is the figure TorBox limits: uncached adds only.

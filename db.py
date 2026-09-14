@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 import sqlite3
 import threading
@@ -298,6 +299,14 @@ CREATE TABLE IF NOT EXISTS createtorrent_log (
 
 CREATE INDEX IF NOT EXISTS idx_createtorrent_ts ON createtorrent_log(ts);
 
+CREATE TABLE IF NOT EXISTS torbox_accounts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    label       TEXT    NOT NULL UNIQUE,
+    api_key     TEXT    NOT NULL,
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))
+);
+
 CREATE TABLE IF NOT EXISTS egress_log (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     token      TEXT    NOT NULL,
@@ -367,6 +376,7 @@ def _migrate() -> None:
             ("debrid_provider", "TEXT DEFAULT 'torbox'"),
             ("rd_id", "TEXT"),
             ("spore_tracks", "TEXT"),
+            ("torbox_account", "INTEGER"),
         ]:
             if col not in vi_cols:
                 try:
@@ -408,6 +418,24 @@ def _migrate() -> None:
                     fixed += 1
             if fixed:
                 log.info("Migration: stripped the episode suffix from %d wanted_episodes title(s)", fixed)
+
+        ct_cols = {r["name"] for r in conn.execute("PRAGMA table_info(createtorrent_log)")}
+        if "account" not in ct_cols:
+            conn.execute("ALTER TABLE createtorrent_log ADD COLUMN account INTEGER NOT NULL DEFAULT 1")
+            log.info("Migration: added createtorrent_log.account")
+
+        # Account pool: account 1 is the configured TORBOX_API_KEY. Seed it
+        # once, and mark every item that already sits on TorBox as homed
+        # there, so a single-key install keeps behaving as before.
+        n_accounts = conn.execute("SELECT COUNT(*) AS n FROM torbox_accounts").fetchone()["n"]
+        if n_accounts == 0:
+            row = conn.execute("SELECT value FROM settings WHERE key='TORBOX_API_KEY'").fetchone()
+            key = (row["value"] if row else None) or os.environ.get("TORBOX_API_KEY") or ""
+            if key:
+                conn.execute("INSERT INTO torbox_accounts (id, label, api_key) VALUES (1, 'main', ?)", (key,))
+                log.info("Migration: seeded torbox_accounts with account 1 (main)")
+        conn.execute("UPDATE virtual_items SET torbox_account=1 WHERE torbox_id IS NOT NULL AND torbox_account IS NULL")
+        conn.commit()
 
         req_cols = {r["name"] for r in conn.execute("PRAGMA table_info(requests)")}
         if "tmdb_id" not in req_cols:
@@ -1468,7 +1496,7 @@ def update_virtual_item_upgrade(token: str, info_hash: str, magnet: str,
         conn.execute(
             """UPDATE virtual_items
                SET info_hash=?, magnet=?, quality=?, source=?,
-                   torbox_id=NULL, file_id=NULL
+                   torbox_id=NULL, torbox_account=NULL, file_id=NULL
                WHERE token=?""",
             (info_hash, magnet, quality, source, token),
         )
@@ -1560,9 +1588,71 @@ def get_virtual_item_by_episode(imdb_id: str, season: int, episode: int) -> dict
         return dict(row) if row else None
 
 
+def set_virtual_torbox(token: str, torbox_id: int | None, account_id: int | None) -> None:
+    """The TorBox torrent id and the account that holds it are written and
+    cleared together; one without the other is meaningless."""
+    with _connect() as conn:
+        conn.execute("UPDATE virtual_items SET torbox_id=?, torbox_account=? WHERE token=?",
+                     (torbox_id, account_id, token))
+        conn.commit()
+
+
 def update_virtual_torbox_id(token: str, torbox_id: int | None) -> None:
+    """Kept for callers not yet account-aware; clearing also clears the home."""
+    if torbox_id is None:
+        set_virtual_torbox(token, None, None)
+        return
     with _connect() as conn:
         conn.execute("UPDATE virtual_items SET torbox_id=? WHERE token=?", (torbox_id, token))
+        conn.commit()
+
+
+def count_items_by_account() -> dict[int, int]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT torbox_account AS a, COUNT(*) AS n FROM virtual_items "
+            "WHERE torbox_account IS NOT NULL GROUP BY torbox_account").fetchall()
+    return {int(r["a"]): int(r["n"]) for r in rows}
+
+
+def list_torbox_accounts() -> list[dict]:
+    with _connect() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM torbox_accounts ORDER BY id").fetchall()]
+
+
+def get_torbox_account(account_id: int) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM torbox_accounts WHERE id=?", (account_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def insert_torbox_account(label: str, api_key: str) -> int:
+    with _connect() as conn:
+        cur = conn.execute("INSERT INTO torbox_accounts (label, api_key) VALUES (?, ?)", (label.strip(), api_key.strip()))
+        conn.commit()
+        return int(cur.lastrowid)
+
+
+def update_torbox_account(account_id: int, *, label: str | None = None, api_key: str | None = None,
+                          enabled: bool | None = None) -> None:
+    sets, args = [], []
+    if label is not None:
+        sets.append("label=?"); args.append(label.strip())
+    if api_key is not None:
+        sets.append("api_key=?"); args.append(api_key.strip())
+    if enabled is not None:
+        sets.append("enabled=?"); args.append(1 if enabled else 0)
+    if not sets:
+        return
+    args.append(account_id)
+    with _connect() as conn:
+        conn.execute(f"UPDATE torbox_accounts SET {', '.join(sets)} WHERE id=?", args)
+        conn.commit()
+
+
+def delete_torbox_account(account_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM torbox_accounts WHERE id=?", (account_id,))
         conn.commit()
 
 
@@ -1650,7 +1740,7 @@ def touch_virtual_item(token: str) -> None:
 def get_virtual_items_with_torbox_id() -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT token, torbox_id, info_hash, title FROM virtual_items WHERE torbox_id IS NOT NULL"
+            "SELECT token, torbox_id, torbox_account, info_hash, title FROM virtual_items WHERE torbox_id IS NOT NULL"
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -2507,7 +2597,7 @@ def integrity_report() -> dict:
 
 def reserve_createtorrent_slot(now: float, reason: str,
                                hour_limit: int, min_limit: int,
-                               cached: bool = False) -> dict:
+                               cached: bool = False, account_id: int = 1) -> dict:
     """Count against the createtorrent budget and reserve a slot in ONE
     immediate transaction, so the check-then-insert is atomic across threads
     AND across processes. This table is the single source of truth for the
@@ -2527,17 +2617,17 @@ def reserve_createtorrent_slot(now: float, reason: str,
         conn.execute("BEGIN IMMEDIATE")
         try:
             hour_count = conn.execute(
-                "SELECT COUNT(*) AS n FROM createtorrent_log WHERE ts >= ? AND cached = 0",
-                (now - 3600,)).fetchone()["n"]
+                "SELECT COUNT(*) AS n FROM createtorrent_log WHERE ts >= ? AND cached = 0 AND account = ?",
+                (now - 3600, account_id)).fetchone()["n"]
             min_count = conn.execute(
-                "SELECT COUNT(*) AS n FROM createtorrent_log WHERE ts >= ?",
-                (now - 60,)).fetchone()["n"]
+                "SELECT COUNT(*) AS n FROM createtorrent_log WHERE ts >= ? AND account = ?",
+                (now - 60, account_id)).fetchone()["n"]
             if (not cached and hour_count >= hour_limit - 2) or min_count >= min_limit - 1:
                 conn.execute("COMMIT")
                 return {"id": None, "hour_count": hour_count, "min_count": min_count}
             cur = conn.execute(
-                "INSERT INTO createtorrent_log (ts, reason, cached) VALUES (?, ?, ?)",
-                (now, reason, 1 if cached else 0))
+                "INSERT INTO createtorrent_log (ts, reason, cached, account) VALUES (?, ?, ?, ?)",
+                (now, reason, 1 if cached else 0, account_id))
             conn.execute("DELETE FROM createtorrent_log WHERE ts < ?", (now - 7200,))
             row_id = cur.lastrowid
             conn.execute("COMMIT")
@@ -2566,11 +2656,14 @@ def release_createtorrent_slot(row_id: int) -> None:
         conn.commit()
 
 
-def get_createtorrent_log(since_ts: float) -> list[tuple[float, str, bool]]:
-    """Return all createtorrent entries after since_ts as (ts, reason, cached) tuples."""
+def get_createtorrent_log(since_ts: float, account_id: int | None = None) -> list[tuple[float, str, bool, int]]:
+    """Return all createtorrent entries after since_ts as (ts, reason, cached, account) tuples."""
+    query = "SELECT ts, reason, cached, account FROM createtorrent_log WHERE ts >= ?"
+    args: list = [since_ts]
+    if account_id is not None:
+        query += " AND account = ?"
+        args.append(account_id)
+    query += " ORDER BY ts"
     with _connect() as conn:
-        rows = conn.execute(
-            "SELECT ts, reason, cached FROM createtorrent_log WHERE ts >= ? ORDER BY ts",
-            (since_ts,),
-        ).fetchall()
-    return [(r["ts"], r["reason"], bool(r["cached"])) for r in rows]
+        rows = conn.execute(query, args).fetchall()
+    return [(r["ts"], r["reason"], bool(r["cached"]), int(r["account"])) for r in rows]
