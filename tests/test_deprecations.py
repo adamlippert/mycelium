@@ -8,6 +8,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import deprecations
 
+_ROOT = os.path.join(os.path.dirname(__file__), "..")
+
 
 def test_empty_map_warns_about_nothing():
     assert deprecations.DEPRECATED == {}
@@ -36,3 +38,14 @@ def test_every_entry_in_the_map_names_a_different_replacement(monkeypatch):
     monkeypatch.setattr(deprecations, "DEPRECATED", {"SELF": "SELF"})
     old, new = next(iter(deprecations.DEPRECATED.items()))
     assert not (new and new != old)
+
+
+def test_app_calls_warn_deprecated_env_after_the_filter_migration_warning():
+    """app.py must actually call the hook, and only after
+    migrate_filters.warn_stale_env() (same startup-ordering guarantee the
+    module docstring promises: one warning pass, filter migration first)."""
+    with open(os.path.join(_ROOT, "app.py"), encoding="utf-8") as f:
+        src = f.read()
+    filter_idx = src.index("migrate_filters.warn_stale_env()")
+    deprecations_call_idx = src.index("deprecations.warn_deprecated_env()")
+    assert deprecations_call_idx > filter_idx
