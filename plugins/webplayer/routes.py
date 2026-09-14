@@ -24,12 +24,14 @@ def _require_session():
 
     Only /prepare used to check anything; every other route here was
     reachable by anyone who obtained a token, with no login check at all.
-    Delegates to _check_enabled(): a real, webplayer_enabled user must be
-    logged in. That is weaker than the name suggests - it does not bind
-    the session to the user who created it, so any webplayer-enabled user
-    can reach any other user's session by guessing or observing its
-    token. Binding a session to its creator is future work (item 6 of the
-    1.0 readiness blocker pass)."""
+    Delegates to _check_enabled(): with auth disabled (single-user, no
+    login at all) every request passes through untouched; with auth
+    enabled, a real, webplayer_enabled user must be logged in. Either way
+    this is weaker than the name suggests - it does not bind the session
+    to the user who created it, so under auth any webplayer-enabled user,
+    and with auth off anyone at all, can reach any other user's session
+    by guessing or observing its token. Binding a session to its creator
+    is future work (item 6 of the 1.0 readiness blocker pass)."""
     _check_enabled()
 
 
