@@ -1027,60 +1027,98 @@ def last_reconcile() -> dict | None:
         return dict(_last_reconcile) if _last_reconcile else None
 
 
+def _account_lists(accounts: list) -> tuple[dict[int, list], dict[int, str]]:
+    """Each enabled account's live TorBox list, fetched once. An empty list
+    is treated the same as a failure to fetch it (an outage would otherwise
+    look like the account cleared house): both mark the account skipped."""
+    lists: dict[int, list] = {}
+    skipped: dict[int, str] = {}
+    for a in accounts:
+        try:
+            live = torbox.list_torrents(a.id, force_refresh=True)
+        except Exception as exc:
+            log.warning("Catbox: TorBox id reconcile skipped for %s, list unavailable: %s", a.label, exc)
+            skipped[a.id] = str(exc)
+            continue
+        if not live:
+            skipped[a.id] = "list empty"
+            continue
+        lists[a.id] = live
+    return lists, skipped
+
+
 def reconcile_torbox_ids() -> dict:
-    """Compare stored TorBox ids with TorBox's own list. An id whose torrent
-    is gone (deleted in the TorBox app, expired) is cleared so the next play
-    re-adds cleanly instead of discovering the loss first; when the same
-    hash lives under another id the item is pointed at that one. Never
-    deletes anything on TorBox. An empty list is treated as an outage and
-    changes nothing: it would otherwise clear every id at once."""
+    """Compare stored TorBox ids with each account's own list. An id whose
+    torrent is gone (deleted in the TorBox app, expired) is cleared so the
+    next play re-adds cleanly instead of discovering the loss first; when
+    the same hash lives under another id (its own account, or another one)
+    the item is pointed at that one. An item whose account is disabled or
+    unknown is checked by hash only, since it has no list to belong to.
+    Never deletes anything on TorBox. An account whose list is empty or
+    unavailable is skipped entirely: its items are left alone rather than
+    cleared as if the account had emptied out."""
+    import torbox_pool
     result = {"ran_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-              "checked": 0, "cleared": 0, "repointed": 0, "skipped": None}
+              "checked": 0, "cleared": 0, "repointed": 0, "skipped": None, "accounts": {}}
     items = db.get_virtual_items_with_torbox_id()
     result["checked"] = len(items)
-    if items:
-        live_by_account: dict[int, list | None] = {}
 
-        def _live_for(acct_id: int):
-            if acct_id not in live_by_account:
-                try:
-                    live_by_account[acct_id] = torbox.list_torrents(acct_id, force_refresh=True)
-                except Exception as exc:
-                    log.warning("Catbox: TorBox id reconcile skipped for account %s, list unavailable: %s",
-                                acct_id, exc)
-                    live_by_account[acct_id] = None
-            return live_by_account[acct_id]
+    enabled = torbox_pool.accounts()
+    label_by_id = {a.id: a.label for a in enabled}
+    account_stats = {a.label: {"checked": 0, "cleared": 0, "repointed": 0, "skipped": None} for a in enabled}
 
-        any_live = False
+    if items and enabled:
+        lists, skipped = _account_lists(enabled)
+        for acct_id, reason in skipped.items():
+            account_stats[label_by_id[acct_id]]["skipped"] = reason
+
+        live_ids_by_account = {acct_id: {t.get("id") for t in live} for acct_id, live in lists.items()}
+        hash_to_home: dict[str, tuple[int, int]] = {}
+        for acct_id, live in lists.items():
+            for t in live:
+                h = (t.get("hash") or "").lower()
+                if h:
+                    hash_to_home[h] = (acct_id, t.get("id"))
+
         for item in items:
             acct_id = _home(item)
-            live = _live_for(acct_id)
-            if not live:
-                continue
-            any_live = True
-            live_ids = {t.get("id") for t in live}
-            by_hash = {(t.get("hash") or "").lower(): t.get("id") for t in live if t.get("hash")}
-            if item["torbox_id"] in live_ids:
-                continue
+            if acct_id is not None:
+                account_stats[label_by_id[acct_id]]["checked"] += 1
+                if acct_id in skipped:
+                    continue  # its account's list didn't answer; leave it
+                if item["torbox_id"] in live_ids_by_account.get(acct_id, set()):
+                    continue
             if _token_lock(item["token"]).locked():
                 continue  # a play is materializing it right now
-            other = by_hash.get((item.get("info_hash") or "").lower())
-            if other is not None:
-                db.set_virtual_torbox(item["token"], other, acct_id)
+            target = hash_to_home.get((item.get("info_hash") or "").lower())
+            if target is not None:
+                new_acct, new_id = target
+                db.set_virtual_torbox(item["token"], new_id, new_acct)
                 result["repointed"] += 1
-                log.info("Catbox: %s (%s) now under TorBox id %s, was %s",
-                         item.get("title"), item["token"], other, item["torbox_id"])
+                if acct_id is not None:
+                    account_stats[label_by_id[acct_id]]["repointed"] += 1
+                log.info("Catbox: %s (%s) now under TorBox id %s on %s, was %s",
+                         item.get("title"), item["token"], new_id, label_by_id.get(new_acct, new_acct),
+                         item["torbox_id"])
             else:
                 db.set_virtual_torbox(item["token"], None, None)
                 invalidate_url_cache(item["token"])
                 result["cleared"] += 1
+                if acct_id is not None:
+                    account_stats[label_by_id[acct_id]]["cleared"] += 1
                 log.info("Catbox: TorBox id %s for %s (%s) is gone; cleared, next play re-adds",
                          item["torbox_id"], item.get("title"), item["token"])
-        if not any_live:
-            result["skipped"] = "TorBox list empty or unavailable"
-        elif result["cleared"] or result["repointed"]:
+
+        unanswered = [label_by_id[a.id] for a in enabled if a.id in skipped]
+        if unanswered:
+            result["skipped"] = ", ".join(unanswered)
+        if result["cleared"] or result["repointed"]:
             log.info("Catbox: TorBox id reconcile: %d checked, %d cleared, %d repointed",
                      result["checked"], result["cleared"], result["repointed"])
+    elif items and not enabled:
+        result["skipped"] = "no enabled TorBox account"
+
+    result["accounts"] = account_stats
     global _last_reconcile
     with _reconcile_lock:
         _last_reconcile = result
@@ -1096,8 +1134,18 @@ def release_idle() -> int:
     items = db.get_idle_virtual_items(cutoff_iso)
     released = 0
     for item in items:
+        acct = _home(item)
+        if acct is None:
+            # Disabled or unknown account (or, after the migration, no
+            # account at all): nothing to delete through, so just clear
+            # the local reference. The torrent (if any) stays on TorBox
+            # until its account is enabled again.
+            db.set_virtual_torbox(item["token"], None, None)
+            log.info("Catbox: %s's TorBox id %s stays on account %s until it is enabled again; cleared locally",
+                     item.get("title"), item["torbox_id"], item.get("torbox_account"))
+            released += 1
+            continue
         try:
-            acct = _home(item)
             deleted = torbox.delete_torrent(acct, item["torbox_id"])
             if not deleted:
                 # Torrent may already be gone from TorBox (evicted or manually removed).
@@ -1105,7 +1153,7 @@ def release_idle() -> int:
                 still_there = torbox.find_by_id(acct, item["torbox_id"])
                 if still_there:
                     continue
-            db.update_virtual_torbox_id(item["token"], None)
+            db.set_virtual_torbox(item["token"], None, None)
             log.info("Catbox: released idle torrent %s (%s)", item["torbox_id"], item["title"])
             released += 1
         except Exception as exc:

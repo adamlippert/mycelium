@@ -51,10 +51,10 @@ def _isolated_db(tmp_path, monkeypatch):
     _drop_cached_conn()
 
 
-def _item(token, torbox_id, h):
+def _item(token, torbox_id, h, account=1):
     with db._connect() as conn:
-        conn.execute("INSERT INTO virtual_items (token, info_hash, magnet, title, media_type, torbox_id) "
-                     "VALUES (?, ?, 'm', ?, 'movie', ?)", (token, h, token, torbox_id))
+        conn.execute("INSERT INTO virtual_items (token, info_hash, magnet, title, media_type, torbox_id, torbox_account) "
+                     "VALUES (?, ?, 'm', ?, 'movie', ?, ?)", (token, h, token, torbox_id, account))
         conn.commit()
 
 
@@ -129,3 +129,35 @@ def test_the_reconcile_is_scheduled_hourly_in_catbox_mode():
     assert 'trigger="interval", minutes=60' in block and 'id="torbox_reconcile"' in block
     loop = src.split("for jid in (")[1].split("):")[0]
     assert '"torbox_reconcile"' in loop, "the overlap guard (max_instances=1) covers it"
+
+
+def test_reconcile_checks_each_item_against_its_own_accounts_list_and_re_homes_by_hash(monkeypatch):
+    import torbox_pool as pool
+    db.insert_torbox_account("second", "k2"); pool.invalidate()
+    _item("on1", 1, HA, account=1)         # present in 1
+    _item("moved", 2, HB, account=1)       # gone from 1, hash lives in account 2 under id 22
+    _item("gone", 3, HC, account=2)        # gone everywhere
+    lists = {1: [{"id": 1, "hash": HA}], 2: [{"id": 22, "hash": HB}]}
+    monkeypatch.setattr(catbox.torbox, "list_torrents", lambda acct, **k: list(lists[acct]))
+    out = catbox.reconcile_torbox_ids()
+    assert (out["checked"], out["cleared"], out["repointed"]) == (3, 1, 1)
+    m = db.get_virtual_item("moved")
+    assert (m["torbox_id"], m["torbox_account"]) == (22, 2)
+    g = db.get_virtual_item("gone")
+    assert (g["torbox_id"], g["torbox_account"]) == (None, None)
+    assert out["accounts"]["second"]["cleared"] == 1 and out["accounts"]["main"]["repointed"] == 1
+
+
+def test_reconcile_skips_an_account_whose_list_fails_and_leaves_its_items(monkeypatch):
+    import torbox_pool as pool
+    db.insert_torbox_account("second", "k2"); pool.invalidate()
+    _item("a", 1, HA, account=1)
+    _item("b", 2, HB, account=2)
+    def lists(acct, **k):
+        if acct == 2:
+            raise RuntimeError("down")
+        return [{"id": 1, "hash": HA}]
+    monkeypatch.setattr(catbox.torbox, "list_torrents", lists)
+    out = catbox.reconcile_torbox_ids()
+    assert out["accounts"]["second"]["skipped"] and db.get_virtual_item("b")["torbox_id"] == 2
+    assert out["accounts"]["main"]["skipped"] is None
