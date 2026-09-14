@@ -552,8 +552,13 @@ _PRELOAD_MIN_INTERVAL = 7.0                   # seconds between add_magnet calls
 # ── Catbox: CDN URL cache ─────────────────────────────────────────────────────
 # TorBox CDN URL ophalen en opslaan. Gedeeld door Jellyfin en Spore.
 
-def _cache_cdn_url(info_hash: str, ready_item: dict, title: str) -> None:
+def _cache_cdn_url(account_id: int, info_hash: str, ready_item: dict, title: str) -> None:
     """Fetch CDN URLs for ALL tokens with this hash and update catbox URL cache + Spore stubs.
+
+    account_id is the account the caller just added/found this torrent on
+    (the account it actually holds it in), not merely a fallback: every
+    token this call resolves gets homed there too, so the next play reuses
+    the same account instead of re-adding under a different one.
 
     Movies: one token, picks largest video file.
     Season packs: N episode tokens sharing the same hash, each gets its own file via SxxExx match.
@@ -567,11 +572,10 @@ def _cache_cdn_url(info_hash: str, ready_item: dict, title: str) -> None:
         all_items = db.get_virtual_items_by_hash(info_hash)
         if not all_items:
             return
-        home = all_items[0].get("torbox_account") or _default_torbox_account()
 
         if not files:
             # TorBox sometimes omits the files list; force a fresh lookup
-            fresh = torbox_mod.find_by_hash(home, info_hash, force_refresh=True)
+            fresh = torbox_mod.find_by_hash(account_id, info_hash, force_refresh=True)
             if fresh:
                 files = fresh.get("files") or []
                 torrent_id = fresh.get("id") or torrent_id
@@ -598,9 +602,10 @@ def _cache_cdn_url(info_hash: str, ready_item: dict, title: str) -> None:
                 main = _pick_main_movie_file(files)
                 file_id = (main or files[0]).get("id")
 
-            cdn_url = torbox_mod.request_download_link(vi.get("torbox_account") or home, torrent_id, file_id)
+            cdn_url = torbox_mod.request_download_link(account_id, torrent_id, file_id)
             if not cdn_url:
                 continue
+            db.set_virtual_torbox(token, torrent_id, account_id)
             _catbox.cache_url(token, cdn_url)
             _preload_spore(cdn_url, token)
             cached_count += 1
@@ -754,7 +759,7 @@ def _preload_torrent(info_hash: str, magnet: str, title: str) -> None:
             if not ready:
                 log.debug("Preload: %s not ready within timeout", title)
                 return
-            _cache_cdn_url(info_hash, ready, title)
+            _cache_cdn_url(acct, info_hash, ready, title)
         except Exception as exc:
             log.debug("Preload: skipped %s: %s", title, exc)
         finally:

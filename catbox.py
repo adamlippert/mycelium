@@ -79,6 +79,17 @@ def _fail_put(token: str, ttl: int = _FAIL_COOLDOWN_SEC) -> None:
     with _fail_cache_lock:
         _fail_cache[token] = time.monotonic() + ttl
 
+
+def _auth_failed(token: str, ckey: str | None, title: str) -> None:
+    """A revoked/invalid TorBox key for the home account: same cooldown as
+    the old 403-from-mylist case, so a bad key degrades to occasional
+    retries instead of unwinding out of the play path as a 500."""
+    log.warning("Catbox: TorBox account auth failed for %s  -  cooling down", title)
+    _fail_put(token, _FAIL_COOLDOWN_429_SEC)
+    if ckey:
+        db.update_playability_fail(ckey, REASON_TB_429)
+
+
 _token_locks: dict[str, threading.Lock] = {}
 
 # Per-content search cache so Zilean/Torrentio are called at most once per hour
@@ -513,14 +524,22 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
 
     # Fast path: cached torbox_id still live in TorBox.
     if torbox_id:
-        live = torbox.find_by_id(acct, torbox_id)
+        try:
+            live = torbox.find_by_id(acct, torbox_id)
+        except torbox.AuthFailed:
+            _auth_failed(token, ckey, item["title"])
+            return None
         if not live or not torbox._is_ready(live):
             torbox_id = None
             rematerialized = True
 
     # Second chance: torrent may still be in TorBox library under its hash.
     if not torbox_id and item.get("info_hash"):
-        existing = torbox.find_by_hash(acct, item["info_hash"])
+        try:
+            existing = torbox.find_by_hash(acct, item["info_hash"])
+        except torbox.AuthFailed:
+            _auth_failed(token, ckey, item["title"])
+            return None
         if existing and torbox._is_ready(existing):
             torbox_id = existing["id"]
             db.set_virtual_torbox(token, torbox_id, acct)
@@ -548,7 +567,7 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
                 log.info("Catbox: %s added via stored magnet (id=%s)", item["title"], torbox_id)
         except Exception as exc:
             exc_str = str(exc)
-            is_rate_limited = (isinstance(exc, torbox.RateLimited)
+            is_rate_limited = (isinstance(exc, (torbox.RateLimited, torbox.AuthFailed))
                                or "429" in exc_str or "403" in exc_str)
             log.warning("Catbox: stored-magnet re-add failed for %s: %s", item["title"], exc)
             if is_rate_limited:
@@ -672,7 +691,7 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
             torbox_id = live["id"]
             db.set_virtual_torbox(token, torbox_id, acct)
         except Exception as exc:
-            is_429 = "429" in str(exc)
+            is_429 = isinstance(exc, torbox.AuthFailed) or "429" in str(exc)
             log.error("Catbox: add_magnet failed for %s: %s", token, exc)
             _fail_put(token, _FAIL_COOLDOWN_429_SEC if is_429 else _FAIL_COOLDOWN_SEC)
             if ckey:
@@ -689,7 +708,11 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
     # `if not file_id` sent the first episode of every pack through the
     # listing again and failed the play when the ?id= endpoint omitted files.
     if file_id is None:
-        live = torbox.find_by_id(acct, torbox_id)
+        try:
+            live = torbox.find_by_id(acct, torbox_id)
+        except torbox.AuthFailed:
+            _auth_failed(token, ckey, item["title"])
+            return None
         if live:
             import strm_generator
             if item["media_type"] == "movie":

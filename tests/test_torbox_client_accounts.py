@@ -170,3 +170,29 @@ def test_no_header_is_built_without_an_account():
         body = open(os.path.join(_ROOT, path)).read()
         assert "TORBOX_API_KEY" not in body and "requestdl" not in body.replace("request_download_link", ""), path
     assert not re.search(r"def _get_stream_url", src + open(os.path.join(_ROOT, "strm_generator.py")).read())
+
+
+def test_check_quota_and_warn_skips_an_account_whose_usage_check_fails(monkeypatch):
+    """A revoked key on one account must not stop the quota check from
+    reaching the healthy accounts after it."""
+    checked = []
+
+    def fake_usage(account_id):
+        if account_id == 1:
+            raise torbox.AuthFailed("account 1: 403")
+        checked.append(account_id)
+        return {"torrent_count": 1, "total_gb": 1.0, "states": {}}
+
+    monkeypatch.setattr(torbox, "get_usage_summary", fake_usage)
+    torbox.check_quota_and_warn()
+    assert checked == [2], "account 1's auth failure must not stop account 2 from being checked"
+
+
+def test_materialize_locked_catches_auth_failed_from_the_homed_lookups():
+    """A revoked key must degrade play to the existing 403/cooldown path
+    (catbox.py's old behaviour) instead of unwinding out of the play path
+    as an unhandled 500."""
+    src = open(os.path.join(_ROOT, "catbox.py")).read()
+    body = src.split("def _materialize_locked(")[1].split("\ndef _metrics_inc(")[0]
+    assert body.count("except torbox.AuthFailed:") >= 3
+    assert "_auth_failed(token" in body

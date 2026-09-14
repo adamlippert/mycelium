@@ -2398,8 +2398,16 @@ def ui_api_torbox_usage():
     import torbox_pool
     # Account 1 for now; Task 6 reports usage and plan per account.
     acct_id = torbox_pool.accounts()[0].id
-    summary = torbox.get_usage_summary(acct_id)
-    user = torbox.get_user_info(acct_id) or {}
+    try:
+        summary = torbox.get_usage_summary(acct_id)
+    except torbox.AuthFailed as exc:
+        log.warning("torbox-usage: account %s auth failed: %s", acct_id, exc)
+        summary = {"torrent_count": 0, "total_bytes": 0, "total_gb": 0, "states": {}}
+    try:
+        user = torbox.get_user_info(acct_id) or {}
+    except torbox.AuthFailed as exc:
+        log.warning("torbox-usage: account %s auth failed: %s", acct_id, exc)
+        user = {}
     return jsonify(usage=summary, plan=user.get("plan") if isinstance(user, dict) else None)
 
 

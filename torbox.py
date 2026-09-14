@@ -374,7 +374,11 @@ def check_quota_and_warn(threshold_count: int = 200, threshold_gb: int = 4000) -
     import torbox_pool
     now = time.monotonic()
     for acct in torbox_pool.accounts():
-        summary = get_usage_summary(acct.id)
+        try:
+            summary = get_usage_summary(acct.id)
+        except AuthFailed as exc:
+            log.warning("Quota check skipped for %s (auth failed): %s", acct.label, exc)
+            continue
         for metric, value, limit, fmt in (
             ("count", summary["torrent_count"], threshold_count, "%d torrents"),
             ("size", summary["total_gb"], threshold_gb, "%.1f GB"),

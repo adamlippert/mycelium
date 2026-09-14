@@ -161,7 +161,7 @@ def run_auto_upgrade() -> int:
             db.update_request(row["id"], "success", quality=better.quality,
                               source=release_tags.source_label(better.name), info_hash=better.info_hash)
             db.log_activity("upgraded", row["title"], f"{row.get('quality')} → {better.quality}", True, imdb_id=row["imdb_id"])
-            strm_generator._cache_cdn_url(better.info_hash, item, row["title"])
+            strm_generator._cache_cdn_url(acct, better.info_hash, item, row["title"])
             try:
                 import arr_sync
                 arr_sync.mirror_add(row["imdb_id"], "movie", row.get("tmdb_id"), row["title"])

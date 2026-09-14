@@ -280,10 +280,15 @@ def _get_cdn_url(stream: streams.Stream,
 
 def _find_in_any_account(info_hash: str) -> dict | None:
     """Library check across every enabled account: a hash may sit in any
-    of them, not just the one a future add would pick."""
+    of them, not just the one a future add would pick. One account's
+    revoked key must not hide a hit sitting in another account."""
     import torbox_pool
     for a in torbox_pool.accounts():
-        item = torbox.find_by_hash(a.id, info_hash)
+        try:
+            item = torbox.find_by_hash(a.id, info_hash)
+        except torbox.AuthFailed:
+            log.warning("web_player: account %s auth failed during library lookup", a.id)
+            continue
         if item:
             return item
     return None
@@ -325,7 +330,7 @@ def _run_job(job: PrepareJob) -> None:
                     best = c
                     log.info("web_player: found in TorBox library hash=%s", c.info_hash)
                     break
-        except (torbox.RateLimited, RuntimeError, _req_exc.RequestException) as exc:
+        except (torbox.RateLimited, torbox.AuthFailed, RuntimeError, _req_exc.RequestException) as exc:
             log.warning("web_player: library lookup failed: %s", exc)
 
         # Priority 2: TorBox has it cached (instant add, no download wait).
@@ -367,12 +372,12 @@ def _run_job(job: PrepareJob) -> None:
             _hash = candidate.info_hash
             try:
                 in_library = _find_in_any_account(_hash)
-            except (torbox.RateLimited, RuntimeError, _req_exc.RequestException):
+            except (torbox.RateLimited, torbox.AuthFailed, RuntimeError, _req_exc.RequestException):
                 in_library = None
             if not in_library:
                 try:
                     single_cached = torbox.check_cached([_hash])
-                except (torbox.RateLimited, RuntimeError, _req_exc.RequestException):
+                except (torbox.RateLimited, torbox.AuthFailed, RuntimeError, _req_exc.RequestException):
                     single_cached = set()
                 if _hash not in single_cached:
                     continue
