@@ -87,6 +87,28 @@ def test_add_update_delete_rules():
     assert api.delete(1)["ok"] is False
 
 
+def test_add_narrows_the_exception_catch_to_integrity_error(monkeypatch):
+    import torbox_accounts_api as api
+
+    def _boom(label, api_key):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(db, "insert_torbox_account", _boom)
+    with pytest.raises(RuntimeError):
+        api.add("x", "k")
+
+    monkeypatch.undo()
+    # the pre-check path: a label already in the table is refused before any insert
+    r = api.add("main", "k2")
+    assert r["ok"] is False and "main" in r["message"]
+
+    # the pre-check passes (accounts() faked empty) but the real table still
+    # has the label, so the insert itself raises sqlite3.IntegrityError
+    monkeypatch.setattr(torbox_pool, "accounts", lambda enabled_only=True: [])
+    r = api.add("main", "k3")
+    assert r["ok"] is False and "main" in r["message"]
+
+
 def test_test_runs_the_torbox_tester_with_that_accounts_key(monkeypatch):
     import torbox_accounts_api as api
     import service_tests

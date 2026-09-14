@@ -1,5 +1,6 @@
 """Admin actions on the TorBox account pool, behind /ui/api/torbox-accounts."""
 import logging
+import sqlite3
 
 import db
 import torbox_pool
@@ -28,7 +29,8 @@ def add(label: str, api_key: str) -> dict:
         return {"ok": False, "message": f"an account labelled {label!r} exists"}
     try:
         new_id = db.insert_torbox_account(label, api_key)
-    except Exception:
+    except sqlite3.IntegrityError:
+        log.debug("TorBox account add: label %r collided at insert (race)", label)
         return {"ok": False, "message": f"an account labelled {label!r} exists"}
     torbox_pool.invalidate()
     db.log_activity("added", "TorBox account", label, True)
