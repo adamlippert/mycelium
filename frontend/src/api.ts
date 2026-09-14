@@ -63,6 +63,8 @@ export type OverviewPayload = {
       db_items: number; strm_without_db: number; db_without_strm: number;
       arr_mirrored: number; arr_total: number;
       last_cleanup: { ran_at: string; deleted: number } | null;
+      /** Hourly check of stored TorBox ids against TorBox's list; null until the first run. */
+      torbox_ids?: { ran_at: string; checked: number; cleared: number; repointed: number; skipped: string | null } | null;
     };
   };
   torbox: { recent_streams: number; last_429_at: string | null; idle_minutes?: number | null };

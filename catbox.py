@@ -18,7 +18,7 @@ import re
 import threading
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import db
 import settings as _settings
@@ -938,6 +938,64 @@ def _sweep_caches() -> None:
     with _recent_lock:
         for t in [t for t, ts in _recent_tokens.items() if now_mono - ts > _SCAN_WINDOW_SEC]:
             del _recent_tokens[t]
+
+
+_last_reconcile: dict | None = None
+_reconcile_lock = threading.Lock()
+
+
+def last_reconcile() -> dict | None:
+    """The most recent reconcile_torbox_ids() result, or None since start."""
+    with _reconcile_lock:
+        return dict(_last_reconcile) if _last_reconcile else None
+
+
+def reconcile_torbox_ids() -> dict:
+    """Compare stored TorBox ids with TorBox's own list. An id whose torrent
+    is gone (deleted in the TorBox app, expired) is cleared so the next play
+    re-adds cleanly instead of discovering the loss first; when the same
+    hash lives under another id the item is pointed at that one. Never
+    deletes anything on TorBox. An empty list is treated as an outage and
+    changes nothing: it would otherwise clear every id at once."""
+    result = {"ran_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+              "checked": 0, "cleared": 0, "repointed": 0, "skipped": None}
+    items = db.get_virtual_items_with_torbox_id()
+    result["checked"] = len(items)
+    if items:
+        try:
+            live = torbox.list_torrents(force_refresh=True)
+        except Exception as exc:
+            log.warning("Catbox: TorBox id reconcile skipped, list unavailable: %s", exc)
+            live = None
+        if not live:
+            result["skipped"] = "TorBox list empty or unavailable"
+        else:
+            live_ids = {t.get("id") for t in live}
+            by_hash = {(t.get("hash") or "").lower(): t.get("id") for t in live if t.get("hash")}
+            for item in items:
+                if item["torbox_id"] in live_ids:
+                    continue
+                if _token_lock(item["token"]).locked():
+                    continue  # a play is materializing it right now
+                other = by_hash.get((item.get("info_hash") or "").lower())
+                if other is not None:
+                    db.update_virtual_torbox_id(item["token"], other)
+                    result["repointed"] += 1
+                    log.info("Catbox: %s (%s) now under TorBox id %s, was %s",
+                             item.get("title"), item["token"], other, item["torbox_id"])
+                else:
+                    db.update_virtual_torbox_id(item["token"], None)
+                    invalidate_url_cache(item["token"])
+                    result["cleared"] += 1
+                    log.info("Catbox: TorBox id %s for %s (%s) is gone; cleared, next play re-adds",
+                             item["torbox_id"], item.get("title"), item["token"])
+            if result["cleared"] or result["repointed"]:
+                log.info("Catbox: TorBox id reconcile: %d checked, %d cleared, %d repointed",
+                         result["checked"], result["cleared"], result["repointed"])
+    global _last_reconcile
+    with _reconcile_lock:
+        _last_reconcile = result
+    return result
 
 
 def release_idle() -> int:

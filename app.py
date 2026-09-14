@@ -343,6 +343,14 @@ def _start_scheduler() -> BackgroundScheduler:
         log.info("Scheduled Catbox GC every %dm (idle threshold %dm)",
                  CATBOX_GC_INTERVAL_MINUTES, cfg.CATBOX_IDLE_MINUTES)
 
+    if CATBOX_MODE:
+        scheduler.add_job(
+            catbox.reconcile_torbox_ids,
+            trigger="interval", minutes=60,
+            id="torbox_reconcile", next_run_time=None,
+        )
+        log.info("Scheduled TorBox id reconcile every 60m")
+
     if BACKUP_INTERVAL_HOURS > 0:
         scheduler.add_job(
             backup.run,
@@ -481,7 +489,7 @@ def _start_scheduler() -> BackgroundScheduler:
     for jid in ("strm_generator", "strm_cleanup", "series_monitor", "movie_sync",
                  "retry_queue", "auto_upgrade", "pack_consolidation",
                  "trending_precache", "db_backup",
-                 "catbox_gc", "merge_versions", "quota_warn"):
+                 "catbox_gc", "torbox_reconcile", "merge_versions", "quota_warn"):
         try:
             scheduler.modify_job(jid, max_instances=1)
         except Exception as exc:

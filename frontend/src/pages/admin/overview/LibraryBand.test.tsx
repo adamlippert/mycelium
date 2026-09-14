@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect } from 'vitest';
-import { LibraryBand } from './LibraryBand';
+import { LibraryBand, torboxIdsLabel } from './LibraryBand';
 
 const library = {
   movies: 312, episodes: 1940, series: 64, wanted: 7, upcoming: 2,
@@ -56,5 +56,15 @@ describe('LibraryBand', () => {
     renderIt({ errors: ['consistency'] });
     const consistencyCard = screen.getByText('Consistency').parentElement as HTMLElement;
     expect(within(consistencyCard).getByText('unavailable')).toBeInTheDocument();
+  });
+});
+
+describe('torboxIdsLabel', () => {
+  it('reads the last reconcile', () => {
+    expect(torboxIdsLabel(null)).toBe('not checked yet');
+    expect(torboxIdsLabel(undefined)).toBe('not checked yet');
+    expect(torboxIdsLabel({ ran_at: '2026-09-13 10:41:00', checked: 40, cleared: 0, repointed: 0, skipped: null })).toBe('10:41, 40 ok');
+    expect(torboxIdsLabel({ ran_at: '2026-09-13 10:41:00', checked: 40, cleared: 2, repointed: 1, skipped: null })).toBe('10:41, 2 cleared, 1 repointed');
+    expect(torboxIdsLabel({ ran_at: '2026-09-13 10:41:00', checked: 40, cleared: 0, repointed: 0, skipped: 'TorBox list empty or unavailable' })).toBe('10:41, skipped');
   });
 });

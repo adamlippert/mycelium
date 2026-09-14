@@ -149,7 +149,7 @@ def test_build_has_the_documented_shape(monkeypatch):
     assert set(lib) >= {"movies", "episodes", "series", "wanted", "upcoming", "qualities", "consistency"}
     assert lib["qualities"] == {"1080p": 1}
     assert lib["consistency"] == {"db_items": 295, "strm_without_db": 5, "db_without_strm": 0,
-                                  "arr_mirrored": 0, "arr_total": 1, "last_cleanup": None}
+                                  "arr_mirrored": 0, "arr_total": 1, "last_cleanup": None, "torbox_ids": None}
     assert out["torbox"] == {"recent_streams": 0, "last_429_at": None, "idle_minutes": 1440}
     assert out["errors"] == []
 

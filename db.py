@@ -1647,6 +1647,14 @@ def touch_virtual_item(token: str) -> None:
         conn.commit()
 
 
+def get_virtual_items_with_torbox_id() -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT token, torbox_id, info_hash, title FROM virtual_items WHERE torbox_id IS NOT NULL"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def get_idle_virtual_items(cutoff_iso: str) -> list[dict]:
     """Items with a torbox_id and either last_played < cutoff or never played + created < cutoff."""
     with _connect() as conn:

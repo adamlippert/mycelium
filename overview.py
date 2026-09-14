@@ -93,11 +93,15 @@ def _consistency() -> dict:
     orphans = _safe(_cached_orphans, {"db_count": 0, "strm_without_db": 0, "db_without_strm": 0})
     mirrored, total = db.count_requests_mirrored()
     last = db.get_last_cleanup_run()
+    import catbox
+    rec = catbox.last_reconcile()
     return {"db_items": int(orphans.get("db_count", 0)),
             "strm_without_db": int(orphans.get("strm_without_db", 0)),
             "db_without_strm": int(orphans.get("db_without_strm", 0)),
             "arr_mirrored": mirrored, "arr_total": total,
-            "last_cleanup": ({"ran_at": last["ran_at"], "deleted": int(last.get("deleted", 0))} if last else None)}
+            "last_cleanup": ({"ran_at": last["ran_at"], "deleted": int(last.get("deleted", 0))} if last else None),
+            "torbox_ids": ({"ran_at": rec["ran_at"], "checked": rec["checked"], "cleared": rec["cleared"],
+                            "repointed": rec["repointed"], "skipped": rec.get("skipped")} if rec else None)}
 
 
 _BASE_DEFAULT = {
@@ -154,7 +158,8 @@ def build() -> dict:
             "upcoming": int(base.get("movies_pending", 0)),
             "qualities": base["qualities"],
             "consistency": _safe(_consistency, {"db_items": 0, "strm_without_db": 0, "db_without_strm": 0,
-                                                 "arr_mirrored": 0, "arr_total": 0, "last_cleanup": None},
+                                                 "arr_mirrored": 0, "arr_total": 0, "last_cleanup": None,
+                                                 "torbox_ids": None},
                                   name="consistency", errors=errors),
         },
         "torbox": {

@@ -4,6 +4,16 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Hourly TorBox id check (catbox mode). Stored TorBox ids are compared
+  with TorBox's own list: an id whose torrent is gone (deleted in the
+  TorBox app, expired) is cleared so the next play re-adds cleanly instead
+  of discovering the loss first, and an item whose hash lives under
+  another id is pointed at that one. Nothing on TorBox is deleted, an item
+  that is materializing is left alone, and an empty or failing list
+  changes nothing. The Overview's consistency card shows the last run.
+
 ### Changed
 
 - Overview: the TorBox card shows the idle cleanup delay again (it read

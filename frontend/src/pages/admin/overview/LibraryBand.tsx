@@ -5,6 +5,18 @@ import { formatGiB } from './format';
 
 const nf = new Intl.NumberFormat('en-US');
 
+/** "10:41, 2 cleared" after a run, "not checked yet" before the first, the
+ * skip reason when TorBox could not be listed. */
+export function torboxIdsLabel(rec: { ran_at: string; checked: number; cleared: number; repointed: number; skipped: string | null } | null | undefined): string {
+  if (!rec) return 'not checked yet';
+  const at = rec.ran_at.slice(11, 16);
+  if (rec.skipped) return `${at}, skipped`;
+  const parts = [];
+  if (rec.cleared) parts.push(`${rec.cleared} cleared`);
+  if (rec.repointed) parts.push(`${rec.repointed} repointed`);
+  return `${at}, ${parts.length ? parts.join(', ') : `${rec.checked} ok`}`;
+}
+
 export function LibraryBand({ library, torbox, loading, torboxLoading, errors }: {
   library: OverviewPayload['library'] | undefined; torbox: TorBoxUsage | undefined; loading: boolean;
   torboxLoading: boolean; errors: string[] | undefined;
@@ -55,6 +67,8 @@ export function LibraryBand({ library, torbox, loading, torboxLoading, errors }:
             <span className="text-muted">Arr mirror</span><span className="text-right font-mono text-body">{c!.arr_mirrored}/{c!.arr_total}</span>
             <span className="text-muted">Last cleanup</span>
             <span className="text-right font-mono text-body">{c!.last_cleanup ? `${c!.last_cleanup.ran_at.slice(11, 16)}, ${c!.last_cleanup.deleted} removed` : 'never'}</span>
+            <span className="text-muted">TorBox ids</span>
+            <span className={`text-right font-mono ${c!.torbox_ids?.skipped ? 'text-warn' : 'text-body'}`}>{torboxIdsLabel(c!.torbox_ids)}</span>
           </div>
         )}
         <Link to={{ hash: 'maintenance' }} className="mt-3 block text-[11px] text-accent-light hover:underline">Run integrity check</Link>
