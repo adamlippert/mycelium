@@ -10,7 +10,10 @@ suite until this file is fixed.
 Everything under `/ui/*` (the admin API and the bundled SPA's own calls) is
 **internal**. It may change shape, move, or disappear in any release
 without notice, warning, or a changelog entry. Nothing outside Mycelium's
-own frontend should call it.
+own frontend should call it. So is every other route that is not on the
+frozen list below: the SPA shell, `/login` and the OIDC callback, `/dav/*`,
+`/spore-nfs/*`, the `/api/*` maintenance triggers, and anything added after
+this document was written.
 
 ## 1. What is frozen
 
