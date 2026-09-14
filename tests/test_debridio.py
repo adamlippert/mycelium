@@ -134,8 +134,6 @@ def test_redact_scrubs_the_live_credential_values(configured):
     assert "tb-uuid-value" not in out
 
 
-import streams as streams_mod
-
 _PAYLOAD = {"streams": [
     {"name": "[TB ⚡] \nDebridio 4k DV|HDR REMUX",
      "title": "Dune.Part.Two.2024.2160p.BluRay.Remux.mkv\n⚡ 📺 4k 💾 85.37 GB\n👤 12",

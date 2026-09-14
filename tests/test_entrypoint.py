@@ -11,7 +11,6 @@ assertions are about what the script actually invoked.
 """
 import os
 import subprocess
-import sys
 
 import pytest
 

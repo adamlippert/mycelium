@@ -1,7 +1,6 @@
 """Accounts table, migrations and torbox_pool: account 1 mirrors
 TORBOX_API_KEY, extra accounts live in the table, choose_for_add picks the
 least loaded healthy account and never fails outright."""
-import os
 import sqlite3
 import time
 

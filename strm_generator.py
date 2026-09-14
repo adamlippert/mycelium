@@ -14,7 +14,7 @@ import jellyfin
 import settings
 import torbox as torbox_mod
 import config as cfg
-from config import MEDIA_PATH, TORBOX_BASE_URL as _TORBOX_BASE_URL_DEFAULT, SPORE_MEDIA_PATH
+from config import MEDIA_PATH, SPORE_MEDIA_PATH
 
 log = logging.getLogger(__name__)
 
