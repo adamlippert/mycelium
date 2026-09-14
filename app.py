@@ -1216,7 +1216,14 @@ def ui_torbox_delete():
     if not torrent_id:
         return jsonify(error="missing torrent_id"), 400
     import torbox_pool
-    account_id = int(request.form.get("account") or torbox_pool.accounts()[0].id)
+    account_param = request.form.get("account")
+    if account_param:
+        account_id = int(account_param)
+    else:
+        accts = torbox_pool.accounts()
+        if not accts:
+            return jsonify(error="no enabled TorBox account"), 503
+        account_id = accts[0].id
     ok = torbox.delete_torrent(account_id, int(torrent_id))
     if not ok:
         log.warning("torbox-delete: failed to delete torrent %s (account=%s)", torrent_id, account_id)
@@ -2397,7 +2404,10 @@ def ui_api_purge_request(row_id: int):
 def ui_api_torbox_usage():
     import torbox_pool
     # Account 1 for now; Task 6 reports usage and plan per account.
-    acct_id = torbox_pool.accounts()[0].id
+    accts = torbox_pool.accounts()
+    if not accts:
+        return jsonify(error="no enabled TorBox account"), 503
+    acct_id = accts[0].id
     try:
         summary = torbox.get_usage_summary(acct_id)
     except torbox.AuthFailed as exc:

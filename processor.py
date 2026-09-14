@@ -79,13 +79,19 @@ def _try_add_magnet(stream: TorrentioStream, label: str, cached: bool = False) -
     rather than wasting the quota or marking a good torrent bad. We do NOT retry
     a 429 inline  -  the hourly window won't reset in seconds."""
     import torbox_pool
-    acct = torbox_pool.choose_for_add().id
-    # Skip createtorrent entirely if this hash is already in our TorBox library  -
-    # re-adding it would waste a 60/hour quota slot for content we already have.
+    # Skip createtorrent entirely if this hash is already in ANY account's
+    # TorBox library  -  re-adding it would waste a 60/hour quota slot for
+    # content we already have, possibly on a different account than
+    # choose_for_add() would pick for a brand new torrent.
     try:
-        existing = torbox.find_by_hash(acct, stream.info_hash)
+        hit = torbox_pool.find_hash_anywhere(stream.info_hash)
     except Exception as exc:
         log.warning("Library lookup failed for %s, proceeding as not-yet-added: %s", label, exc)
+        hit = None
+    if hit is not None:
+        acct, existing = hit
+    else:
+        acct = torbox_pool.choose_for_add().id
         existing = None
     if existing and torbox._is_ready(existing):
         log.info("Already in TorBox library (id=%s)  -  skipping createtorrent for %s",

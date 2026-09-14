@@ -152,6 +152,25 @@ def test_request_download_link_uses_the_accounts_key(monkeypatch):
     assert seen["token"] == "k2" and seen["torrent_id"] == 77 and seen["file_id"] == 0
 
 
+def test_request_download_link_never_logs_the_key_on_failure(monkeypatch, caplog):
+    """Important 3: a non-auth failure here used to str(exc) a requests
+    exception, and requests exceptions stringify with the full request URL
+    -  which carries the API key in `token=`. The log must name the
+    exception type (and status code, when there is one) instead."""
+    import requests as _requests
+
+    def boom(url, params=None, timeout=None):
+        raise _requests.ConnectionError(
+            f"https://api.torbox.app/v1/api/torrents/requestdl?token={params['token']}&torrent_id=1")
+    monkeypatch.setattr(torbox.requests, "get", boom)
+    import logging
+    with caplog.at_level(logging.WARNING):
+        result = torbox.request_download_link(2, 77, 0)
+    assert result is None
+    assert "k2" not in caplog.text
+    assert "ConnectionError" in caplog.text
+
+
 def test_cache_checks_use_any_enabled_key(monkeypatch):
     seen = []
     monkeypatch.setattr(torbox.requests, "get", lambda url, headers=None, params=None, timeout=None: (seen.append(headers["Authorization"]), Resp(body={"data": {}}))[1])

@@ -1626,9 +1626,17 @@ def get_torbox_account(account_id: int) -> dict | None:
         return dict(row) if row else None
 
 
-def insert_torbox_account(label: str, api_key: str) -> int:
+def insert_torbox_account(label: str, api_key: str, account_id: int | None = None) -> int:
+    """Insert a new account row. With `account_id` given, the row gets that
+    explicit id (used to (re)create account 1  -  the empty table would hand
+    out id 1 anyway, but a table that already has other rows would not)."""
     with _connect() as conn:
-        cur = conn.execute("INSERT INTO torbox_accounts (label, api_key) VALUES (?, ?)", (label.strip(), api_key.strip()))
+        if account_id is not None:
+            cur = conn.execute(
+                "INSERT INTO torbox_accounts (id, label, api_key) VALUES (?, ?, ?)",
+                (account_id, label.strip(), api_key.strip()))
+        else:
+            cur = conn.execute("INSERT INTO torbox_accounts (label, api_key) VALUES (?, ?)", (label.strip(), api_key.strip()))
         conn.commit()
         return int(cur.lastrowid)
 

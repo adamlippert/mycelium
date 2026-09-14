@@ -173,9 +173,9 @@ def run_series_check() -> None:
             continue
         if not catbox_mode:
             usage = torbox.createtorrent_usage()
-            if usage["count"] >= torbox._CREATETORRENT_LIMIT_HOUR - 2:
+            if usage["count"] >= usage["limit"] - 2:
                 log.info("Monitor: createtorrent budget low (%d/%d)  -  pausing episode retries",
-                         usage["count"], torbox._CREATETORRENT_LIMIT_HOUR)
+                         usage["count"], usage["limit"])
                 break
         try:
             _retry_episode(ep)
@@ -258,10 +258,15 @@ def _retry_episode(ep: dict) -> bool:
     cached_hashes = torbox.check_cached([s.info_hash for s in candidates])
     ordered = [s for s in candidates if s.info_hash in cached_hashes] or candidates[:1]
     import torbox_pool
-    acct = torbox_pool.choose_for_add().id
     for stream in ordered:
-        # Skip createtorrent if already in the TorBox library.
-        existing = torbox.find_by_hash(acct, stream.info_hash)
+        # Skip createtorrent if already in ANY account's TorBox library, not
+        # just the one a fresh add would land on.
+        hit = torbox_pool.find_hash_anywhere(stream.info_hash)
+        if hit is not None:
+            acct, existing = hit
+        else:
+            acct = torbox_pool.choose_for_add().id
+            existing = None
         if existing and torbox._is_ready(existing):
             log.info("Monitor: %s S%02dE%02d already in TorBox library", title, season, episode)
             return True

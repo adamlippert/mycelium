@@ -109,11 +109,24 @@ def createtorrent_usage(account_id: int | None = None, window_sec: int = 3600) -
         by_reason[reason] = by_reason.get(reason, 0) + 1
     uncached = [ts for ts, _, cached, _account in recent if not cached]
     oldest = min(uncached, default=None)
+    if account_id is None:
+        # Summed across every account: the aggregate's limit is 60 per
+        # account, not 60 flat  -  a two-account pool has 120/hour to spend,
+        # not 60. At least one account's worth even if the pool is empty
+        # (no accounts configured yet), so the figure stays meaningful.
+        import torbox_pool
+        try:
+            n_accounts = max(1, len(torbox_pool.accounts()))
+        except Exception:
+            n_accounts = 1
+        limit = _CREATETORRENT_LIMIT_HOUR * n_accounts
+    else:
+        limit = _CREATETORRENT_LIMIT_HOUR
     return {
         # `count` is the figure TorBox limits: uncached adds only.
         "count": len(uncached),
         "cached_count": cached_count,
-        "limit": 60,
+        "limit": limit,
         "window_sec": window_sec,
         "by_reason": by_reason,
         "oldest_ts": oldest,
@@ -534,5 +547,12 @@ def request_download_link(account_id: int, torrent_id: int, file_id: int, timeou
         resp.raise_for_status()
         return (resp.json() or {}).get("data") or None
     except Exception as exc:
-        log.warning("requestdl failed account=%s torrent=%s file=%s: %s", account_id, torrent_id, file_id, exc)
+        # Never str(exc): requests exceptions stringify with the full request
+        # URL, which carries the API key in `token=`. Status code (when the
+        # exception came from a response) plus the exception type is enough
+        # to diagnose without leaking the key into the logs.
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        log.warning("requestdl failed account=%s torrent=%s file=%s: %s%s",
+                    account_id, torrent_id, file_id, type(exc).__name__,
+                    f" (status {status})" if status is not None else "")
         return None

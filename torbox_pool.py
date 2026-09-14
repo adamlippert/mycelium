@@ -78,6 +78,24 @@ def any_key() -> str:
     return enabled[0].api_key if enabled else ""
 
 
+def find_hash_anywhere(info_hash: str) -> tuple[int, dict] | None:
+    """The first enabled account whose library already holds this hash, and
+    the TorBox item there  -  so an add path checks every account, not just
+    the one choose_for_add() would pick, before spending a createtorrent
+    slot re-adding a torrent another account already holds. An account
+    whose key has been revoked (AuthFailed) is skipped rather than hiding a
+    hit that sits in another account."""
+    import torbox
+    for a in accounts():
+        try:
+            item = torbox.find_by_hash(a.id, info_hash)
+        except torbox.AuthFailed:
+            continue
+        if item:
+            return a.id, item
+    return None
+
+
 def mark_429(account_id: int) -> None:
     _health.setdefault(account_id, {})["rate_limited_at"] = time.time()
 
@@ -89,7 +107,7 @@ def mark_auth_failure(account_id: int) -> None:
 def _budget_left(account_id: int) -> int:
     import torbox
     try:
-        return max(0, 60 - torbox.createtorrent_usage(account_id)["count"])
+        return max(0, torbox._CREATETORRENT_LIMIT_HOUR - torbox.createtorrent_usage(account_id)["count"])
     except Exception as exc:
         log.debug("budget for account %s unavailable: %s", account_id, exc)
         return 0

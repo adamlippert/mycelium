@@ -695,12 +695,20 @@ def set(key: str, value) -> None:
         return
     if key == "TORBOX_API_KEY":
         # Account 1 of the TorBox pool is this key; keep its row in step so
-        # the pool and the setting never disagree.
+        # the pool and the setting never disagree. A fresh install with no
+        # env key never seeded row 1 (db.init() only seeds it when a key is
+        # already configured), so the first save here must create it  -  with
+        # an explicit id, in case other accounts already exist.
         try:
             if db.get_torbox_account(1):
                 db.update_torbox_account(1, api_key=str(value))
+            else:
+                db.insert_torbox_account("main", str(value), account_id=1)
         except Exception as exc:
             log.debug("settings.set: could not mirror TORBOX_API_KEY into account 1: %s", exc)
+        else:
+            import torbox_pool
+            torbox_pool.invalidate()
     if key in _ENUM_KEYS and str(value) not in _ENUM_KEYS[key]:
         raise ValueError(f"{key} must be one of {_ENUM_KEYS[key]}, got {value!r}")
     if key in _LANGUAGE_LIST_KEYS:

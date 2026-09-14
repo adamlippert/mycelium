@@ -87,6 +87,29 @@ def test_add_update_delete_rules():
     assert api.delete(1)["ok"] is False
 
 
+def test_update_refuses_to_disable_account_1():
+    """Important 4 (controller ruling): account 1 is the configured
+    TORBOX_API_KEY setting and always stays enabled; the key is edited in
+    Settings instead of being turned off here."""
+    import torbox_accounts_api as api
+    r = api.update(1, enabled=False)
+    assert r["ok"] is False
+    assert "stays" in r["message"] or "enabled" in r["message"]
+    assert db.get_torbox_account(1)["enabled"] == 1
+    # Other edits to account 1 are unaffected.
+    assert api.update(1, label="main-renamed")["ok"] is True
+    assert db.get_torbox_account(1)["label"] == "main-renamed"
+
+
+def test_app_torbox_endpoints_guard_an_empty_account_pool():
+    """Important 4: torbox_pool.accounts()[0] used to be indexed unguarded
+    in /ui/torbox-delete and /ui/api/torbox-usage, an IndexError (500) with
+    no enabled account. Both must check first and answer 503."""
+    src = _src("app.py")
+    assert "torbox_pool.accounts()[0]" not in src, \
+        "app.py must guard an empty pool before indexing accounts()[0]"
+
+
 def test_add_narrows_the_exception_catch_to_integrity_error(monkeypatch):
     import torbox_accounts_api as api
 

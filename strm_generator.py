@@ -741,8 +741,12 @@ def _preload_torrent(info_hash: str, magnet: str, title: str) -> None:
     with _preload_semaphore:
         try:
             import torbox_pool
-            acct = torbox_pool.choose_for_add().id
-            existing = torbox_mod.find_by_hash(acct, info_hash)
+            hit = torbox_pool.find_hash_anywhere(info_hash)
+            if hit is not None:
+                acct, existing = hit
+            else:
+                acct = torbox_pool.choose_for_add().id
+                existing = None
             if existing and torbox_mod._is_ready(existing):
                 log.debug("Preload: %s already ready in TorBox", title)
                 ready = existing

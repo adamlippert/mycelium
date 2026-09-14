@@ -40,6 +40,9 @@ def add(label: str, api_key: str) -> dict:
 def update(account_id: int, *, label=None, api_key=None, enabled=None) -> dict:
     if db.get_torbox_account(account_id) is None:
         return {"ok": False, "message": "unknown account"}
+    if account_id == 1 and enabled is False:
+        return {"ok": False, "message": "account 1 is the configured TorBox API key and stays "
+                                         "enabled; change its key in Settings"}
     if label is not None:
         label = label.strip()[:_MAX_LABEL_LEN]
         if not label:

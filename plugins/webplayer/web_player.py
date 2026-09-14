@@ -225,19 +225,24 @@ def get_job(job_id: str) -> PrepareJob | None:
 
 # ── Pipeline ───────────────────────────────────────────────────────────────────
 
-def _get_cdn_url(stream: streams.Stream,
+def _get_cdn_url(stream: streams.Stream, hit: tuple[int, dict] | None = None,
                  ) -> tuple[str | None, int | None, int | None]:
     """Resolve a TorrentioStream to (cdn_url, torrent_id, file_id).
 
     The caller guarantees that either:
-    - the hash is already in the user's TorBox library, OR
-    - TorBox has it cached (instant add).
+    - the hash is already in some account's TorBox library (passed as
+      `hit`, from `_find_in_any_account`, so we use that account instead of
+      choosing a fresh one and missing the existing copy), OR
+    - TorBox has it cached (instant add) and `hit` is None.
 
     We never wait for a full download here.
     """
     import torbox_pool
-    acct = torbox_pool.choose_for_add().id
-    item = torbox.find_by_hash(acct, stream.info_hash)
+    if hit is not None:
+        acct, item = hit
+    else:
+        acct = torbox_pool.choose_for_add().id
+        item = torbox.find_by_hash(acct, stream.info_hash)
 
     if item is None:
         # Not in library yet  -  add it (instant because caller verified cache).
@@ -278,20 +283,12 @@ def _get_cdn_url(stream: streams.Stream,
     return url, torrent_id, file_id
 
 
-def _find_in_any_account(info_hash: str) -> dict | None:
+def _find_in_any_account(info_hash: str) -> tuple[int, dict] | None:
     """Library check across every enabled account: a hash may sit in any
     of them, not just the one a future add would pick. One account's
     revoked key must not hide a hit sitting in another account."""
     import torbox_pool
-    for a in torbox_pool.accounts():
-        try:
-            item = torbox.find_by_hash(a.id, info_hash)
-        except torbox.AuthFailed:
-            log.warning("web_player: account %s auth failed during library lookup", a.id)
-            continue
-        if item:
-            return item
-    return None
+    return torbox_pool.find_hash_anywhere(info_hash)
 
 
 def _run_job(job: PrepareJob) -> None:
@@ -461,7 +458,7 @@ def _run_job(job: PrepareJob) -> None:
 
             job.status  = JobStatus.MATERIALIZING
             job.message = "Fetching via TorBox…"
-            _cdn, _torrent_id, _file_id = _get_cdn_url(candidate)
+            _cdn, _torrent_id, _file_id = _get_cdn_url(candidate, hit=in_library)
             if not _cdn:
                 log.warning("web_player: no CDN link for hash=%s, skipping", _hash)
                 continue

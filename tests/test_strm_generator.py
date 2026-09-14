@@ -456,9 +456,12 @@ def test_movie_nfo_title_is_unchanged(tmp_path):
 
 
 class TestPreloadTorrentAccount:
-    """_preload_torrent picks one account (choose_for_add) for the whole
-    operation: adding the magnet AND resolving/caching the CDN link must
-    use that same account, never a different one for each half."""
+    """_preload_torrent picks one account for the whole operation: adding
+    the magnet AND resolving/caching the CDN link must use that same
+    account, never a different one for each half. It also checks every
+    enabled account's library first (torbox_pool.find_hash_anywhere), so a
+    hash another account already holds is never re-added on the account
+    choose_for_add() would have picked for a brand new torrent."""
 
     def test_preload_resolves_the_link_with_the_account_it_added_to(self, monkeypatch):
         import torbox_pool as real_pool
@@ -470,6 +473,8 @@ class TestPreloadTorrentAccount:
 
         second = real_pool.Account(id=2, label="second", api_key="k2", enabled=True)
         monkeypatch.setattr(real_pool, "choose_for_add", lambda: second)
+        # No account already holds this hash: falls through to choose_for_add().
+        monkeypatch.setattr(real_pool, "find_hash_anywhere", lambda h: None)
 
         calls = []
         sg.torbox_mod.find_by_hash = lambda account_id, h, **k: calls.append(("find_by_hash", account_id)) or None
@@ -484,3 +489,32 @@ class TestPreloadTorrentAccount:
 
         assert cached == [2], "the link must be resolved on the same account the add used"
         assert calls and all(acct == 2 for _, acct in calls), calls
+
+    def test_preload_skips_the_add_when_another_account_already_has_it_ready(self, monkeypatch):
+        import torbox_pool as real_pool
+
+        info_hash = "f" * 40
+        with sg._preload_lock:
+            sg._preload_in_flight.discard(info_hash)
+        sg._preload_state["last_add"] = 0.0
+
+        # choose_for_add() would pick account 1, but account 3 already holds
+        # the hash, ready.
+        first = real_pool.Account(id=1, label="main", api_key="k1", enabled=True)
+        monkeypatch.setattr(real_pool, "choose_for_add", lambda: first)
+        ready_item = {"id": 9, "files": []}
+        monkeypatch.setattr(real_pool, "find_hash_anywhere", lambda h: (3, ready_item))
+        sg.torbox_mod._is_ready = lambda item: True
+
+        calls = []
+        sg.torbox_mod.add_magnet = lambda account_id, magnet, **k: calls.append(("add_magnet", account_id)) or {"id": 1}
+        sg.torbox_mod.wait_until_ready = lambda account_id, h, **k: calls.append(("wait_until_ready", account_id)) or {"id": 1, "files": []}
+
+        cached = []
+        monkeypatch.setattr(sg, "_cache_cdn_url",
+                            lambda account_id, h, ready, title: cached.append(account_id))
+
+        sg._preload_torrent(info_hash, "magnet:?xt=urn:btih:" + info_hash, "Title")
+
+        assert not calls, "already ready elsewhere: no add, no extra wait"
+        assert cached == [3], "the CDN link must be resolved on the account that actually holds it"

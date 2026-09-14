@@ -77,18 +77,19 @@ def run_due() -> int:
         return 0
 
     usage = torbox.createtorrent_usage()
-    if usage["count"] >= torbox._CREATETORRENT_LIMIT_HOUR - 2:
+    if usage["count"] >= usage["limit"] - 2:
         log.info("Retry: skipping this cycle  -  createtorrent budget %d/%d (resets ~%dm)",
-                 usage["count"], torbox._CREATETORRENT_LIMIT_HOUR,
+                 usage["count"], usage["limit"],
                  max(1, usage["resets_in_sec"] // 60))
         return 0
 
     log.info("Retry: processing up to %d due retries (budget %d/%d)",
-             len(due), usage["count"], torbox._CREATETORRENT_LIMIT_HOUR)
+             len(due), usage["count"], usage["limit"])
     processed = 0
     for row in due:
         # Re-check budget before each item; bail out (leave the rest queued) when low.
-        if torbox.createtorrent_usage()["count"] >= torbox._CREATETORRENT_LIMIT_HOUR - 2:
+        usage = torbox.createtorrent_usage()
+        if usage["count"] >= usage["limit"] - 2:
             log.info("Retry: budget reached after %d item(s)  -  leaving %d for next cycle",
                      processed, len(due) - processed)
             break
