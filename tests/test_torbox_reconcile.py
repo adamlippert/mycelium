@@ -6,6 +6,7 @@ import os
 import pytest
 
 import catbox
+import catbox_jobs
 import overview
 
 db = catbox.db
@@ -45,8 +46,8 @@ def _isolated_db(tmp_path, monkeypatch):
     torbox_pool.invalidate()
     torbox_pool._health.clear()
     catbox.invalidate_url_cache()
-    with catbox._reconcile_lock:
-        catbox._last_reconcile = None
+    with catbox_jobs._reconcile_lock:
+        catbox_jobs._last_reconcile = None
     yield
     _drop_cached_conn()
 

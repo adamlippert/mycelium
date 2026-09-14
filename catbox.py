@@ -12,13 +12,16 @@ in the DB so playback works again on the next request.
 Resolved CDN URLs are cached in-memory per token to avoid hammering TorBox's
 60/hour createtorrent + 300/min general rate limits when Jellyfin sends
 multiple probe/seek requests for the same item in quick succession.
+
+Background jobs (release_idle, reconcile_torbox_ids) live in catbox_jobs.py
+and season-pack reconciliation lives in catbox_packs.py; both import this
+module for its private state. Re-exports (until 1.1): release_idle,
+reconcile_torbox_ids, last_reconcile.
 """
 import logging
-import re
 import threading
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
 
 import db
 import settings as _settings
@@ -176,34 +179,6 @@ def _token_lock(token: str) -> threading.Lock:
         return lock
 
 
-def _resolve_pack_files(token: str, item: dict, live: dict) -> int | None:
-    """Match every episode of this pack (same hash and season) to a file
-    now that TorBox has listed the files, and return the file id for
-    `token`, or None when its episode is not in the pack.
-
-    Matching is by name (strm_generator.episode_matches); when no name
-    matches at all and the pack holds exactly one video file per
-    registered episode, sorted names map onto sorted episode numbers.
-    An episode with no file is detached: its .strm and virtual item go,
-    Jellyfin is told, and it returns to the wanted list so the monitor
-    searches for it on its own. That replaces the old fallback to the
-    largest file, which played episode 2 for every missing episode.
-
-    An empty files list (the single-item endpoint sometimes omits it)
-    changes nothing: no match and no detaching."""
-    import strm_generator
-    videos = strm_generator.pack_videos(live.get("files") or [])
-    if not videos:
-        return None
-    season = item.get("season")
-    # Only the playing token's lock is held here; a sibling episode of the
-    # same pack materializing at the same moment would reconcile the same
-    # siblings, detach them twice and start a second search. One pack at a
-    # time; the second caller then sees the detached rows already gone.
-    with _pack_lock(item["info_hash"]):
-        return _reconcile_pack(token, item, season, videos)
-
-
 def _pack_lock(info_hash: str) -> threading.Lock:
     with _token_locks_lock:
         lock = _pack_locks.get(info_hash)
@@ -211,119 +186,6 @@ def _pack_lock(info_hash: str) -> threading.Lock:
             lock = threading.Lock()
             _pack_locks[info_hash] = lock
         return lock
-
-
-def _reconcile_pack(token: str, item: dict, season, videos: list) -> int | None:
-    import strm_generator
-    siblings = [s for s in db.get_virtual_items_by_hash(item["info_hash"])
-                if s.get("season") == season and s.get("episode")]
-    if not any(s["token"] == token for s in siblings):
-        siblings.append(item)
-    by_episode = strm_generator.map_episodes_to_files(videos, season, [s["episode"] for s in siblings])
-    matched = {s["token"]: by_episode[s["episode"]] for s in siblings if s["episode"] in by_episode}
-    if matched and not any(strm_generator.episode_matches(f.get("name") or "", season, s["episode"])
-                           for s in siblings for f in videos):
-        log.info("Catbox: %s S%02d pack %s: no episode tags in the file names, mapped %d files by order",
-                 item.get("title"), season, item["info_hash"][:8], len(matched))
-    for s in siblings:
-        fid = matched.get(s["token"])
-        if fid is not None and s.get("file_id") != fid:
-            db.update_virtual_file_id(s["token"], fid)
-    unmatched = [s for s in siblings if s["token"] not in matched]
-    if unmatched:
-        log.warning("Catbox: %s S%02d pack %s has no file for %s; detaching them back to wanted. Files: %s",
-                    item.get("title"), season, item["info_hash"][:8],
-                    ", ".join(f"E{s['episode']:02d}" for s in sorted(unmatched, key=lambda s: s["episode"])),
-                    "; ".join((f.get("name") or "").rsplit("/", 1)[-1] for f in videos))
-        to_search = []
-        for s in unmatched:
-            status, title = _detach_episode(s)
-            if status == "wanted" and s.get("imdb_id"):
-                to_search.append({"imdb_id": s["imdb_id"], "title": title,
-                                  "season": season, "episode": s["episode"]})
-        if to_search:
-            _start_detached_search(to_search)
-    return matched.get(token)
-
-
-def _detach_episode(vi: dict) -> tuple[str, str]:
-    """Remove an episode that its pack does not contain and put it back on
-    the wanted list, so the monitor searches for it as its own torrent."""
-    import os
-    token = vi["token"]
-    strm_path = vi.get("strm_path") or ""
-    for path in (strm_path, strm_path[:-5] + ".nfo" if strm_path.endswith(".strm") else ""):
-        if path:
-            try:
-                os.remove(path)
-            except FileNotFoundError:
-                pass
-            except OSError as exc:
-                log.warning("Catbox: could not remove %s: %s", path, exc)
-    db.delete_virtual_item(token)
-    invalidate_url_cache(token)
-    ckey = _content_key(vi)
-    if ckey:
-        try:
-            db.reset_playability_state(ckey)
-        except Exception as exc:
-            log.debug("Catbox: playability reset skipped for %s: %s", ckey, exc)
-    if strm_path:
-        try:
-            import jellyfin
-            jellyfin.note_change(strm_path, "Deleted")
-        except Exception as exc:
-            log.debug("Catbox: Jellyfin note skipped for %s: %s", strm_path, exc)
-    imdb_id = vi.get("imdb_id")
-    status = "wanted"
-    title = _series_title(vi.get("title") or "")
-    if imdb_id:
-        req = db.get_request_by_imdb(imdb_id) or {}
-        # The virtual item's title carries the episode suffix ("Show S04E04");
-        # a wanted row with that title would search and file under a folder
-        # of that name. Prefer the request title, else strip the suffix.
-        title = req.get("title") or _series_title(vi.get("title") or "") or imdb_id
-        season, episode = vi["season"], vi["episode"]
-        db.upsert_wanted_episode(imdb_id, req.get("tmdb_id"), title, season, episode, None)
-        row = db.get_wanted_episode(imdb_id, season, episode) or {}
-        if row.get("title") and _EP_SUFFIX_RE.search(row["title"]):
-            # An existing row seeded by 0.25.2 with the item title.
-            db.set_wanted_episode_title(imdb_id, season, episode, title)
-        air_date = row.get("air_date")
-        if air_date and air_date > datetime.now().date().isoformat():
-            status = "not_aired"
-        db.mark_episode_status(imdb_id, season, episode, status)
-        if vi.get("info_hash"):
-            db.exclude_episode_hash(imdb_id, season, episode, vi["info_hash"])
-    log.info("Catbox: detached S%02dE%02d of %s (token %s) back to %s",
-             vi["season"], vi["episode"], vi.get("title"), token, status)
-    return status, title
-
-
-_EP_SUFFIX_RE = re.compile(r"\s+S\d{1,2}E\d{1,3}\s*$", re.IGNORECASE)
-
-
-def _series_title(item_title: str) -> str:
-    return _EP_SUFFIX_RE.sub("", item_title or "").strip()
-
-
-def _start_detached_search(episodes: list[dict]) -> None:
-    """Seam for tests; production starts the search on a daemon thread."""
-    threading.Thread(target=_search_detached, args=(episodes,), daemon=True,
-                     name="detached-search").start()
-
-
-def _search_detached(episodes: list[dict]) -> None:
-    """Search each detached episode right away instead of waiting for the
-    next monitor run. Runs on its own thread, off the play request; every
-    failure is logged, none reaches the player."""
-    import monitor
-    for ep in episodes:
-        try:
-            monitor.search_episode_now(ep["imdb_id"], ep["title"], ep["season"], ep["episode"])
-        except Exception as exc:
-            log.warning("Catbox: immediate search for %s S%02dE%02d failed: %s",
-                        ep["title"], ep["season"], ep["episode"], exc)
 
 
 def _content_key(item: dict) -> str | None:
@@ -773,7 +635,8 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
                     log.info("Catbox: no files list for %s  -  using file_id=0 (auto)", item["title"])
                     file_id = 0
             elif is_episode:
-                file_id = _resolve_pack_files(token, item, live)
+                from catbox_packs import reconcile_pack_files
+                file_id = reconcile_pack_files(token, item, live)
             else:
                 videos = [f for f in (live.get("files") or [])
                           if strm_generator._is_video(f.get("name") or "")
@@ -1017,155 +880,19 @@ def _sweep_caches() -> None:
             del _recent_tokens[t]
 
 
-_last_reconcile: dict | None = None
-_reconcile_lock = threading.Lock()
-
-
-def last_reconcile() -> dict | None:
-    """The most recent reconcile_torbox_ids() result, or None since start."""
-    with _reconcile_lock:
-        return dict(_last_reconcile) if _last_reconcile else None
-
-
-def _account_lists(accounts: list) -> tuple[dict[int, list], dict[int, str]]:
-    """Each enabled account's live TorBox list, fetched once. An empty list
-    is treated the same as a failure to fetch it (an outage would otherwise
-    look like the account cleared house): both mark the account skipped."""
-    lists: dict[int, list] = {}
-    skipped: dict[int, str] = {}
-    for a in accounts:
-        try:
-            live = torbox.list_torrents(a.id, force_refresh=True)
-        except Exception as exc:
-            log.warning("Catbox: TorBox id reconcile skipped for %s, list unavailable: %s", a.label, exc)
-            skipped[a.id] = str(exc)
-            continue
-        if not live:
-            skipped[a.id] = "list empty"
-            continue
-        lists[a.id] = live
-    return lists, skipped
+def release_idle() -> int:
+    """Re-export, removed in 1.1: use catbox_jobs.release_idle."""
+    import catbox_jobs
+    return catbox_jobs.release_idle()
 
 
 def reconcile_torbox_ids() -> dict:
-    """Compare stored TorBox ids with each account's own list. An id whose
-    torrent is gone (deleted in the TorBox app, expired) is cleared so the
-    next play re-adds cleanly instead of discovering the loss first; when
-    the same hash lives under another id (its own account, or another one)
-    the item is pointed at that one. An item whose account is disabled or
-    unknown is checked by hash only, since it has no list to belong to.
-    Never deletes anything on TorBox. An account whose list is empty or
-    unavailable is skipped entirely: its items are left alone rather than
-    cleared as if the account had emptied out."""
-    import torbox_pool
-    result = {"ran_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-              "checked": 0, "cleared": 0, "repointed": 0, "skipped": None, "accounts": {}}
-    items = db.get_virtual_items_with_torbox_id()
-    result["checked"] = len(items)
-
-    enabled = torbox_pool.accounts()
-    label_by_id = {a.id: a.label for a in enabled}
-    account_stats = {a.label: {"checked": 0, "cleared": 0, "repointed": 0, "skipped": None} for a in enabled}
-
-    if items and enabled:
-        lists, skipped = _account_lists(enabled)
-        for acct_id, reason in skipped.items():
-            account_stats[label_by_id[acct_id]]["skipped"] = reason
-
-        live_ids_by_account = {acct_id: {t.get("id") for t in live} for acct_id, live in lists.items()}
-        hash_to_home: dict[str, tuple[int, int]] = {}
-        for acct_id, live in lists.items():
-            for t in live:
-                h = (t.get("hash") or "").lower()
-                if h:
-                    hash_to_home[h] = (acct_id, t.get("id"))
-
-        for item in items:
-            acct_id = _home(item)
-            if acct_id is not None:
-                account_stats[label_by_id[acct_id]]["checked"] += 1
-                if acct_id in skipped:
-                    continue  # its account's list didn't answer; leave it
-                if item["torbox_id"] in live_ids_by_account.get(acct_id, set()):
-                    continue
-            elif not lists:
-                continue  # homeless, and no account answered: nothing known to have changed
-            if _token_lock(item["token"]).locked():
-                continue  # a play is materializing it right now
-            target = hash_to_home.get((item.get("info_hash") or "").lower())
-            if target is not None:
-                new_acct, new_id = target
-                db.set_virtual_torbox(item["token"], new_id, new_acct)
-                result["repointed"] += 1
-                if acct_id is not None:
-                    account_stats[label_by_id[acct_id]]["repointed"] += 1
-                log.info("Catbox: %s (%s) now under TorBox id %s on %s, was %s",
-                         item.get("title"), item["token"], new_id, label_by_id.get(new_acct, new_acct),
-                         item["torbox_id"])
-            else:
-                db.set_virtual_torbox(item["token"], None, None)
-                invalidate_url_cache(item["token"])
-                result["cleared"] += 1
-                if acct_id is not None:
-                    account_stats[label_by_id[acct_id]]["cleared"] += 1
-                log.info("Catbox: TorBox id %s for %s (%s) is gone; cleared, next play re-adds",
-                         item["torbox_id"], item.get("title"), item["token"])
-
-        unanswered = [label_by_id[a.id] for a in enabled if a.id in skipped]
-        if unanswered:
-            result["skipped"] = ", ".join(unanswered)
-        if result["cleared"] or result["repointed"]:
-            log.info("Catbox: TorBox id reconcile: %d checked, %d cleared, %d repointed",
-                     result["checked"], result["cleared"], result["repointed"])
-    elif items and not enabled:
-        result["skipped"] = "no enabled TorBox account"
-
-    result["accounts"] = account_stats
-    global _last_reconcile
-    with _reconcile_lock:
-        _last_reconcile = result
-    return result
+    """Re-export, removed in 1.1: use catbox_jobs.reconcile_torbox_ids."""
+    import catbox_jobs
+    return catbox_jobs.reconcile_torbox_ids()
 
 
-def release_idle() -> int:
-    """Remove TorBox items idle longer than CATBOX_IDLE_MINUTES. Returns count released."""
-    _sweep_caches()
-    idle_minutes = _settings.get("CATBOX_IDLE_MINUTES", _CATBOX_IDLE_MINUTES_DEFAULT)
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=idle_minutes)
-    cutoff_iso = cutoff.strftime("%Y-%m-%d %H:%M:%S")
-    items = db.get_idle_virtual_items(cutoff_iso)
-    released = 0
-    for item in items:
-        acct = _home(item)
-        if acct is None:
-            # Disabled or unknown account (or, after the migration, no
-            # account at all): nothing to delete through, so just clear
-            # the local reference. The torrent (if any) stays on TorBox
-            # until its account is enabled again.
-            db.set_virtual_torbox(item["token"], None, None)
-            raw_account = item.get("torbox_account")
-            if raw_account:
-                log.info("Catbox: %s's TorBox id %s stays on account %s until it is enabled again; cleared locally",
-                         item.get("title"), item["torbox_id"], raw_account)
-            else:
-                log.info("Catbox: %s had no TorBox account on record; cleared locally",
-                         item.get("title"))
-            released += 1
-            continue
-        try:
-            deleted = torbox.delete_torrent(acct, item["torbox_id"])
-            if not deleted:
-                # Torrent may already be gone from TorBox (evicted or manually removed).
-                # Still clear the local reference so catbox can re-add it on next play.
-                still_there = torbox.find_by_id(acct, item["torbox_id"])
-                if still_there:
-                    continue
-            db.set_virtual_torbox(item["token"], None, None)
-            log.info("Catbox: released idle torrent %s (%s)", item["torbox_id"], item["title"])
-            released += 1
-        except Exception as exc:
-            log.warning("Catbox: failed to release idle torrent %s (%s): %s",
-                        item["torbox_id"], item.get("title"), exc)
-    if released:
-        log.info("Catbox: released %d idle torrent(s)", released)
-    return released
+def last_reconcile() -> dict | None:
+    """Re-export, removed in 1.1: use catbox_jobs.last_reconcile."""
+    import catbox_jobs
+    return catbox_jobs.last_reconcile()

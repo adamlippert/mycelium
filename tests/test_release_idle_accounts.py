@@ -15,6 +15,7 @@ else:
     sys.modules.pop("torbox", None)
 
 import catbox  # noqa: E402
+import catbox_jobs  # noqa: E402
 import db  # noqa: E402
 import overview  # noqa: E402
 import torbox_pool as pool  # noqa: E402
@@ -52,8 +53,8 @@ def _isolated_db(tmp_path, monkeypatch):
     pool.invalidate()
     pool._health.clear()
     catbox.invalidate_url_cache()
-    with catbox._reconcile_lock:
-        catbox._last_reconcile = None
+    with catbox_jobs._reconcile_lock:
+        catbox_jobs._last_reconcile = None
     yield
     _drop_cached_conn()
 

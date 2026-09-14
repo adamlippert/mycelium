@@ -1,11 +1,11 @@
 """Season packs: matching episodes to files, never playing the wrong one,
-and detaching episodes the pack does not contain (catbox._resolve_pack_files)."""
+and detaching episodes the pack does not contain (catbox_packs.reconcile_pack_files)."""
 import os
-import re
 
 import pytest
 
 import catbox
+import catbox_packs
 import strm_generator as sg
 
 # test_catbox_cache_sweep.py imports catbox against a fresh db module object
@@ -36,7 +36,7 @@ def _isolated_db(tmp_path, monkeypatch):
     catbox.invalidate_url_cache()
     # Detaching starts an immediate search on a thread; never let a test
     # reach the scrapers. Tests that care inspect `searched`.
-    monkeypatch.setattr(catbox, "_start_detached_search", lambda eps: searched.append(eps))
+    monkeypatch.setattr(catbox_packs, "_start_detached_search", lambda eps: searched.append(eps))
     yield
     _drop_cached_conn()
 
@@ -124,7 +124,7 @@ def test_a_partial_pack_keeps_its_episodes_and_detaches_the_rest(tmp_path, monke
     assert db.hash_has_duplicate_file_ids(H) is True
 
     item = db.get_virtual_item(tokens[5])
-    out = catbox._resolve_pack_files(tokens[5], item, {"files": REACHER_FILES})
+    out = catbox_packs.reconcile_pack_files(tokens[5], item, {"files": REACHER_FILES})
 
     assert out is None, "episode 5 is not in the pack, so nothing plays for it"
     assert {db.get_virtual_item(tokens[e])["file_id"] for e in (1, 2, 3)} == {0, 2, 1}
@@ -145,7 +145,7 @@ def test_the_playing_episode_gets_its_own_file(tmp_path, monkeypatch):
     monkeypatch.setattr(jellyfin, "note_change", lambda path, kind: None)
     tokens, _ = _seed_season(tmp_path, [1, 2, 3])
     item = db.get_virtual_item(tokens[2])
-    assert catbox._resolve_pack_files(tokens[2], item, {"files": REACHER_FILES}) == 2
+    assert catbox_packs.reconcile_pack_files(tokens[2], item, {"files": REACHER_FILES}) == 2
     assert db.get_virtual_item(tokens[2])["file_id"] == 2
 
 
@@ -155,7 +155,7 @@ def test_untagged_files_map_by_order_only_with_one_file_per_episode(tmp_path, mo
     tokens, _ = _seed_season(tmp_path, [1, 2, 3])
     files = [_f(7, "Reacher/c-third.mkv"), _f(5, "Reacher/a-first.mkv"), _f(6, "Reacher/b-second.mkv")]
     item = db.get_virtual_item(tokens[3])
-    assert catbox._resolve_pack_files(tokens[3], item, {"files": files}) == 7
+    assert catbox_packs.reconcile_pack_files(tokens[3], item, {"files": files}) == 7
     assert [db.get_virtual_item(tokens[e])["file_id"] for e in (1, 2, 3)] == [5, 6, 7]
 
 
@@ -165,7 +165,7 @@ def test_a_count_mismatch_without_tags_detaches_instead_of_guessing(tmp_path, mo
     tokens, _ = _seed_season(tmp_path, [1, 2, 3])
     files = [_f(5, "Reacher/a.mkv"), _f(6, "Reacher/b.mkv")]
     item = db.get_virtual_item(tokens[1])
-    assert catbox._resolve_pack_files(tokens[1], item, {"files": files}) is None
+    assert catbox_packs.reconcile_pack_files(tokens[1], item, {"files": files}) is None
     assert all(db.get_virtual_item(tokens[e]) is None for e in (1, 2, 3))
 
 
@@ -174,7 +174,7 @@ def test_an_empty_file_list_changes_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr(jellyfin, "note_change", lambda path, kind: (_ for _ in ()).throw(AssertionError("no change expected")))
     tokens, folder = _seed_season(tmp_path, [1, 2, 3])
     item = db.get_virtual_item(tokens[2])
-    assert catbox._resolve_pack_files(tokens[2], item, {"files": []}) is None
+    assert catbox_packs.reconcile_pack_files(tokens[2], item, {"files": []}) is None
     assert all(db.get_virtual_item(tokens[e]) is not None for e in (1, 2, 3))
     assert (folder / "Reacher - S04E02.strm").exists()
 
@@ -183,7 +183,7 @@ def test_materialize_reconciles_a_pack_with_colliding_files_and_movies_keep_thei
     src = open(os.path.join(_ROOT, "catbox.py"), encoding="utf-8").read()
     body = src.split("def materialize(", 1)[1]
     assert "db.hash_has_duplicate_file_ids(item[\"info_hash\"])" in body
-    assert "file_id = _resolve_pack_files(token, item, live)" in body
+    assert "file_id = reconcile_pack_files(token, item, live)" in body
     assert "max(videos, key=lambda f: f.get(\"size\") or 0) if videos else None" in body, "non-episode series items keep the largest-file rule"
     episode_branch = body.split("elif is_episode:", 1)[1].split("else:", 1)[0]
     assert "max(videos" not in episode_branch
@@ -195,7 +195,7 @@ def test_detaching_records_the_pack_as_excluded_and_searches_right_away(tmp_path
     import jellyfin
     monkeypatch.setattr(jellyfin, "note_change", lambda path, kind: None)
     tokens, _ = _seed_season(tmp_path, range(1, 9), file_ids={1: 0, 2: 2, 3: 1, 4: 2, 5: 2, 6: 2, 7: 2, 8: 2})
-    catbox._resolve_pack_files(tokens[5], db.get_virtual_item(tokens[5]), {"files": REACHER_FILES})
+    catbox_packs.reconcile_pack_files(tokens[5], db.get_virtual_item(tokens[5]), {"files": REACHER_FILES})
 
     for ep in range(4, 9):
         assert db.excluded_hashes_for("tt9288030", 4, ep) == {H}
@@ -213,7 +213,7 @@ def test_an_unaired_episode_is_detached_as_not_aired_and_not_searched(tmp_path, 
     tokens, _ = _seed_season(tmp_path, range(1, 9), file_ids={1: 0, 2: 2, 3: 1, 4: 2, 5: 2, 6: 2, 7: 2, 8: 2})
     db.upsert_wanted_episode("tt9288030", 108978, "Reacher", 4, 8, "2999-01-01")
     db.mark_episode_status("tt9288030", 4, 8, "found")
-    catbox._resolve_pack_files(tokens[5], db.get_virtual_item(tokens[5]), {"files": REACHER_FILES})
+    catbox_packs.reconcile_pack_files(tokens[5], db.get_virtual_item(tokens[5]), {"files": REACHER_FILES})
 
     wanted = {w["episode"]: w["status"] for w in db.get_all_wanted_episodes() if w["imdb_id"] == "tt9288030"}
     assert wanted == {4: "wanted", 5: "wanted", 6: "wanted", 7: "wanted", 8: "not_aired"}
@@ -228,11 +228,11 @@ def test_detaching_without_a_request_strips_the_episode_suffix_from_the_title():
         conn.execute("INSERT INTO virtual_items (token, info_hash, magnet, title, media_type, imdb_id, season, episode) "
                      "VALUES ('tokx', ?, 'm', 'Some Show (2020) S02E07', 'series', 'tt0000001', 2, 7)", (H,))
         conn.commit()
-    assert catbox._detach_episode(vi) == ("wanted", "Some Show (2020)")
+    assert catbox_packs.detach_episode(vi) == ("wanted", "Some Show (2020)")
     row = db.get_wanted_episode("tt0000001", 2, 7)
     assert row["title"] == "Some Show (2020)" and row["status"] == "wanted"
-    assert catbox._series_title("Reacher (2022) S04E04") == "Reacher (2022)"
-    assert catbox._series_title("Reacher (2022)") == "Reacher (2022)"
+    assert catbox_packs.series_title("Reacher (2022) S04E04") == "Reacher (2022)"
+    assert catbox_packs.series_title("Reacher (2022)") == "Reacher (2022)"
 
 
 def test_search_detached_logs_failures_and_keeps_going(monkeypatch):
@@ -244,7 +244,7 @@ def test_search_detached_logs_failures_and_keeps_going(monkeypatch):
             raise RuntimeError("scraper down")
         return False
     monkeypatch.setattr(monitor, "search_episode_now", fake)
-    catbox._search_detached([{"imdb_id": "tt1", "title": "Reacher", "season": 4, "episode": e} for e in (4, 5)])
+    catbox_packs._search_detached([{"imdb_id": "tt1", "title": "Reacher", "season": 4, "episode": e} for e in (4, 5)])
     assert calls == [4, 5]
 
 
@@ -254,7 +254,7 @@ def test_detaching_repairs_a_row_seeded_with_the_item_title_and_searches_with_th
     tokens, _ = _seed_season(tmp_path, range(1, 9), file_ids={1: 0, 2: 2, 3: 1, 4: 2, 5: 2, 6: 2, 7: 2, 8: 2})
     # What the 0.25.2 detach left behind: the item title, never updated by the upsert.
     db.upsert_wanted_episode("tt9288030", 108978, "Reacher S04E04", 4, 4, "2026-08-19")
-    catbox._resolve_pack_files(tokens[5], db.get_virtual_item(tokens[5]), {"files": REACHER_FILES})
+    catbox_packs.reconcile_pack_files(tokens[5], db.get_virtual_item(tokens[5]), {"files": REACHER_FILES})
     assert db.get_wanted_episode("tt9288030", 4, 4)["title"] == "Reacher"
     assert {e["title"] for e in searched[0]} == {"Reacher"}
 
@@ -263,12 +263,12 @@ def test_a_second_reconciliation_of_the_same_pack_finds_nothing_left_to_detach(t
     import jellyfin
     monkeypatch.setattr(jellyfin, "note_change", lambda path, kind: None)
     tokens, _ = _seed_season(tmp_path, range(1, 9), file_ids={1: 0, 2: 2, 3: 1, 4: 2, 5: 2, 6: 2, 7: 2, 8: 2})
-    catbox._resolve_pack_files(tokens[5], db.get_virtual_item(tokens[5]), {"files": REACHER_FILES})
-    catbox._resolve_pack_files(tokens[2], db.get_virtual_item(tokens[2]), {"files": REACHER_FILES})
+    catbox_packs.reconcile_pack_files(tokens[5], db.get_virtual_item(tokens[5]), {"files": REACHER_FILES})
+    catbox_packs.reconcile_pack_files(tokens[2], db.get_virtual_item(tokens[2]), {"files": REACHER_FILES})
     assert len(searched) == 1, "the sibling's reconciliation must not search the detached episodes again"
-    src = open(os.path.join(_ROOT, "catbox.py")).read()
-    body = src.split("def _resolve_pack_files(")[1].split("\ndef _pack_lock(")[0]
-    assert "with _pack_lock(item[\"info_hash\"]):" in body, "reconciliation runs under a per-pack lock"
+    src = open(os.path.join(_ROOT, "catbox_packs.py")).read()
+    body = src.split("def reconcile_pack_files(")[1].split("\ndef _reconcile_pack(")[0]
+    assert "with catbox._pack_lock(item[\"info_hash\"]):" in body, "reconciliation runs under a per-pack lock"
 
 
 def test_the_re_resolve_scrape_skips_releases_excluded_for_the_episode():

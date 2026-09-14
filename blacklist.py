@@ -42,7 +42,7 @@ def filter_candidates(candidates: list) -> list:
 
 def filter_for_episode(candidates: list, imdb_id: str | None, season, episode) -> list:
     """Drop releases recorded as not containing this episode (a season pack
-    that turned out to be partial, see catbox._detach_episode). Season packs
+    that turned out to be partial, see catbox_packs.detach_episode). Season packs
     sort first, so without this the same pack would win every search for
     the episode and loop with the detach on the next play."""
     if not candidates or not imdb_id or not season or not episode:
