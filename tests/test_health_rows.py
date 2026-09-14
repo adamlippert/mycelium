@@ -172,7 +172,7 @@ def test_add_budget_row_survives_a_counter_failure(env, monkeypatch):
     assert _row("TorBox adds this hour") is None
 
 
-# -- Multiple accounts ------------------------------------------------------
+# Multiple accounts
 
 def test_two_accounts_get_their_own_labelled_row_key_and_a_403_marks_only_that_one(env, monkeypatch):
     """With two enabled accounts, each gets its own ping (its own key in the

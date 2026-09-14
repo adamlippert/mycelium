@@ -131,19 +131,37 @@ def refresh_gauges() -> None:
         import torbox
         import torbox_pool
         item_counts = db.count_items_by_account()
-        for acct in torbox_pool.accounts():
+        accounts = torbox_pool.accounts()
+    except Exception as exc:
+        log.debug("metrics: torbox accounts unavailable: %s", exc)
+        accounts = []
+
+    for acct in accounts:
+        # Each account's usage block is its own try/except: one account's
+        # get_usage_summary() raising (AuthFailed on 401/403, a network
+        # error) must not stop later accounts from being scraped.
+        try:
             summary = torbox.get_usage_summary(acct.id)
             torbox_torrent_count.labels(account=acct.label).set(summary["torrent_count"])
             torbox_total_bytes.labels(account=acct.label).set(summary["total_bytes"])
             catbox_active_in_torbox.labels(account=acct.label).set(item_counts.get(acct.id, 0))
             torbox_createtorrent_used.labels(account=acct.label).set(
                 torbox.createtorrent_usage(acct.id)["count"])
+        except Exception as exc:
+            log.debug("metrics: torbox usage failed for %s: %s", acct.label, exc)
+        # Set torbox_account_up regardless of the block above: torbox_pool.
+        # health() makes no network call of its own, and a failed call just
+        # above may have recorded a fresh auth failure via mark_auth_failure
+        # (the way the real TorBox client does on a 401/403) - reading
+        # health() after the attempt, not before, picks that up the same
+        # scrape instead of one scrape late.
+        try:
             h = torbox_pool.health(acct.id)
             auth_failed = h.get("auth_failed_at")
             up = 0 if auth_failed and (_time.time() - auth_failed) < torbox_pool.EXCLUDE_WINDOW_SEC else 1
             torbox_account_up.labels(account=acct.label).set(up)
-    except Exception as exc:
-        log.debug("metrics: torbox usage failed: %s", exc)
+        except Exception as exc:
+            log.debug("metrics: torbox health unavailable for %s: %s", acct.label, exc)
 
     # Library .strm counts
     try:

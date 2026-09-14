@@ -109,6 +109,28 @@ def test_account_up_recovers_once_the_auth_failure_ages_out(monkeypatch):
     assert metrics_prom.torbox_account_up.labels(account="second")._value.get() == 1
 
 
+def test_one_account_failing_does_not_stop_the_others_from_being_scraped(monkeypatch):
+    """get_usage_summary() raising for one account (AuthFailed on 401/403,
+    or a network error) must not abort the scrape for every later account,
+    and the failing account's own torbox_account_up must still read 0 -
+    computed from torbox_pool.health(), which makes no network call."""
+    db.insert_torbox_account("second", "k2")
+    torbox_pool.invalidate()
+
+    def fake_summary(account_id):
+        if account_id == 1:
+            # As the real client does (torbox._check_auth): record the auth
+            # failure on the pool before raising.
+            torbox_pool.mark_auth_failure(1)
+            raise torbox.AuthFailed("account 1: 401")
+        return _USAGE[account_id]
+
+    monkeypatch.setattr(torbox, "get_usage_summary", fake_summary)
+    metrics_prom.refresh_gauges()
+    assert metrics_prom.torbox_torrent_count.labels(account="second")._value.get() == 34
+    assert metrics_prom.torbox_account_up.labels(account="main")._value.get() == 0
+
+
 def test_a_single_account_install_reports_one_labelled_series(monkeypatch):
     monkeypatch.setattr(torbox, "get_usage_summary", lambda account_id: _USAGE[1])
     metrics_prom.refresh_gauges()
