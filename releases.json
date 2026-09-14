@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.29.0",
+    "date": "2026-09-14",
+    "notes": [
+      "TorBox account pool. Several TorBox API keys can be configured in Settings (section Debrid, \"TorBox accounts\") and are used as equal peers: a new torrent goes to the least loaded healthy account (fewest torrents, budget left, no recent 429 or auth failure), every play of a title uses the account that holds its torrent, and a disabled or failing account hands its titles over on their next play. The hourly add budget is counted per account. The Overview's TorBox card, the health rows, the Library drawer and the Prometheus gauges show accounts by label. A single-key install is unchanged: the existing key becomes account 1"
+    ]
+  },
+  {
     "version": "0.28.0",
     "date": "2026-09-13",
     "notes": [

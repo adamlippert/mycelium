@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-09-14
+
 ### Added
 
 - TorBox account pool. Several TorBox API keys can be configured in
