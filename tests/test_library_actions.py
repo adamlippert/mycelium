@@ -93,8 +93,8 @@ def test_the_routes_exist_and_delegate():
                   '@bp.route("/ui/api/library/<imdb_id>/override", methods=["POST", "DELETE"])'):
         assert route in src, route
         body = src.split(route, 1)[1].split("\n\n\n", 1)[0]
-        assert "_lib_action(" in body, route
-    helper = src.split("def _lib_action", 1)[1][:400]
+        assert "_admin_lib_action(" in body, route
+    helper = src.split("def _admin_lib_action", 1)[1][:400]
     assert "auth.is_admin()" in helper and "library_actions" in helper
 
 

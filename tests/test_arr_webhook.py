@@ -149,7 +149,7 @@ def _route_body():
 def test_route_is_a_machine_caller():
     body = _route_body()
     first_statements = "\n".join(body.splitlines()[:10])
-    assert "_check_auth()" in first_statements, "the secret check must run before the payload is read"
+    assert "_require_webhook_secret()" in first_statements, "the secret check must run before the payload is read"
 
 
 def test_route_ignores_titles_mycelium_does_not_own():

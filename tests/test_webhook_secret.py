@@ -90,7 +90,7 @@ def test_routes_and_the_check_go_through_the_module():
     assert m, "no rotate route"
     body = m.group(1)
     assert "auth.is_admin()" in body and "webhook_secret.rotate()" in body and "409" in body
-    check = src_for_route("/webhook").split("def _check_auth() -> None:", 1)[1].split("\n\n\n", 1)[0]
+    check = src_for_route("/webhook").split("def _require_webhook_secret() -> None:", 1)[1].split("\n\n\n", 1)[0]
     assert "webhook_secret.accepts(provided)" in check
     assert 'matched == "previous"' in check, "a previous-secret use is logged by sender"
     assert "hmac.compare_digest" not in check, "the comparison lives in webhook_secret"

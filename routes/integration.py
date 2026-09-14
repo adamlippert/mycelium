@@ -23,7 +23,7 @@ bp = Blueprint("integration", __name__)
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
-def _check_auth() -> None:
+def _require_webhook_secret() -> None:
     if not webhook_secret.effective():
         return
     header_secret = request.headers.get("X-Webhook-Secret")
@@ -96,7 +96,7 @@ def health_deep():
 @bp.post("/webhook")
 @_csrf.exempt
 def webhook():
-    _check_auth()
+    _require_webhook_secret()
     payload = request.get_json(silent=True) or {}
     log.info("Received webhook: notification_type=%s subject=%s",
              payload.get("notification_type"), payload.get("subject"))
@@ -130,7 +130,7 @@ def webhook():
 def torbox_webhook():
     """Endpoint for TorBox to push completion notifications.
     Triggers strm_generator to catch the newly-ready torrent."""
-    _check_auth()
+    _require_webhook_secret()
     payload = request.get_json(silent=True) or {}
     log.info("TorBox webhook: %s", payload)
     threading.Thread(target=strm_generator.run_and_refresh, name="torbox-push", daemon=True).start()
@@ -146,7 +146,7 @@ def arr_webhook_route():
     A title Mycelium does not own is answered with "ignored" and no purge:
     that is how the echo of our own mirror_remove, and Jellyfin's ItemDeleted
     after our own purge, are kept from looping."""
-    _check_auth()
+    _require_webhook_secret()
     import arr_webhook
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):

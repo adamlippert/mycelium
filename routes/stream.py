@@ -187,7 +187,7 @@ def _build_then_probe(cdn_url_: str, tok: str) -> None:
         _spore_probing.discard(tok)
 
 
-def _resolve_stream_mode(token: str) -> dict:
+def _prepare_stream(token: str) -> dict:
     """Everything /spore-stream decides BEFORE any byte is served, shared by
     the Flask route below and by /internal/stream-resolve, which the Go
     streaming front calls so it can do the byte-shoveling itself. All side
@@ -402,7 +402,7 @@ def spore_stream_proxy(token: str):
     ua  = request.headers.get("User-Agent", "?")[:80]
     rng = request.headers.get("Range", "-")
 
-    res = _resolve_stream_mode(token)
+    res = _prepare_stream(token)
     if "error" in res:
         if res["error"] == 404:
             log.warning("spore-stream: materialize FAILED token=%s ua=%r range=%s (%.1fs)",
@@ -475,7 +475,7 @@ def internal_stream_resolve(token: str):
     The Go front additionally refuses to proxy /internal/* at all."""
     if request.remote_addr not in ("127.0.0.1", "::1"):
         abort(403)
-    res = _resolve_stream_mode(token)
+    res = _prepare_stream(token)
     if "error" in res:
         return jsonify(error=res.get("reason", "")), res["error"]
     res.pop("info", None)  # bytes payload; the front reads the .fsh itself

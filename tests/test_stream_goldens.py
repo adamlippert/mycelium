@@ -100,8 +100,8 @@ def test_flask_route_and_resolve_share_one_decision_function():
     src = src_for_route("/spore-stream/<token>")
     route = re.search(r"def spore_stream_proxy\(.*?\n(.*?)\n@bp\.", src, re.S)
     internal = re.search(r"def internal_stream_resolve\(.*?\n(.*?)\n@bp\.", src, re.S)
-    assert route and "_resolve_stream_mode(" in route.group(1)
-    assert internal and "_resolve_stream_mode(" in internal.group(1)
+    assert route and "_prepare_stream(" in route.group(1)
+    assert internal and "_prepare_stream(" in internal.group(1)
 
 
 def test_dockerfile_wires_the_go_front():
@@ -120,8 +120,8 @@ def test_cold_head_validates_the_cdn_status():
     status, retry a 429 once, refuse to cache failures, and answer 503 (rate
     limited) or 502 rather than success."""
     src = src_for_route("/spore-stream/<token>")
-    m = re.search(r"def _resolve_stream_mode\(.*?\n(.*?)\n    # CDN file is", src, re.S)
-    assert m, "cold branch of _resolve_stream_mode not found"
+    m = re.search(r"def _prepare_stream\(.*?\n(.*?)\n    # CDN file is", src, re.S)
+    assert m, "cold branch of _prepare_stream not found"
     body = m.group(1)
     assert "head.status_code" in body, "HEAD status is never checked"
     assert "429" in body, "no rate-limit handling on the HEAD"
