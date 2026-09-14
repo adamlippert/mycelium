@@ -112,8 +112,9 @@ def detach_episode(vi: dict) -> tuple[str, str]:
         req = catbox.db.get_request_by_imdb(imdb_id) or {}
         # The virtual item's title carries the episode suffix ("Show S04E04");
         # a wanted row with that title would search and file under a folder
-        # of that name. Prefer the request title, else strip the suffix.
-        title = req.get("title") or series_title(vi.get("title") or "") or imdb_id
+        # of that name. Prefer the request title, else the stripped one
+        # already computed above.
+        title = req.get("title") or title or imdb_id
         season, episode = vi["season"], vi["episode"]
         catbox.db.upsert_wanted_episode(imdb_id, req.get("tmdb_id"), title, season, episode, None)
         row = catbox.db.get_wanted_episode(imdb_id, season, episode) or {}
