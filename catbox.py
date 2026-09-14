@@ -1141,8 +1141,13 @@ def release_idle() -> int:
             # the local reference. The torrent (if any) stays on TorBox
             # until its account is enabled again.
             db.set_virtual_torbox(item["token"], None, None)
-            log.info("Catbox: %s's TorBox id %s stays on account %s until it is enabled again; cleared locally",
-                     item.get("title"), item["torbox_id"], item.get("torbox_account"))
+            raw_account = item.get("torbox_account")
+            if raw_account:
+                log.info("Catbox: %s's TorBox id %s stays on account %s until it is enabled again; cleared locally",
+                         item.get("title"), item["torbox_id"], raw_account)
+            else:
+                log.info("Catbox: %s had no TorBox account on record; cleared locally",
+                         item.get("title"))
             released += 1
             continue
         try:
