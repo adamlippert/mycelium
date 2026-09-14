@@ -317,10 +317,9 @@ def _prepare_fast(token: str, cdn_url: str, info: dict) -> dict:
         # page with no recovery. Cheaply confirm it's alive first and re-resolve
         # once if not. A short local cache avoids re-checking with the CDN on
         # every reopen/seek within the same playback session.
-        alive = stream_decisions.link_is_alive(
-            cdn_url, _head_status, _spore_alive_cache, _t.monotonic(),
-            _ALIVE_CHECK_TTL_SEC)
-        if not alive:
+        if not stream_decisions.link_is_alive(
+                cdn_url, _head_status, _spore_alive_cache, _t.monotonic(),
+                _ALIVE_CHECK_TTL_SEC):
             log.warning("spore-stream: cached CDN url dead for token=%s, re-resolving", token)
             catbox.invalidate_url_cache(token)
             _spore_alive_cache.pop(cdn_url, None)

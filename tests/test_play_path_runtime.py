@@ -187,9 +187,13 @@ def test_the_redirect_branch_still_asks_before_it_hands_out_a_cached_url():
     """Runtime cover for link_is_alive is worthless if the route stops
     calling it: pin the call and the re-resolve it guards."""
     body = _prepare_body("_prepare_fast")
-    assert "stream_decisions.link_is_alive(" in body, "the liveness check is gone"
+    # The answer must BE the branch: calling it and then overriding the result
+    # (alive = True) reads as a check and is not one.
+    assert "if not stream_decisions.link_is_alive(" in body, \
+        "the liveness answer does not decide the branch"
+    assert "alive = " not in body, "the liveness answer is rebound before the branch"
     assert "_head_status" in body, "nothing probes the CDN"
-    assert "if not alive:" in body and "catbox.invalidate_url_cache(token)" in body
+    assert "catbox.invalidate_url_cache(token)" in body
     assert "fresh = catbox.materialize(token)" in body, "a dead link is not re-resolved"
 
 
@@ -204,7 +208,9 @@ def test_the_build_starts_only_when_there_is_no_cache_and_no_build_running():
 
 def test_the_cold_branch_still_starts_the_background_build_behind_that_gate():
     body = _prepare_body("_prepare_cold")
-    assert "stream_decisions.should_start_build(" in body, "the build gate is gone"
+    assert "if stream_decisions.should_start_build(" in body, \
+        "the build decision does not decide the branch"
+    assert "if False" not in body, "the gate is dead code with the call kept beside it"
     gated = body.split("stream_decisions.should_start_build(", 1)[1]
     assert "threading.Thread(" in gated and "target=_build_then_probe" in gated, \
         "the cold path no longer starts the .fsh build"
