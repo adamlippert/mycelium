@@ -40,6 +40,16 @@ follow come from `db._migrate()`, adding the columns and tables this
 version needs. Migrations are additive and safe to run on every boot;
 against a database that already has them, each guard finds nothing to do.
 
+**One upgrade to 1.0 needs a setting changed by hand.** If you use
+`TRUSTED_PROXY_AUTH` (an Authelia, Authentik or Traefik forward-auth in
+front of Mycelium) with the streaming front enabled, and you never set
+`TRUSTED_PROXY_NETWORKS`, header auth stops working on this release.
+Mycelium now sees the real peer address instead of the loopback address
+the front used to present, so the default whitelist no longer matches.
+List the network your proxy connects from under Settings, Security,
+Trusted networks. The same release made that header auth safe: with the
+old behaviour any caller could send the header and be believed.
+
 ## Before you upgrade
 
 Mycelium takes a backup automatically the first time it boots on a new
@@ -72,11 +82,17 @@ docker exec mycelium python3 -c "import backup; print(backup.run())"
 Restoring the previous image tag is the rollback: redeploy `vX.Y.(Z-1)`
 (or whichever earlier tag) the same way you deployed the new one, in
 Dokploy or with `docker compose`. Nothing has to be undone in the
-database by hand, because `db._migrate()` never removes a column, drops a
-table, or narrows a type; every schema change is one of `ALTER TABLE ...
-ADD COLUMN`, `CREATE TABLE IF NOT EXISTS`, or `CREATE INDEX IF NOT
-EXISTS`. Code from before a column existed simply never reads or writes
-it, so an older build runs unmodified against a newer database.
+database by hand. `db._migrate()` never removes a column and never
+narrows a type; every schema change is one of `ALTER TABLE ... ADD
+COLUMN`, `CREATE TABLE IF NOT EXISTS`, or `CREATE INDEX IF NOT EXISTS`.
+It carries exactly two guarded clean-ups, and neither affects a rollback:
+it drops `trakt_watched` when the table still has the wrong shape left by
+a removed duplicate integration, so the Trakt plugin can recreate it
+correctly on the next start, and it deletes duplicate `retry_queue` rows
+(keeping the furthest-along attempt per title) before creating the unique
+index that stops them coming back. An older build recreates or refills
+both by itself. Code from before a column existed simply never reads or
+writes it, so an older build runs unmodified against a newer database.
 
 What each release since 0.17.0 added, from `db._migrate()` and the base
 schema (`db._DDL`), dated from the commit that introduced the guard and
