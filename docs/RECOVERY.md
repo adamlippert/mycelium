@@ -60,13 +60,10 @@ whether a migration is about to happen, while the startup one is tied to
 the version change itself, so there is always a backup from just before
 that specific migration, not from up to a day earlier.
 
-The automatic backup only fires once, on the version change. Take one by
-hand before a deploy you are unsure about:
+The automatic backup on a version change already covers the upgrade case.
+To take one by hand anyway, on the host:
 
 ```bash
-# Admin UI: Maintenance -> Backup now.
-
-# Or on the host:
 docker exec mycelium python3 -c "import backup; print(backup.run())"
 ```
 
@@ -114,14 +111,18 @@ changes.
 
 One caveat, not a blocker: 0.21.1 changed what `virtual_items.source` and
 `requests.source` mean, from the scraper name (`torrentio`, `zilean`) to a
-release label (`WEB-DL`, `BluRay`, `REMUX`). A row written before 0.21.1
-keeps the scraper name until its title is reprocessed or swapped; a row
-written on 0.21.1 or later holds a label. Code from before 0.21.1 reads
-either value the same way, as a scraper name, so a rolled-back build shows
-a release label in a place that expects `torrentio` or `zilean`. This is
-cosmetic only, a display string nothing branches on, and it resolves
-itself the next time the title is processed. No other column has changed
-meaning since 0.17.0.
+release label (`WEB-DL`, `BluRay`, `REMUX`); per that release's entry in
+`CHANGELOG.md`, "a one-off startup migration blanks a bare scraper name
+left over in existing rows." `migrate_source.migrate()` runs once, sets
+any `source` value that matches a known scraper name to `NULL`, and
+leaves everything else (a label, empty, `NULL`) untouched, so after that
+migration has run a row never holds a scraper name again: it holds either
+a release label or nothing. Code from before 0.21.1 reads that column as
+a scraper name, so a rolled-back build shows either a release label or a
+blank in a place that expects `torrentio` or `zilean`. This is cosmetic
+only, a display string nothing branches on, and a label resolves itself
+the next time the title is processed; a blank stays blank until then. No
+other column has changed meaning since 0.17.0.
 
 ---
 
