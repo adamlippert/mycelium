@@ -26,6 +26,7 @@ install behaves exactly as today after the upgrade, with no action needed.
 | Configuration | A table of accounts with label, key and enabled flag, edited on a Settings section; the existing `TORBOX_API_KEY` becomes account 1 ("main") |
 | Client shape | The existing module keeps its functions; account-bound ones take an `account_id`; per-account state is keyed by id. A new `torbox_pool` module owns the accounts and the choice |
 | Cache checks | Account-free. TorBox's cache is global, any key answers |
+| Key and account | One and the same: a TorBox account has exactly one active API key, so a key identifies an account and per-key limits are per-account limits |
 
 ## 1. Data
 
@@ -254,9 +255,6 @@ Roughly two days.
   the guard test and the type of `account_id` (an int, never optional on
   account-bound functions) keep a forgotten call site from passing
   silently.
-- TorBox may count some limits per user rather than per key. If two keys
-  belong to one TorBox user, the budget split is fiction; the Settings
-  help text says keys must belong to separate accounts.
 - The "fewest torrents" proxy for load ignores what is actually streaming.
   It is cheap and monotone; a later refinement can weigh recent plays per
   account from `egress_log` once the account is recorded there. Not in
