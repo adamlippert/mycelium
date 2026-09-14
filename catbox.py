@@ -54,18 +54,32 @@ def _home(item: dict) -> int | None:
 
 def _adopt_or_choose(item: dict) -> tuple[int, dict | None]:
     """Where an unhomed torrent goes: the enabled account whose library
-    already holds the hash (no add needed), else the pool's choice."""
+    already holds the hash and has it ready (no add needed); else the
+    account that already holds the hash but is still downloading it (the
+    add target, so a retry lands on the same account instead of spraying
+    the magnet across the pool and spending a scarce uncached slot on a
+    different account every play. TorBox answers DUPLICATE_ITEM for the
+    re-add, releasing the reservation, and wait_until_ready polls there);
+    else the pool's choice."""
     import torbox_pool
     h = item.get("info_hash") or ""
+    unready_account = None
     if h:
         for acct in torbox_pool.accounts():
             try:
                 existing = torbox.find_by_hash(acct.id, h)
             except torbox.AuthFailed:
                 continue
-            if existing and torbox._is_ready(existing):
+            if not existing:
+                continue
+            if torbox._is_ready(existing):
                 log.info("Catbox: %s found in %s's library (id=%s), adopting", item["title"], acct.label, existing["id"])
                 return acct.id, existing
+            if unready_account is None:
+                log.info("Catbox: %s found unready on %s's library, using it as the add target", item["title"], acct.label)
+                unready_account = acct.id
+    if unready_account is not None:
+        return unready_account, None
     return torbox_pool.choose_for_add().id, None
 
 # Failure cooldown: after a failed materialize (429, timeout, no file found),

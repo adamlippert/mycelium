@@ -117,6 +117,34 @@ def test_an_unhomed_item_adopts_the_account_that_already_has_the_hash(client):
     assert ("add", 1) not in calls and ("add", 2) not in calls
 
 
+def test_an_unready_hit_is_the_add_target_not_a_fresh_account(client, monkeypatch):
+    """A hash present but still downloading on account 2 must be re-added
+    (TorBox answers DUPLICATE_ITEM, no budget spent) and waited-on on that
+    same account, never sprayed onto the pool's otherwise-preferred choice."""
+    libs, calls = client
+    libs[2].append(dict(READY, id=5, download_finished=False))
+    monkeypatch.setattr(pool, "choose_for_add", lambda: pool.account(1))
+
+    def add(acct, magnet, **k):
+        calls.append(("add", acct))
+        return {"id": 5}  # DUPLICATE_ITEM: minimal payload, not ready yet
+
+    def wait(acct, h, **k):
+        for t in libs[acct]:
+            if t["hash"] == h:
+                t["download_finished"] = True
+                return t
+        return None
+
+    monkeypatch.setattr(torbox, "add_magnet", add)
+    monkeypatch.setattr(torbox, "wait_until_ready", wait)
+    _item()
+    assert catbox.materialize("t") == "https://cdn/2/5"
+    it = db.get_virtual_item("t")
+    assert (it["torbox_id"], it["torbox_account"]) == (5, 2)
+    assert ("add", 1) not in calls
+
+
 def test_an_unhomed_item_goes_to_the_pools_choice(client, monkeypatch):
     libs, calls = client
     monkeypatch.setattr(pool, "choose_for_add", lambda: pool.account(2))
