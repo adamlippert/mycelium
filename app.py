@@ -2411,6 +2411,50 @@ def ui_api_torbox_usage():
     return jsonify(usage=summary, plan=user.get("plan") if isinstance(user, dict) else None)
 
 
+@app.get("/ui/api/torbox-accounts")
+def ui_api_torbox_accounts():
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import torbox_accounts_api
+    return jsonify(accounts=torbox_accounts_api.list_accounts())
+
+
+@app.post("/ui/api/torbox-accounts")
+def ui_api_torbox_accounts_add():
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import torbox_accounts_api
+    p = request.get_json(silent=True) or {}
+    return jsonify(**torbox_accounts_api.add(str(p.get("label") or ""), str(p.get("api_key") or "")))
+
+
+@app.post("/ui/api/torbox-accounts/<int:account_id>")
+def ui_api_torbox_accounts_update(account_id: int):
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import torbox_accounts_api
+    p = request.get_json(silent=True) or {}
+    return jsonify(**torbox_accounts_api.update(
+        account_id, label=p.get("label"), api_key=p.get("api_key"),
+        enabled=None if p.get("enabled") is None else bool(p.get("enabled"))))
+
+
+@app.delete("/ui/api/torbox-accounts/<int:account_id>")
+def ui_api_torbox_accounts_delete(account_id: int):
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import torbox_accounts_api
+    return jsonify(**torbox_accounts_api.delete(account_id))
+
+
+@app.post("/ui/api/torbox-accounts/<int:account_id>/test")
+def ui_api_torbox_accounts_test(account_id: int):
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
+    import torbox_accounts_api
+    return jsonify(**torbox_accounts_api.test(account_id))
+
+
 @app.get("/ui/api/metrics-summary")
 def ui_api_metrics_summary():
     return jsonify(

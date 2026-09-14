@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../../../api';
-import type { GenreRule } from '../../../api';
+import type { GenreRule, TorboxAccount } from '../../../api';
 import { Button, GenreRuleRows } from '../../../components/primitives';
 import type { FieldValue, Values } from './visibility';
 
@@ -209,4 +209,53 @@ export function FilterRulesLink(_props: CardProps) {
   );
 }
 
-export const CUSTOM_CARDS = { WebhookSecret, FilterRulesLink, GenreTabs, AutoAddNow, LegacyPassword };
+export function TorboxAccounts(_props: CardProps) {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['torbox-accounts'], queryFn: api.torboxAccounts });
+  const [label, setLabel] = useState('');
+  const [key, setKey] = useState('');
+  const [msg, setMsg] = useState<Record<number | 'new', string>>({} as Record<number | 'new', string>);
+  const refresh = () => qc.invalidateQueries({ queryKey: ['torbox-accounts'] });
+  const note = (id: number | 'new', text: string) => setMsg((m) => ({ ...m, [id]: text }));
+
+  const add = async () => {
+    const r = await api.torboxAccountAdd({ label, api_key: key });
+    note('new', r.message);
+    if (r.ok) { setLabel(''); setKey(''); refresh(); }
+  };
+  const toggle = async (a: TorboxAccount) => { const r = await api.torboxAccountUpdate(a.id, { enabled: !a.enabled }); note(a.id, r.message); refresh(); };
+  const test = async (a: TorboxAccount) => { const r = await api.torboxAccountTest(a.id); note(a.id, r.message); };
+  const remove = async (a: TorboxAccount) => { const r = await api.torboxAccountDelete(a.id); note(a.id, r.message); if (r.ok) refresh(); };
+
+  return (
+    <div className="space-y-3">
+      <div className="text-sm font-semibold">TorBox accounts</div>
+      <p className="text-xs text-muted">Several TorBox accounts are used as equal peers: a new torrent goes to the least loaded one, every play uses the account that holds its torrent. Account 1 is the API key above. A disabled account keeps its torrents until its titles move on their next play.</p>
+      <ul className="space-y-1 text-xs">
+        {(q.data?.accounts ?? []).map((a) => (
+          <li key={a.id} className="flex flex-wrap items-center gap-2 rounded border border-border p-2">
+            <span className="font-semibold">{a.label}</span>
+            <span className="font-mono text-muted">key ending {a.key_hint}</span>
+            <span className="text-muted">{a.items} titles, {a.health.budget_left} adds left</span>
+            {!a.enabled && <span className="text-warn">disabled</span>}
+            {a.health.auth_failed_at && <span className="text-danger">key rejected</span>}
+            <span className="ml-auto flex items-center gap-1">
+              <Button variant="ghost" onClick={() => test(a)}>Test</Button>
+              {a.id !== 1 && <Button variant="ghost" onClick={() => toggle(a)}>{a.enabled ? 'Disable' : 'Enable'}</Button>}
+              {a.id !== 1 && <Button variant="ghost" onClick={() => remove(a)}>Remove</Button>}
+            </span>
+            {msg[a.id] && <span role="status" className="basis-full text-muted">{msg[a.id]}</span>}
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-wrap items-center gap-2">
+        <input aria-label="New account label" className="rounded border border-border bg-bg px-2 py-1 text-xs" placeholder="label" value={label} onChange={(e) => setLabel(e.target.value)} />
+        <input aria-label="New account API key" type="password" className="rounded border border-border bg-bg px-2 py-1 text-xs" placeholder="API key" value={key} onChange={(e) => setKey(e.target.value)} />
+        <Button onClick={add} disabled={!label || !key}>Add account</Button>
+        {msg.new && <span role="status" className="text-muted">{msg.new}</span>}
+      </div>
+    </div>
+  );
+}
+
+export const CUSTOM_CARDS = { WebhookSecret, FilterRulesLink, GenreTabs, AutoAddNow, LegacyPassword, TorboxAccounts };

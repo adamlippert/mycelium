@@ -371,6 +371,13 @@ export const api = {
   activity: () => http<{ events: ActivityEvent[] }>('/ui/api/activity'),
   webhookSecret: () => http<WebhookSecretStatus>('/ui/api/webhook-secret'),
   rotateWebhookSecret: () => http<WebhookSecretStatus>('/ui/api/webhook-secret/rotate', { method: 'POST' }),
+  torboxAccounts: () => http<{ accounts: TorboxAccount[] }>('/ui/api/torbox-accounts'),
+  torboxAccountAdd: (body: { label: string; api_key: string }) =>
+    http<{ ok: boolean; id?: number; message: string }>('/ui/api/torbox-accounts', { method: 'POST', body: JSON.stringify(body) }),
+  torboxAccountUpdate: (id: number, body: { label?: string; api_key?: string; enabled?: boolean }) =>
+    http<{ ok: boolean; message: string }>(`/ui/api/torbox-accounts/${id}`, { method: 'POST', body: JSON.stringify(body) }),
+  torboxAccountDelete: (id: number) => http<{ ok: boolean; message: string }>(`/ui/api/torbox-accounts/${id}`, { method: 'DELETE' }),
+  torboxAccountTest: (id: number) => http<{ ok: boolean; message: string }>(`/ui/api/torbox-accounts/${id}/test`, { method: 'POST' }),
   torboxList: () => http<{ torrents: TorboxTorrent[] }>('/ui/api/torbox-list'),
   retryQueue: () => http<{ items: unknown[] }>('/ui/api/retry-queue'),
   releases: () => http<{ releases: Release[] }>('/ui/api/releases'),
@@ -897,6 +904,11 @@ export interface Candidate {
 }
 export interface CandidatesResponse { current: { info_hash: string; quality: string | null; source: string | null } | null; candidates: Candidate[] }
 export interface SwapResult { ok: boolean; message: string; swapped?: number[]; registered?: number[]; skipped?: number[]; busy?: number[] }
+
+export interface TorboxAccount {
+  id: number; label: string; enabled: boolean; key_hint: string; items: number;
+  health: { rate_limited_until: number | null; auth_failed_at: number | null; budget_left: number };
+}
 
 export interface GenreRule {
   media_type: 'movie' | 'tv';

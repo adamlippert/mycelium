@@ -319,6 +319,7 @@ SECTIONS = [
             _f("TORBOX_API_KEY", "TorBox API key", "From TorBox, Settings, API. Required for everything.", "secret", test="torbox", required=True),
             _f("TORBOX_BASE_URL", "TorBox API URL", "Leave the default unless TorBox publishes a new API address.",
                "url", placeholder="https://api.torbox.app/v1/api", advanced=True, test="torbox"),
+            _custom("TorboxAccounts", "TorBox accounts"),
             _f("TORBOX_POLL_INTERVAL_SEC", "Poll interval", "Seconds between checks while waiting for TorBox to finish caching a torrent.",
                unit="seconds", min=1, advanced=True),
             _f("TORBOX_POLL_TIMEOUT_SEC", "Poll timeout", "Give up waiting for TorBox after this many seconds and report the title as failed for now.",
