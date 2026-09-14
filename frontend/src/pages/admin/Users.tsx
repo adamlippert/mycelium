@@ -18,7 +18,7 @@ export default function Users() {
   const { plugins } = usePlugins();
 
   // Every user-table column a plugin contributes: user_fields + admin_fields,
-  // matching plugin_loader.user_fields() / the Jinja togglePluginField() reach.
+  // matching plugin_loader.user_fields()'s reach.
   const pluginFields = plugins.flatMap((p) =>
     [...(p.user_fields || []), ...(p.admin_fields || [])].map((field) => ({
       field,

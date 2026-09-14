@@ -124,10 +124,10 @@ async function http<T>(url: string, init: RequestInit = {}): Promise<T> {
   return (await resp.json()) as T;
 }
 
-/** POST helper for the Jinja maintenance/blacklist routes that are plain form
- * posts today: the Flask handler flashes a message and responds with a
- * redirect to the dashboard, not JSON. fetch() follows that redirect on its
- * own, so success is just response.ok after the follow - there is no JSON
+/** POST helper for the form-encoded admin routes (maintenance/blacklist):
+ * the Flask handler flashes a message and responds with a redirect to the
+ * dashboard, not JSON. fetch() follows that redirect on its own, so
+ * success is just response.ok after the follow - there is no JSON
  * body to parse. */
 async function formPost(url: string, body?: Record<string, string>): Promise<void> {
   const headers: Record<string, string> = { 'X-CSRFToken': csrfToken() };
@@ -490,8 +490,8 @@ export const api = {
   seriesBackfill: () =>
     http<{ ok: boolean; started: string }>('/ui/api/series-backfill', { method: 'POST' }),
 
-  // Maintenance tab: the 14 Jinja action forms. Each POSTs and redirects to
-  // the dashboard (flash message on the reloaded page) rather than
+  // Maintenance tab: 14 form-encoded admin routes. Each POSTs and redirects
+  // to the dashboard (flash message on the reloaded page) rather than
   // returning JSON, so these go through formPost, not http().
   maintenanceRepairAll: () => formPost('/ui/repair-all'),
   maintenanceRunCleanup: () => formPost('/ui/run-cleanup'),
@@ -525,8 +525,8 @@ export const api = {
 
   // Maintenance tab: small manual-input cards for actions whose live UI
   // (search candidates, TorBox list, backup list, show-override list) is
-  // out of scope for this tab - each posts the same route the Jinja page's
-  // per-row form used, form-encoded, plain redirect response.
+  // out of scope for this tab - each posts the same form-encoded admin
+  // route a per-row form would, plain redirect response.
   maintenanceAddMagnet: (magnet: string) => formPost('/ui/add-magnet', { magnet }),
   maintenanceTorboxDelete: (torrentId: string) => formPost('/ui/torbox-delete', { torrent_id: torrentId }),
   maintenanceBackupRestore: (name: string) => formPost('/ui/backup-restore', { name }),
@@ -603,9 +603,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(values),
     }),
-  // The Jinja settings form itself: POSTs setting_<KEY> fields form-encoded
-  // and redirects back to the dashboard rather than returning JSON, same
-  // shape as the maintenance routes above, so this goes through formPost.
+  // The settings form-encoded admin route: POSTs setting_<KEY> fields
+  // form-encoded and redirects back to the dashboard rather than returning
+  // JSON, same shape as the maintenance routes above, so this goes
+  // through formPost.
   saveSettings: (fields: Record<string, string>) => formPost('/ui/settings', fields),
   // The legacy shared fallback password (`POST /ui/set-password`, admin-only,
   // no current-password check) - distinct from a user's own password, which

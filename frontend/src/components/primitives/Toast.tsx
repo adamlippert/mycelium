@@ -18,8 +18,8 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-// Mirrors the old Jinja dashboard's toast() (templates/ui.html, ~line 992):
-// same 5s auto-dismiss, same ok/err accent-edge distinction.
+// Same 5s auto-dismiss, same ok/err accent-edge distinction as the
+// original dashboard's toast().
 export const TOAST_DISMISS_MS = 5000;
 
 const ACCENT: Record<ToastKind, string> = { ok: '#7bd0a7', err: '#e48181' };

@@ -5,8 +5,7 @@ import type { RepairItem } from '../../api';
 import { Card, DataTable, StatTile } from '../../components/primitives';
 import type { Column } from '../../components/primitives';
 
-/** One maintenance action button: pending state, optional confirm() guard
- * (copied verbatim from templates/ui.html where the Jinja form had one),
+/** One maintenance action button: pending state, optional confirm() guard,
  * and an inline result line in place of the flash message the old
  * full-page-reload flow showed on the reloaded dashboard. */
 function ActionButton({
@@ -421,7 +420,7 @@ function ArrImportPanel() {
 
 /** Ported from the pre-native-admin Admin.tsx `MaintenancePanel`: the four
  * filesystem-repair actions that only ever existed as JSON endpoints, never
- * as a Jinja form. */
+ * as a form-encoded route. */
 function FilesystemToolsPanel() {
   return (
     <section>
@@ -467,8 +466,8 @@ function FilesystemToolsPanel() {
 
 /** A small manual-input card for an action whose live per-row UI (search
  * candidates, TorBox torrent list, backup list, show-override list) is out
- * of scope for this tab - it posts the same route the Jinja page's per-row
- * form used to. */
+ * of scope for this tab - it posts the same form-encoded admin route a
+ * per-row form would. */
 function QuickActionCard({
   title,
   placeholder,

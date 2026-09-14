@@ -1,8 +1,7 @@
 // Equivalence test: the TS port (filterRulesModel.ts) must behave exactly
 // like the shipped, byte-frozen static/admin/filter_rules.js. That file
-// cannot move (the Jinja settings page still loads it) and its own 34
-// node tests stay untouched, so this is the referee for the port: any
-// mismatch here means the port is wrong, never the original.
+// and its own 34 node tests stay untouched, so this is the referee for
+// the port: any mismatch here means the port is wrong, never the original.
 import { createRequire } from 'node:module';
 import { describe, it, expect } from 'vitest';
 import * as ported from './filterRulesModel';

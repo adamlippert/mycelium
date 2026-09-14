@@ -1,12 +1,12 @@
 // TypeScript port of the pure state half of static/admin/filter_rules.js.
 //
-// The original file cannot move (the Jinja settings page still loads it,
-// and its 34 node tests are pinned byte-unchanged), so this is a
-// function-for-function rewrite of the same semantics. It exists so the
-// native React admin can reuse the model without a DOM. Behavioural parity
-// with the original is proven by filterRulesModel.test.ts, which loads the
-// original via createRequire and asserts deep equality against this file
-// for a matrix of operations - that test is the referee, not this file.
+// The original stays byte-unchanged (its own 34 node tests are pinned to
+// it), so this is a function-for-function rewrite of the same semantics.
+// It exists so the native React admin can reuse the model without a DOM.
+// Behavioural parity with the original is proven by filterRulesModel.test.ts,
+// which loads the original via createRequire and asserts deep equality
+// against this file for a matrix of operations - that test is the
+// referee, not this file.
 //
 // Deliberately NOT ported: renderPanel, renderCollapsed, syncHiddenInputs,
 // initFilterRules. Those are DOM wiring; React replaces them.

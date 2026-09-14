@@ -25,8 +25,8 @@ function levelClass(level: string): string {
 
 export default function Logs() {
   const [level, setLevel] = useState<LevelFilter>('All');
-  // Ported from the Jinja "Auto: ON/OFF" button - lets the operator pause
-  // the tail without leaving the tab (e.g. to read a burst of lines in peace).
+  // "Auto: ON/OFF" - lets the operator pause the tail without leaving the
+  // tab (e.g. to read a burst of lines in peace).
   const [auto, setAuto] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);

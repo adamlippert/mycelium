@@ -30,15 +30,14 @@ export const ADMIN_TABS: { id: string; label: string; component: ComponentType }
   { id: 'settings', label: 'Settings', component: Settings },
 ];
 
-// Refresh policy: mirrors the old Jinja dashboard's pollActivity() (see
-// templates/ui.html, ~line 1474) - a 5s tail that turns new activity_log
-// rows into corner toasts. The sub-10s cadence is justified here because
-// this is the operator's live event stream (deletes, purges, sync results),
-// not a dashboard metric, and it only runs while AdminLayout is mounted:
+// Refresh policy: a 5s tail that turns new activity_log rows into corner
+// toasts. The sub-10s cadence is justified here because this is the
+// operator's live event stream (deletes, purges, sync results), not a
+// dashboard metric, and it only runs while AdminLayout is mounted:
 // navigating away from /admin unmounts this hook and the poll with it.
 const ACTIVITY_POLL_MS = 5000;
 
-/** Ports LAST_ACTIVITY_ID from the Jinja poller: /ui/api/activity returns
+/** Tracks a LAST_ACTIVITY_ID high-water mark: /ui/api/activity returns
  * newest-first, so events[0].id is the high-water mark. The first poll only
  * primes that cursor - nothing "just happened" before this component
  * existed - then every later poll toasts whatever is newer than the cursor. */

@@ -32,14 +32,14 @@ function ScraperStatusDot({ state }: { state: ScraperRow['state'] }) {
   return <StatusDot tone={tone} />;
 }
 
-/** Ported from the Jinja `zileanSync()`/`zileanImport()`/`zileanStatus()` controls. */
+/** Ported from the original `zileanSync()`/`zileanImport()`/`zileanStatus()` controls. */
 function ZileanPanel() {
   const qc = useQueryClient();
   const [msg, setMsg] = useState('');
   const { data } = useQuery({
     queryKey: ['zilean-status'],
     queryFn: api.zileanStatus,
-    // Mirrors the Jinja panel: only poll quickly while a sync/import is running.
+    // Only poll quickly while a sync/import is running.
     refetchInterval: (q) => (q.state.data?.syncing || q.state.data?.importing ? 3000 : false),
   });
 
