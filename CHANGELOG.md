@@ -39,6 +39,10 @@ All notable changes to Mycelium are documented in this file.
 
 ### Fixed
 
+- Webhook auth diagnostics (routes/integration.py) now log
+  auth.peer_address() instead of request.remote_addr, which is always
+  loopback behind the Go streaming front. Log-only; the secret
+  comparison itself was never affected.
 - Web Player: `_check_enabled()` no longer aborts 403 when auth is disabled.
   `auth.current_user_record()` is always None in that single-user no-auth
   mode, so the gate previously locked the entire Web Player out on any

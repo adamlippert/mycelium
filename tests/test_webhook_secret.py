@@ -94,5 +94,10 @@ def test_routes_and_the_check_go_through_the_module():
     assert "webhook_secret.accepts(provided)" in check
     assert 'matched == "previous"' in check, "a previous-secret use is logged by sender"
     assert "hmac.compare_digest" not in check, "the comparison lives in webhook_secret"
+    # Fix round 1, item 6: request.remote_addr is always loopback behind the
+    # Go streaming front, so every diagnostic here used auth.peer_address()
+    # instead, log-only (the secret comparison is unaffected).
+    assert "request.remote_addr" not in check
+    assert check.count("auth.peer_address()") == 3
     show = src.split('@bp.get("/ui/api/webhook-secret")', 1)[1].split("\n\n\n", 1)[0]
     assert "webhook_secret.status()" in show

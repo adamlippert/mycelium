@@ -33,16 +33,16 @@ def _require_webhook_secret() -> None:
         # Deprecated: secret in query string leaks via access logs and proxy history.
         # Migrate to the X-Webhook-Secret header.
         log.warning("Webhook secret passed via ?secret= query param from %s"
-                    " - migrate to X-Webhook-Secret header", request.remote_addr)
+                    " - migrate to X-Webhook-Secret header", auth.peer_address())
     matched = webhook_secret.accepts(provided)
     if matched is None:
-        log.warning("Rejected webhook with bad/missing secret from %s", request.remote_addr)
+        log.warning("Rejected webhook with bad/missing secret from %s", auth.peer_address())
         abort(401)
     if matched == "previous":
         # Still inside the rotation grace window: this sender has not been
         # updated yet. Name it so the admin knows what to fix.
         log.warning("Webhook from %s (%s) still uses the previous secret; update it before the grace window ends",
-                    request.remote_addr, request.headers.get("User-Agent", "?"))
+                    auth.peer_address(), request.headers.get("User-Agent", "?"))
 
 
 # ── Webhook ───────────────────────────────────────────────────────────────────
