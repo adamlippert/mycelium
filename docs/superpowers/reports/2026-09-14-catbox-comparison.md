@@ -17,6 +17,8 @@ Read 2026-09-14:
 - https://docs.elfhosted.com/guides/media/plex-torbox-aars/ (linked from the guides above)
 - https://docs.elfhosted.com/guides/media/emby-torbox-aars/ (linked from the guides above)
 
+Labels used after each behaviour below: `jellyfin-torbox-aars` = the Jellyfin guide, `torbox` or `torbox guide` = the TorBox guide, `store` = the store page, `plex guide` = the Plex guide, `emby guide` = the Emby guide, each the URL listed above.
+
 All six loaded. Further links found on these pages but not fetched, because
 they lead away from the CatBox mechanism itself: the Real-Debrid-to-TorBox
 migration guide, a general FAQ page, a "Jellyfin + Gelato" alternative
@@ -31,7 +33,8 @@ None of the four pages that were fetched pointed to a dedicated changelog.
 - An item materializes in the TorBox account only when actual playback starts: CatBox adds the torrent, fetches a presigned URL, and proxies the stream. (jellyfin-torbox-aars, store)
 - After playback ends, CatBox removes the item from the TorBox account again. The symlink and the library entry stay, so the title still appears; TorBox just no longer holds it against the account. (jellyfin-torbox-aars, torbox, store, plex guide)
 - For a direct-play request, CatBox can redirect straight to a signed TorBox CDN URL so bytes go client to TorBox, bypassing ElfHosted's own infrastructure. (jellyfin-torbox-aars, store, "DirectStream")
-- On Plex specifically, a transcode or remux request falls back to normal proxying through Plex instead of the CDN redirect; Plex also cannot use `.strm` files at all, so CatBox is FUSE-backed there rather than using the lighter streaming-URL method Jellyfin and Emby get. (plex guide)
+- When the media server needs to transcode, remux or serve HLS segments, CatBox falls back to normal proxying through the media server instead of the CDN redirect, so playback behaves like a regular stream. Stated for Jellyfin and repeated for Plex. (jellyfin-torbox-aars, plex guide)
+- Plex cannot use `.strm` files at all, so CatBox is FUSE-backed there rather than using the lighter streaming-URL method Jellyfin and Emby get. (plex guide)
 - New torrents are added cached-only by default (TorBox's `add_only_if_cached`); an optional UI toggle allows uncached fetches, kept separate from the playback queue. (store)
 - CatBox exposes its own Torznab indexer endpoint (`/torznab`) so Prowlarr can search what it already has cached, and runs background availability checking that flags items no longer available. (store)
 - Each CatBox tenant keeps a small SQLite catalog of release state and settings; symlinks live under `/storage/symlinks/downloads/<category>/`. (store)
@@ -48,7 +51,7 @@ None of the four pages that were fetched pointed to a dedicated changelog.
 | Symlink into a virtual WebDAV tree | Yes, for Jellyfin, Emby and (via FUSE) Plex | `.strm` files carrying a proxy URL (`/stream/<token>`), native to Jellyfin/Emby/Kodi; a separate optional WebDAV server exists for Plex/Emby but is a different mechanism, not symlink-based | different by design | `strm_generator.py` `create_lazy_movie_strm`, `create_lazy_episode_strm`; `catbox.py` `register`, `proxy_url`; `webdav.py` |
 | Removal from the debrid account after playback | Removed right after playback ends | Removed by an idle-timeout sweep (`CATBOX_IDLE_MINUTES`, default 1440 minutes / 24 hours), not tied to a playback-stop event | different by design | `catbox.py` `release_idle` |
 | Direct-play requests redirected to a signed CDN URL | Yes, bytes bypass the app | Same for MKV/other non-MP4: `/stream/<token>` is a 302 to `/spore-stream/<token>`, which live-checks and 302s again to the TorBox CDN | same | `catbox.py` `materialize`; `spore-stream/stream.go` |
-| Bytes proxied instead of redirected for transcode-shaped requests | Plex falls back to proxying for transcode/remux | MP4 is always proxied through a moov-first cache, because TorBox serves MP4 with `moov` at the end (mdat-before-moov), not because of a transcode decision | different by design | `mp4_faststart.py` `build_and_cache`, `serve_bytes` |
+| Bytes proxied instead of redirected for transcode-shaped requests | Jellyfin and Plex fall back to proxying for transcode, remux and HLS | MP4 is always proxied through a moov-first cache, because TorBox serves MP4 with `moov` at the end (mdat-before-moov), not because of a transcode decision | different by design | `mp4_faststart.py` `build_and_cache`, `serve_bytes` |
 | Add new torrents cached-only by default | `add_only_if_cached` | `_materialize_locked` only ever adds a release TorBox's cache-check already confirmed (`cached=True`) | same | `catbox.py` `_materialize_locked` (the `torbox.add_magnet(..., cached=True)` call) |
 | Optional toggle for uncached fetches | Yes, kept apart from the play queue | No such toggle in the catbox path | missing | none |
 | Self-hosted Torznab indexer endpoint | `/torznab`, for Prowlarr | Mycelium consumes Torznab feeds (Comet, MediaFusion) but exposes none of its own | missing | none |
