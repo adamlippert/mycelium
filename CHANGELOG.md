@@ -4,6 +4,16 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- The Go streaming front now appends its own peer address to
+  X-Forwarded-For instead of passing it through untouched, and the
+  trusted-proxy header check and the login rate limiter now derive the
+  real client address from that chain. Previously every request behind
+  the front reached Flask as if it came from loopback, which made
+  TRUSTED_PROXY_AUTH accept a forwarded admin username from any caller
+  and made the login rate limiter one shared bucket for every visitor.
+
 ### Changed
 
 - Internal: catbox.py's idle release, hourly TorBox id check and

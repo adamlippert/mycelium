@@ -59,11 +59,17 @@ from flask_wtf.csrf import CSRFProtect, generate_csrf
 _csrf = CSRFProtect(app)
 
 
-# Rate limiter  -  applied selectively to auth endpoints.
+# Rate limiter  -  applied selectively to auth endpoints. Keyed on
+# auth.client_address rather than flask_limiter's own get_remote_address:
+# behind the Go streaming front (spore-stream/main.go) request.remote_addr
+# is always the loopback address gunicorn sees it from, which would make
+# get_remote_address key every caller into one global bucket - a single
+# attacker locking out every user's login attempts. auth.client_address
+# recovers the real client from the front's X-Forwarded-For chain.
 from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
+import auth
 limiter = Limiter(
-    key_func=get_remote_address,
+    key_func=auth.client_address,
     app=app,
     default_limits=[],  # opt-in per route
     # memory:// keeps the counters in this process. Correct ONLY at

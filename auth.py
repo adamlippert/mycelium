@@ -91,6 +91,66 @@ def set_password(pw: str) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# The real client address, behind the Go streaming front
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# spore-stream (spore-stream/main.go) binds the exposed port and reverse
+# proxies everything but /spore-stream/<token> to gunicorn on loopback, so
+# request.remote_addr is 127.0.0.1 for every external request whenever the
+# front is enabled (the default). The front now appends its own peer to
+# X-Forwarded-For and marks its requests with X-Stream-Front: 1, so the
+# real client can be recovered from the header instead of trusting a peer
+# address that is always loopback.
+
+def _is_loopback(addr: str | None) -> bool:
+    try:
+        return bool(addr) and ipaddress.ip_address(addr).is_loopback
+    except ValueError:
+        return False
+
+
+def _forwarded_chain() -> list[str]:
+    raw = request.headers.get("X-Forwarded-For", "")
+    return [p.strip() for p in raw.split(",") if p.strip()]
+
+
+def peer_address() -> str | None:
+    """The address that connected to this application. Behind the Go front
+    (gunicorn on loopback, the front marks its requests with X-Stream-Front)
+    that is the last X-Forwarded-For entry, which the front appends itself;
+    otherwise the socket peer.
+
+    STREAM_FRONT_ENABLED is a shell switch in the Dockerfile CMD that Python
+    never reads, so there is no config flag to check here: "loopback peer
+    plus the front's marker header" is sufficient on its own. With the front
+    disabled gunicorn is the exposed listener and a loopback caller is a
+    local process, which is trusted anyway."""
+    remote = request.remote_addr
+    if _is_loopback(remote) and request.headers.get("X-Stream-Front") == "1":
+        chain = _forwarded_chain()
+        if chain:
+            return chain[-1]
+    return remote
+
+
+def client_address() -> str:
+    """The address to rate-limit on: the peer, unless the peer is a trusted
+    proxy, in which case the address it reported just before itself."""
+    peer = peer_address()
+    if peer and _ip_in_trusted(peer):
+        chain = _forwarded_chain()
+        # Behind the front the peer is chain[-1]; without it the peer is the
+        # socket and the client is chain[-1].
+        idx = -2 if (_is_loopback(request.remote_addr)
+                     and request.headers.get("X-Stream-Front") == "1") else -1
+        try:
+            return chain[idx]
+        except IndexError:
+            pass
+    return peer or "unknown"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Reverse-proxy header trust
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -118,7 +178,7 @@ def _ip_in_trusted(remote: str | None) -> bool:
 def _proxy_user() -> str | None:
     if not settings.get("TRUSTED_PROXY_AUTH", False):
         return None
-    if not _ip_in_trusted(request.remote_addr):
+    if not _ip_in_trusted(peer_address()):
         return None
     header = settings.get("TRUSTED_PROXY_USER_HEADER", "X-Forwarded-User")
     return request.headers.get(header) or None

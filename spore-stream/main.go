@@ -29,24 +29,37 @@ func env(key, fallback string) string {
 	return fallback
 }
 
-func main() {
-	listen := env("STREAM_LISTEN", "0.0.0.0:8088")
-	upstreamRaw := env("STREAM_UPSTREAM", "http://127.0.0.1:8090")
-	upstream, err := url.Parse(upstreamRaw)
-	if err != nil {
-		log.Fatalf("spore-stream: bad STREAM_UPSTREAM %q: %v", upstreamRaw, err)
-	}
-
-	proxy := &httputil.ReverseProxy{
+// newProxy builds the reverse proxy to gunicorn. Extracted from main so the
+// X-Forwarded-* rewriting can be exercised directly in tests.
+func newProxy(upstream *url.URL) *httputil.ReverseProxy {
+	return &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(upstream)
 			pr.Out.Host = pr.In.Host
-			// Pass X-Forwarded-* through untouched instead of appending this
-			// hop, so Flask sees exactly the headers the outer proxy set and
-			// its trusted-header auth and logging behave as before.
+			// Copy the inbound X-Forwarded-For first so SetXForwarded (below)
+			// appends this hop's peer to it instead of replacing it - Flask
+			// needs the whole chain to tell the real client from the proxies
+			// in front of it. Without this step every request reached Flask
+			// as if it came from 127.0.0.1 (this process's own loopback
+			// connection to gunicorn), which made the trusted-proxy header
+			// check and the login rate limiter both key on the same address
+			// for every caller.
 			pr.Out.Header["X-Forwarded-For"] = pr.In.Header["X-Forwarded-For"]
-			pr.Out.Header["X-Forwarded-Proto"] = pr.In.Header["X-Forwarded-Proto"]
-			pr.Out.Header["X-Forwarded-Host"] = pr.In.Header["X-Forwarded-Host"]
+			// Appends the peer that connected to this process (the outer
+			// proxy, or the client directly) and sets X-Forwarded-Host/Proto
+			// from the inbound connection.
+			pr.SetXForwarded()
+			// SetXForwarded derives Proto from whether *this* connection is
+			// TLS, which it never is - TLS terminates upstream at the outer
+			// proxy - so it would set "http" even for an HTTPS visitor.
+			// Restore the values the inbound request actually carried,
+			// keeping the outer proxy as the source of truth when present.
+			if v := pr.In.Header.Get("X-Forwarded-Proto"); v != "" {
+				pr.Out.Header.Set("X-Forwarded-Proto", v)
+			}
+			if v := pr.In.Header.Get("X-Forwarded-Host"); v != "" {
+				pr.Out.Header.Set("X-Forwarded-Host", v)
+			}
 			// Overwrites any client-sent value: requests through the front
 			// carry it, so Flask can report "front active" as live truth.
 			pr.Out.Header.Set("X-Stream-Front", "1")
@@ -59,6 +72,17 @@ func main() {
 			w.WriteHeader(http.StatusBadGateway)
 		},
 	}
+}
+
+func main() {
+	listen := env("STREAM_LISTEN", "0.0.0.0:8088")
+	upstreamRaw := env("STREAM_UPSTREAM", "http://127.0.0.1:8090")
+	upstream, err := url.Parse(upstreamRaw)
+	if err != nil {
+		log.Fatalf("spore-stream: bad STREAM_UPSTREAM %q: %v", upstreamRaw, err)
+	}
+
+	proxy := newProxy(upstream)
 
 	streamer := newStreamer(upstreamRaw)
 
