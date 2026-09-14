@@ -76,7 +76,9 @@ query parameter `?metrics_token=<token>` is checked, and an admin session
 with no token still gets 401; when `METRICS_TOKEN` is unset, an admin
 session is required and a token (there being none configured to match)
 does nothing. Returns the Prometheus text exposition format on success, or
-401 on failure either way.
+401 on failure either way. The route is exempt from the login gate, so a
+scraper is answered by the check above rather than redirected to the login
+form it could not complete.
 
 ```
 $ curl -H "X-Metrics-Token: <token>" https://mycelium.example/metrics
@@ -738,7 +740,7 @@ ZILEAN_DB_PATH
 | `LISTEN_PORT` | `8088` | Port the app (or the Go streaming front) listens on. |
 | `LOG_LEVEL` | `INFO` | Root log level. |
 | `MEDIA_PATH` | `/data/media` | Where .strm files and Spore stubs are written. |
-| `METRICS_TOKEN` | `(empty)` | Bearer token required to scrape /metrics; blank falls back to requiring an admin session. |
+| `METRICS_TOKEN` | `(empty)` | Token required to scrape /metrics, sent as the `X-Metrics-Token` header or a `metrics_token` query parameter; blank falls back to requiring an admin session. |
 | `QUOTA_CHECK_INTERVAL_HOURS` | `0` | How often to check the TorBox quota warning. 0 disables it (TorBox paid plans have no hard storage limit). |
 | `QUOTA_WARN_SIZE_GB` | `999999` | Library size that triggers a quota warning. |
 | `QUOTA_WARN_TORRENT_COUNT` | `999999` | Torrent count that triggers a quota warning. |

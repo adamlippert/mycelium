@@ -45,6 +45,13 @@ _PUBLIC_PATHS = (
     "/logout",
     "/stream/",
     "/spore-stream/",
+    # The Prometheus scrape endpoint carries its own check (the
+    # METRICS_TOKEN header or query parameter when one is configured, an
+    # admin session otherwise), and a scraper has no session to redirect to
+    # a login form with. Without this line the gate answered a
+    # token-bearing scrape with a 302 to /login and the route's own check
+    # never ran, which is not what docs/COMPATIBILITY.md promises.
+    "/metrics",
     "/assets",
     "/static",
 )
