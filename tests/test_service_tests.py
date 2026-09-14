@@ -9,7 +9,7 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from _routes import src_for_route
+from _routes import all_route_sources, src_for_route
 
 sys.modules.pop("settings", None)
 
@@ -262,7 +262,7 @@ def test_the_routes_exist_and_the_wizard_and_arr_import_use_the_registry():
     arr_src = src_for_route("/ui/api/arr-import/test-radarr")
     arr = arr_src.split('/ui/api/arr-import/test-radarr', 1)[1][:2000]
     assert "service_tests" in arr
-    assert "def _arr_test" not in arr_src
+    assert "def _arr_test" not in all_route_sources()
     scheduler = _src("app.py")
     assert '_settings_mod.get("ARR_SYNC_INTERVAL_MINUTES"' in scheduler
     assert '_settings_mod.get("DISK_SYNC_INTERVAL_MINUTES"' in scheduler

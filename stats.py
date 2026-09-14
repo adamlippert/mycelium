@@ -88,13 +88,10 @@ def get_storage_breakdown(limit: int = 20) -> list[dict]:
 
 
 def get_repair_overview(limit: int = 200) -> dict:
-    """Everything the repair half of the Maintenance tab renders.
+    """Everything the repair half of the Maintenance tab fetches from
+    GET /ui/api/repair.
 
-    That half is server-rendered, and until this existed the only way to
-    refresh it was to reload the whole dashboard, which is exactly what
-    templates/ui.html used to do every two minutes.
-
-    last_cleanup is None before the first cleanup run; the template renders
+    last_cleanup is None before the first cleanup run; the frontend shows
     "No cleanup run yet." for that, so the key is always present rather than
     omitted.
     """

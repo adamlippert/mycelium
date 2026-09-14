@@ -97,8 +97,8 @@ def ui_api_activity():
 @bp.get("/ui/api/releases")
 def ui_api_releases():
     """Release changelog for the admin Overview tab. Every /ui/api/ route is
-    already behind the global auth gate, and the Jinja page shows this to any
-    admin-page viewer, so plain auth is enough here."""
+    already behind the global auth gate, and the changelog carries no
+    operator-sensitive data, so plain auth is enough here."""
     return jsonify(releases=RELEASES)
 
 
@@ -544,7 +544,8 @@ def ui_api_purge_request(row_id: int):
 @bp.get("/ui/api/torbox-usage")
 def ui_api_torbox_usage():
     import torbox_pool
-    # Account 1 for now; Task 6 reports usage and plan per account.
+    # Reports the first enabled account only; usage and plan per account
+    # is not broken out here yet.
     accts = torbox_pool.accounts()
     if not accts:
         return jsonify(error="no enabled TorBox account"), 503

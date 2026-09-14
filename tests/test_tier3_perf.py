@@ -179,7 +179,7 @@ def test_vendor_and_hls_have_their_own_chunks():
 
 def test_admin_requests_table_renders_one_page():
     """The all-requests table moved from admin/Requests.tsx to the Library
-    tab (Task 9), which pages server-side through api.library(query) instead
+    tab, which pages server-side through api.library(query) instead
     of slicing a client-side array."""
     src = _src("frontend/src/pages/admin/Library.tsx")
     assert "api.library(query)" in src

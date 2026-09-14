@@ -8,7 +8,7 @@ import sys
 os.environ.setdefault("TORBOX_API_KEY", "test")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from _routes import src_for_route
+from _routes import all_route_sources, src_for_route
 
 import pytest
 
@@ -104,4 +104,4 @@ def test_test_routes_report_the_arr_version():
         body = _route(rf"/ui/api/arr-import/test-{kind}")
         assert f'service_tests.run("{kind}"' in body
         assert "version=" in body
-    assert "def _arr_test" not in src_for_route("/ui/api/arr-import/test-radarr")
+    assert "def _arr_test" not in all_route_sources()

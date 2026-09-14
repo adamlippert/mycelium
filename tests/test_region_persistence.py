@@ -1,4 +1,4 @@
-"""F3 fix round 1: the legacy single-user login (AUTH_USERNAME/AUTH_PASSWORD)
+"""The legacy single-user login (AUTH_USERNAME/AUTH_PASSWORD)
 has no real users-table row - auth.current_user_record() hands back a
 synthetic dict with id=0 (auth.py:170) - so it cannot persist a region via
 db.update_user(rec["id"], ...) the way a real user account does. That login
@@ -79,8 +79,8 @@ def test_id_zero_save_writes_legacy_user_region_instead_of_failing():
     body = _func_body(src_for_route("/ui/api/me/region"), "ui_api_me_region")
     assert "LEGACY_USER_REGION" in body
     assert '_settings.set("LEGACY_USER_REGION", region)' in body
-    # Round 0 shipped a 409 for this case; round 1 replaces it with a
-    # genuine save, so the shim must return ok, not fail.
+    # The id=0 shim must return ok, not the 409 an earlier version returned
+    # for this case.
     assert "409" not in body
     assert re.search(r'if not rec\.get\("id"\):.*?jsonify\(ok=True, region=region\)', body, re.S)
 

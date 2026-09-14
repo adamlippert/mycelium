@@ -38,8 +38,6 @@ RECOMMENDED = {
     "CATBOX_MODE": "true",
     "CATBOX_LAZY_ADD": "true",
     "CATBOX_IDLE_MINUTES": "43200",  # 30 days  -  no eviction within TorBox retention
-    "TORRENTIO_BASE_URL":
-        "https://torrentio.strem.fun/qualityfilter=brremux,threed,other,480p,scr,cam,unknown",
 }
 
 _BOOL = {"true": True, "false": False, "1": True, "0": False, "yes": True, "no": False}

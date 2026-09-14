@@ -480,7 +480,7 @@ def test_undersized_strict_makes_the_size_check_fatal(monkeypatch):
     assert kept == []
 
 
-# ── Task 12: configurable SORT_ORDER ─────────────────────────────────────────
+# ── Configurable SORT_ORDER ───────────────────────────────────────────────────
 
 def _mk(name, info_hash, quality="1080p", seeders=10, size_gb=5.0,
         is_season_pack=False, languages=(), source="torrentio", cached=False):

@@ -231,11 +231,11 @@ HOT_RELOAD = {
     "MEDIAFUSION_ENABLED", "MEDIAFUSION_URL", "MEDIAFUSION_API_KEY",
 }
 
-# The 35 rule keys from Task 4 (_RULE_LIST_KEYS' 28 + _RULE_STRICT_KEYS' 7)
-# are hot-reloadable: filter_rules.load_rules() reads every one of them live
-# on every rank_streams call, the same as EXCLUDE_UNDERSIZED_STRICT and
-# SORT_ORDER above. Only EXCLUDE_UNDERSIZED_STRICT and SORT_ORDER were added
-# when those two shipped; the 35 were never added, which left the admin UI
+# The rule keys (_RULE_LIST_KEYS plus _RULE_STRICT_KEYS) are hot-reloadable:
+# filter_rules.load_rules() reads every one of them live on every
+# rank_streams call, the same as EXCLUDE_UNDERSIZED_STRICT and SORT_ORDER
+# above. Only EXCLUDE_UNDERSIZED_STRICT and SORT_ORDER were added when those
+# two shipped; the rule keys were never added, which left the admin UI
 # telling users to restart after every filter edit when nothing needed one.
 HOT_RELOAD |= {*_RULE_LIST_KEYS} | _RULE_STRICT_KEYS
 

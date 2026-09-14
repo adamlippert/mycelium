@@ -200,10 +200,11 @@ def _strm_path(info: dict) -> Path:
 
 def _default_torbox_account() -> int:
     """Best-effort account for a TorBox call with no item to home against
-    (the legacy fixed-mode library scans). Task 3 replaces this with real
-    per-item homing; until then the first enabled account stands in, and a
-    pool that cannot be read at all falls back to account 1 so a scan never
-    crashes on an unconfigured pool."""
+    (the legacy fixed-mode library scans). Catbox playback uses real
+    per-item homing (catbox._home); this function is the fixed-mode
+    fallback where there is no item yet: the first enabled account stands
+    in, and a pool that cannot be read at all falls back to account 1 so a
+    scan never crashes on an unconfigured pool."""
     try:
         import torbox_pool
         accts = torbox_pool.accounts()
