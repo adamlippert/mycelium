@@ -507,6 +507,8 @@ def internal_stream_report(token: str):
 
 @bp.get("/ui/api/virtual-items")
 def ui_api_virtual_items():
+    if not auth.is_admin():
+        return jsonify(error="admin required"), 403
     items = db.get_all_virtual_items()
     return jsonify(items=[{
         "id": i["id"], "token": i["token"], "title": i["title"], "media_type": i["media_type"],

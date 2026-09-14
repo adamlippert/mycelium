@@ -21,6 +21,10 @@ All notable changes to Mycelium are documented in this file.
   /ui/api/logs. Any logged-in non-admin could previously read the last
   100 raw log lines, including scraper and CDN URLs, tokens and
   exception text.
+- /ui/api/virtual-items (the list route) now requires an admin session.
+  Tokens are unauthenticated capability URLs, so any logged-in non-admin
+  could previously dump and redistribute the entire library as anonymous
+  stream links.
 
 ### Changed
 
