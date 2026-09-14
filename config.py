@@ -100,11 +100,6 @@ ALLOW_4K = _env("ALLOW_4K", "true").lower() in ("1", "true", "yes")
 EXCLUDE_REMUX = _env("EXCLUDE_REMUX", "true").lower() in ("1", "true", "yes")
 EXCLUDE_BLURAY = _env("EXCLUDE_BLURAY", "false").lower() in ("1", "true", "yes")
 EXCLUDE_CAM = _env("EXCLUDE_CAM", "true").lower() in ("1", "true", "yes")
-# Exclude Dolby Vision Profile 5 (single-layer, no HDR10 fallback). Profile 5
-# releases have DV/DoVi in the name but no HDR10 alongside  -  they fail direct
-# play on Jellyfin Android TV, Linux app, and most browser clients. Profile 8
-# (DV + HDR10) works fine because it has an HDR10 base layer as fallback.
-EXCLUDE_DV_P5 = _env("EXCLUDE_DV_P5", "true").lower() in ("1", "true", "yes")
 # When true, never accept cam/telesync/screener even as a last resort (no
 # "only cam available, allowing them" fallback). When false, cam is allowed
 # only if it's the sole option.
