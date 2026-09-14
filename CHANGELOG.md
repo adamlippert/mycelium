@@ -33,6 +33,9 @@ All notable changes to Mycelium are documented in this file.
   mode, so the gate previously locked the entire Web Player out on any
   no-auth install; it now allows the request there, matching every other
   gate in the codebase.
+- /ui/api/discover/search clamps `page` with admin_query.clamp_int instead
+  of a bare `int()` call. `?page=x` used to raise a ValueError (a 500);
+  a large value went straight to TMDB unclamped.
 
 ### Changed
 

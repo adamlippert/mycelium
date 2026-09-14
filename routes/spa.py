@@ -7,6 +7,7 @@ import time
 
 from flask import Blueprint, jsonify, redirect, request, url_for
 
+import admin_query
 import auth
 import config as cfg
 import db
@@ -36,7 +37,7 @@ def ui_api_discover_search():
     q = (request.args.get("q") or "").strip()
     if not q:
         return jsonify(results=[])
-    page = int(request.args.get("page") or "1")
+    page = admin_query.clamp_int(request.args.get("page"), 1, 1, 500)
     results = tmdb.multi_search(q, page=page)
     results = _filter_by_language(results)
     _enrich_library_status(results)
