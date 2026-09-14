@@ -17,6 +17,10 @@ All notable changes to Mycelium are documented in this file.
   TORRENTIO_OPTS, appended into that URL, is a config segment users paste
   from Torrentio's own configure page and can carry a debrid API key; the
   log line now carries only the imdb id and media type.
+- /ui/logs now requires an admin session, matching its sibling
+  /ui/api/logs. Any logged-in non-admin could previously read the last
+  100 raw log lines, including scraper and CDN URLs, tokens and
+  exception text.
 
 ### Changed
 

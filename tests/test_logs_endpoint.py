@@ -61,3 +61,15 @@ def test_the_endpoint_is_registered_and_admin_only():
     assert m
     assert "auth.is_admin()" in m.group(1)
     assert "get_structured(" in m.group(1)
+
+
+def test_the_legacy_ui_logs_route_is_admin_only_too():
+    """/ui/logs served the last 100 raw log lines - scraper URLs, CDN URLs,
+    tokens, exception text - to any logged-in user, not just admins, while
+    its sibling /ui/api/logs already checked auth.is_admin(). Item 4 of the
+    1.0 readiness blocker pass closes that gap."""
+    src = src_for_route("/ui/logs")
+    import re
+    m = re.search(r'@bp\.get\("/ui/logs"\)\n(.*?)(?=\n@(?:bp|app)\.|\Z)', src, re.S)
+    assert m
+    assert "auth.is_admin()" in m.group(1)
