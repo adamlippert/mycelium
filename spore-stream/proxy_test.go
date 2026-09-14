@@ -126,3 +126,71 @@ func TestProxySynthesizesProtoFromTheConnectionWhenAbsent(t *testing.T) {
 		t.Fatalf("X-Forwarded-Proto = %q, want \"http\" synthesized from the connection", got.Get("X-Forwarded-Proto"))
 	}
 }
+
+// Fix wave item 1: /spore-nfs/tree lists every playable token, so the front
+// must refuse the whole family from outside the container the same way it
+// already refuses /internal/. The helpers that legitimately call these
+// routes run beside gunicorn and reach it over loopback, never through this
+// process.
+
+func newRouterFront(t *testing.T) (*httptest.Server, chan string) {
+	t.Helper()
+	reached := make(chan string, 4)
+	proxy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached <- "proxy " + r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	})
+	stream := func(w http.ResponseWriter, r *http.Request, token string) {
+		reached <- "stream " + token
+		w.WriteHeader(http.StatusOK)
+	}
+	front := httptest.NewServer(newRouter(proxy, stream))
+	t.Cleanup(front.Close)
+	return front, reached
+}
+
+func TestRouterRefusesTheLoopbackOnlyPathFamilies(t *testing.T) {
+	front, reached := newRouterFront(t)
+
+	for _, path := range []string{
+		"/internal/stream-resolve/abc",
+		"/spore-nfs/tree",
+		"/spore-nfs/size/abc",
+	} {
+		resp, err := http.Get(front.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("GET %s = %d, want 404", path, resp.StatusCode)
+		}
+		select {
+		case got := <-reached:
+			t.Fatalf("GET %s reached the upstream as %q, want it refused here", path, got)
+		default:
+		}
+	}
+}
+
+func TestRouterStillProxiesAndStreamsEverythingElse(t *testing.T) {
+	front, reached := newRouterFront(t)
+
+	resp, err := http.Get(front.URL + "/ui/api/overview")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if got := <-reached; got != "proxy /ui/api/overview" {
+		t.Fatalf("reached = %q, want the request proxied to gunicorn", got)
+	}
+
+	resp, err = http.Get(front.URL + "/spore-stream/deadbeef")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if got := <-reached; got != "stream deadbeef" {
+		t.Fatalf("reached = %q, want the token served by this process", got)
+	}
+}

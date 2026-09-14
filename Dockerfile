@@ -91,7 +91,11 @@ COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 ENTRYPOINT ["docker-entrypoint.sh"]
 
-ENV MYCELIUM_BASE=http://127.0.0.1:8088
+# MYCELIUM_BASE (the base URL spore-nfs and spore-smb call for
+# /spore-nfs/tree and /spore-nfs/size) is set per process in the CMD
+# below, not as an ENV here: the value that works differs between the
+# two front modes, and those routes are loopback-only, so it has to be
+# whichever port gunicorn itself listens on, never the exposed one.
 
 EXPOSE 8088 2049 445
 
@@ -111,8 +115,13 @@ sys.exit(0 if r.status==200 else 1)" || exit 1
 # gunicorn on the exposed port with its own (complete) /spore-stream route,
 # where --threads is once again the ceiling on simultaneous open streams.
 CMD ["sh", "-c", "\
-( LISTEN_ADDR=:2049 spore-nfs; echo \"[mycelium] spore-nfs exited (status $?); the NFS share is now unavailable\" >&2 ) & \
-( LISTEN_ADDR=0.0.0.0:445 spore-smb; echo \"[mycelium] spore-smb exited (status $?); the SMB share is now unavailable\" >&2 ) & \
+if [ \"${STREAM_FRONT_ENABLED:-true}\" = \"true\" ]; then \
+  HELPER_BASE=http://127.0.0.1:${GUNICORN_PORT:-8090}; \
+else \
+  HELPER_BASE=http://127.0.0.1:${LISTEN_PORT}; \
+fi; \
+( LISTEN_ADDR=:2049 MYCELIUM_BASE=${HELPER_BASE} spore-nfs; echo \"[mycelium] spore-nfs exited (status $?); the NFS share is now unavailable\" >&2 ) & \
+( LISTEN_ADDR=0.0.0.0:445 MYCELIUM_BASE=${HELPER_BASE} spore-smb; echo \"[mycelium] spore-smb exited (status $?); the SMB share is now unavailable\" >&2 ) & \
 if [ \"${STREAM_FRONT_ENABLED:-true}\" = \"true\" ]; then \
   ( while true; do STREAM_LISTEN=${LISTEN_HOST}:${LISTEN_PORT} STREAM_UPSTREAM=http://127.0.0.1:${GUNICORN_PORT:-8090} spore-stream; \
       echo \"[mycelium] spore-stream exited (status $?); restarting in 1s\" >&2; sleep 1; done ) & \

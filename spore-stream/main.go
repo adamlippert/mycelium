@@ -3,9 +3,11 @@
 // Listens on the container's exposed port. It owns exactly one path family,
 // /spore-stream/<token>, where each open stream costs a goroutine instead of
 // one of gunicorn's OS threads; every other request is reverse-proxied to
-// gunicorn unchanged. Python keeps every decision (materialize, the TorBox
-// budget, liveness checks, .fsh cache builds) behind
-// /internal/stream-resolve/<token>; this process only shovels bytes.
+// gunicorn unchanged, except for the two loopback-only path families
+// (/internal/ and /spore-nfs/), which are refused with a 404. Python keeps
+// every decision (materialize, the TorBox budget, liveness checks, .fsh
+// cache builds) behind /internal/stream-resolve/<token>; this process only
+// shovels bytes.
 //
 // Disable with STREAM_FRONT_ENABLED=false (see the Dockerfile CMD): gunicorn
 // then binds the exposed port directly and its own /spore-stream route,
@@ -74,6 +76,35 @@ func newProxy(upstream *url.URL) *httputil.ReverseProxy {
 	}
 }
 
+// newRouter builds the front's one handler: /spore-stream/<token> is served
+// here, /internal/ and /spore-nfs/ are refused, everything else goes to
+// gunicorn. Extracted from main so the routing decisions can be exercised
+// directly in tests without a real streamer.
+func newRouter(proxy http.Handler, serveStream func(http.ResponseWriter, *http.Request, string)) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// The resolve endpoint (and anything else under /internal/) is
+		// loopback-only business between this process and gunicorn.
+		// /spore-nfs/ is the same kind of traffic: the tree and size
+		// endpoints exist for the NFS and SMB helpers running beside
+		// gunicorn in this container, and the tree lists every playable
+		// token, which is an unauthenticated capability link. Both
+		// families answer 404 rather than 403, so an outside caller
+		// learns nothing about what does exist here. Python refuses
+		// them over the same rule; this is the outer line.
+		if strings.HasPrefix(r.URL.Path, "/internal/") || strings.HasPrefix(r.URL.Path, "/spore-nfs/") {
+			http.NotFound(w, r)
+			return
+		}
+		if token, ok := strings.CutPrefix(r.URL.Path, "/spore-stream/"); ok && !strings.Contains(token, "/") && token != "" {
+			serveStream(w, r, token)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	})
+	return mux
+}
+
 func main() {
 	listen := env("STREAM_LISTEN", "0.0.0.0:8088")
 	upstreamRaw := env("STREAM_UPSTREAM", "http://127.0.0.1:8090")
@@ -86,20 +117,7 @@ func main() {
 
 	streamer := newStreamer(upstreamRaw)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// The resolve endpoint (and anything else under /internal/) is
-		// loopback-only business between this process and gunicorn.
-		if strings.HasPrefix(r.URL.Path, "/internal/") {
-			http.NotFound(w, r)
-			return
-		}
-		if token, ok := strings.CutPrefix(r.URL.Path, "/spore-stream/"); ok && !strings.Contains(token, "/") && token != "" {
-			streamer.serve(w, r, token)
-			return
-		}
-		proxy.ServeHTTP(w, r)
-	})
+	mux := newRouter(proxy, streamer.serve)
 
 	srv := &http.Server{
 		Addr:              listen,

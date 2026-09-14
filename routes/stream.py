@@ -23,6 +23,18 @@ log = logging.getLogger("mycelium")
 bp = Blueprint("stream", __name__)
 
 
+def _from_loopback() -> bool:
+    """True when the request reached this process over the container's own
+    loopback interface.
+
+    The only honest signal available here: the Go front and the two share
+    helpers all talk to gunicorn over 127.0.0.1, while anything arriving
+    from the outside carries the proxy's address (or the client's own).
+    X-Forwarded-For is not consulted on purpose, since a caller can set it.
+    """
+    return request.remote_addr in ("127.0.0.1", "::1")
+
+
 # ── Catbox lazy materialization ───────────────────────────────────────────────
 
 def _parse_byte_range(range_hdr: str, file_size: int) -> tuple[int, int]:
@@ -84,7 +96,15 @@ def spore_nfs_tree():
     virtual item, reusing the same movies/series folder layout as the Jellyfin
     .strm tree (strm_path), just with the extension swapped for the real
     media container instead of .strm. spore-nfs polls this to build its
-    in-memory filesystem; it does not touch the filesystem itself."""
+    in-memory filesystem; it does not touch the filesystem itself.
+
+    Loopback-only, like the /internal/* endpoints: the listing names every
+    playable token, and a token is an unauthenticated capability link, so
+    an outside caller must not be able to enumerate the library. spore-nfs
+    runs in this container and reaches gunicorn over 127.0.0.1; the Go
+    front refuses to proxy /spore-nfs/ from outside as a second line."""
+    if not _from_loopback():
+        abort(404)
     from pathlib import Path
     entries = []
     for item in db.get_all_virtual_items():
@@ -121,7 +141,13 @@ def spore_nfs_size(token: str):
     """Cheap file-size lookup for spore-nfs's Attr()/ReadDir(): a TorBox
     checkcached call, which reports cached files without adding anything to
     the account. Used for library scans; actual playback still goes through
-    /spore-stream/<token>, which materializes for real."""
+    /spore-stream/<token>, which materializes for real.
+
+    Loopback-only for the same reason as the tree endpoint above: it would
+    otherwise confirm to any caller which tokens exist and how large their
+    files are."""
+    if not _from_loopback():
+        abort(404)
     item = db.get_virtual_item(token)
     if not item:
         abort(404)
@@ -498,7 +524,7 @@ def internal_stream_resolve(token: str):
     front is disabled gunicorn is exposed directly, where this must not be
     reachable (the CDN URLs it returns are unauthenticated capability links).
     The Go front additionally refuses to proxy /internal/* at all."""
-    if request.remote_addr not in ("127.0.0.1", "::1"):
+    if not _from_loopback():
         abort(403)
     res = _prepare_stream(token)
     if "error" in res:
@@ -516,7 +542,7 @@ def internal_stream_report(token: str):
     Loopback-only for the same reason as the resolve endpoint: the front
     talks to gunicorn over 127.0.0.1, and when the front is disabled
     gunicorn is exposed directly, where this must not be reachable."""
-    if request.remote_addr not in ("127.0.0.1", "::1"):
+    if not _from_loopback():
         abort(403)
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):

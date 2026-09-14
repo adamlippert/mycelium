@@ -83,7 +83,12 @@ def test_internal_resolve_is_loopback_only():
         r"def internal_stream_resolve\(.*?\n(.*?)\n@bp\.", src, re.S)
     assert m, "internal resolve endpoint not found"
     body = m.group(1)
-    assert '"127.0.0.1"' in body and "403" in body
+    # The address literals moved into the shared _from_loopback() predicate
+    # when /spore-nfs/ gained the same rule; the endpoint still refuses a
+    # non-loopback caller, and the predicate still pins the two addresses.
+    assert "_from_loopback()" in body and "403" in body
+    pred = re.search(r"def _from_loopback\(\).*?return ([^\n]+)", src, re.S)
+    assert pred and '"127.0.0.1"' in pred.group(1) and '"::1"' in pred.group(1)
 
 
 def test_internal_paths_skip_session_auth_but_nothing_else_changed():
@@ -110,6 +115,25 @@ def test_dockerfile_wires_the_go_front():
     assert "STREAM_FRONT_ENABLED" in src
     # Rollback path: front disabled binds gunicorn to the exposed port.
     assert re.search(r"STREAM_FRONT_ENABLED[^\n]*false", src) or "else" in src
+
+
+def test_the_share_helpers_are_pointed_at_gunicorn_on_loopback():
+    """/spore-nfs/tree and /spore-nfs/size are loopback-only since 1.0 and
+    the front refuses to proxy them, so spore-nfs and spore-smb have to call
+    gunicorn's own address. Their built-in defaults (the container name, and
+    the exposed port where the front listens) both miss it, so the CMD must
+    pass MYCELIUM_BASE to each of them."""
+    src = _src("Dockerfile")
+    for helper in ("spore-nfs", "spore-smb"):
+        launch = re.search(r"\( LISTEN_ADDR=[^\n]*?\b" + helper + r"\b", src)
+        assert launch, f"{helper} is not launched from the CMD"
+        assert "MYCELIUM_BASE=" in launch.group(0), (
+            f"{helper} is launched without MYCELIUM_BASE, so it calls its own "
+            "default base URL instead of gunicorn on loopback")
+    # Both modes: with the front on gunicorn sits on GUNICORN_PORT, with it
+    # off on the exposed port. Neither may be a non-loopback address.
+    assert "HELPER_BASE=http://127.0.0.1:${GUNICORN_PORT:-8090}" in src
+    assert "HELPER_BASE=http://127.0.0.1:${LISTEN_PORT}" in src
 
 
 def test_cold_head_validates_the_cdn_status():

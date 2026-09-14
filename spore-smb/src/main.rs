@@ -860,6 +860,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // that logging isn't lost.
     tracing_subscriber::fmt().init();
 
+    // The container CMD always sets MYCELIUM_BASE to the loopback address
+    // gunicorn itself listens on, which is what /spore-nfs/tree and
+    // /spore-nfs/size answer: both are loopback-only since 1.0, and the Go
+    // streaming front refuses to proxy them from outside. This fallback only
+    // applies to a hand-started process, which then needs an explicit
+    // MYCELIUM_BASE to reach anything.
     let base_url = env_or("MYCELIUM_BASE", "http://127.0.0.1:8088");
     let listen: std::net::SocketAddr = env_or("LISTEN_ADDR", "0.0.0.0:445").parse()?;
     let max_concurrent_fetches: usize = env_or("MAX_CONCURRENT_FETCHES", "4").parse()?;

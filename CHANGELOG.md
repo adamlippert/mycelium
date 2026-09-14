@@ -34,6 +34,16 @@ All notable changes to Mycelium are documented in this file.
 
 ### Security
 
+- `/spore-nfs/tree` and `/spore-nfs/size/<token>` now answer only a caller
+  on the container's loopback interface, and the Go streaming front refuses
+  to proxy the whole `/spore-nfs/` family from outside, exactly as it
+  already refused `/internal/`. Both routes sit outside the login gate
+  because the NFS and SMB share helpers have no session, so before this
+  anyone who could reach Mycelium could list every playable token (each an
+  unauthenticated capability link to a library item) and ask its file size.
+  The image's start command now points both helpers at gunicorn's own
+  loopback address in either streaming-front mode; a helper run outside the
+  container needs `MYCELIUM_BASE` set to a loopback address of its own.
 - The Go streaming front now appends its own peer address to
   X-Forwarded-For instead of passing it through untouched. Previously
   every request behind the front reached Flask as if it came from

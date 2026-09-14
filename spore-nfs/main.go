@@ -33,6 +33,12 @@ import (
 )
 
 var (
+	// The container CMD always sets MYCELIUM_BASE to the loopback address
+	// gunicorn itself listens on, which is what /spore-nfs/tree and
+	// /spore-nfs/size answer: both are loopback-only since 1.0, and the
+	// Go streaming front refuses to proxy them from outside. This
+	// fallback only applies to a hand-started process and then needs an
+	// explicit MYCELIUM_BASE to reach anything.
 	myceliumBase = envOr("MYCELIUM_BASE", "http://mycelium:8088")
 	listenAddr   = envOr("LISTEN_ADDR", ":2049")
 	treeTTL      = 10 * time.Second

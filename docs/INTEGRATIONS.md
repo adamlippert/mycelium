@@ -300,3 +300,16 @@ Neither feed says whether TorBox has a release cached. Mycelium checks
 TorBox itself, exactly as it does for Torrentio results, so the cache
 badge and the add budget behave the same. The Scrapers page shows each
 one with its latency and state; a wrong URL shows as "down".
+
+## The NFS and SMB shares
+
+Two helper processes serve the virtual library as read-only network
+shares next to the web app: `spore-nfs` on port 2049 and `spore-smb` on
+port 445. Both build their file listing from two HTTP routes on Mycelium
+itself, `/spore-nfs/tree` and `/spore-nfs/size/<token>`, and neither
+route has answered a caller from outside the container since 1.0: the
+tree lists every playable token, and a token is an unauthenticated
+capability link, so the helpers have to run in the Mycelium container
+(which the image's own start command does, pointing `MYCELIUM_BASE` at
+whichever loopback port the app listens on) or, if you run one
+elsewhere, reach the app through a loopback address of its own.

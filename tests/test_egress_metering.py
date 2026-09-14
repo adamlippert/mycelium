@@ -66,8 +66,12 @@ def test_the_report_endpoint_is_loopback_only():
                   src, re.S)
     assert m, "no /internal/stream-report route"
     body = m.group(1)
-    assert '"127.0.0.1"' in body, "the report endpoint is not loopback gated"
+    # The address literals live in the shared _from_loopback() predicate
+    # since /spore-nfs/ gained the same rule; both still have to be there.
+    assert "_from_loopback()" in body, "the report endpoint is not loopback gated"
     assert "403" in body
+    pred = re.search(r"def _from_loopback\(\).*?return ([^\n]+)", src, re.S)
+    assert pred and '"127.0.0.1"' in pred.group(1) and '"::1"' in pred.group(1)
 
 
 def test_the_go_front_reports_bytes():

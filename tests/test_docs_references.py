@@ -30,6 +30,8 @@ NOT_VARIABLES = {
                                            # shell, not by config.py
     "STREAM_FRONT_ENABLED",    # read by the Go streaming front / entrypoint shell, not by
                                 # config.py at all (no `_env(...)` call for it there)
+    "MYCELIUM_BASE",           # read by the spore-nfs and spore-smb helper processes, set
+                                # per process in the Dockerfile CMD, not by config.py
 }
 # RETRY_BACKOFF_MINUTES and the seven-category, four-state filter rule model
 # (RESOLUTION_PREFERRED, SOURCE_EXCLUDED, ... down to LANGUAGE_STRICT, 35
