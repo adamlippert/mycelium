@@ -171,7 +171,7 @@ CDN fails outright (an unusable HEAD response while building the
 fast-start cache), 503 when the CDN itself is rate limiting (a HEAD
 returning 429), and 416 for a `Range` header that does not fit the file.
 In the default deployment the Go streaming front (`spore-stream/`) serves
-these bytes itself and calls `/internal/stream-resolve` instead; this
+these bytes itself and calls `/internal/stream-resolve/<token>` instead; this
 Flask route is the complete fallback when `STREAM_FRONT_ENABLED=false`.
 
 ```
@@ -187,7 +187,7 @@ Content-Length: 1048576
 
 The decision endpoint the Go streaming front calls instead of asking Flask
 to serve bytes itself: the same materialize/liveness logic as
-`/spore-stream`, returned as JSON (`mode`, and depending on `mode` a
+`/spore-stream/<token>`, returned as JSON (`mode`, and depending on `mode` a
 `cdn_url`, a `size`, or a `.fsh` cache path) so the Go process can transfer
 the bytes on its own. Refuses any caller whose address is not
 `127.0.0.1`/`::1` with 403; the CDN URLs it returns are unauthenticated
@@ -197,7 +197,7 @@ all. Documented here because it is part of the frozen contract between the
 two processes in this image, not because a third party should call it.
 On success, answers the same `mode`-tagged JSON the route above acts on
 (`redirect`, `cold` or `warm`, without the raw `.fsh` bytes). On the same
-failures `/spore-stream` raises via `abort()`, this route instead answers
+failures `/spore-stream/<token>` raises via `abort()`, this route instead answers
 JSON with the matching status code: 404 `{"error": "materialize failed"}`,
 502 `{"error": "HEAD failed"}` or `{"error": "HEAD status <code>"}`, and
 503 `{"error": "HEAD status 429"}` when the CDN itself is rate limiting.
@@ -213,7 +213,7 @@ HTTP/1.1 404 NOT FOUND
 
 ### `POST /internal/stream-report/<token>`
 
-Loopback-only, for the same reason as `/internal/stream-resolve`: the Go
+Loopback-only, for the same reason as `/internal/stream-resolve/<token>`: the Go
 front reports how many bytes it actually sent for one finished stream, so
 Mycelium's egress estimate stays accurate. Body: `{"bytes": <integer>}`.
 Answers `{"ok": true}`, or 400 when the body is not a JSON object or

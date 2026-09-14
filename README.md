@@ -392,7 +392,7 @@ flowchart LR
 | Component | Role |
 |---|---|
 | `processor.py` | Request, search, cache check, add to TorBox |
-| `catbox.py` | Lazy materialize / release lifecycle |
+| `catbox.py` / `catbox_jobs.py` / `catbox_packs.py` | Lazy materialize / release lifecycle, background jobs, season-pack file mapping |
 | `strm_generator.py` | Writes `.strm` files |
 | `monitor.py` | New-episode tracking for monitored series |
 | `upgrader.py` | Auto-upgrade quality + season-pack consolidation |
@@ -402,7 +402,10 @@ flowchart LR
 | `mdblist.py` | MDBList list sync + auto-request |
 | `plugins/trakt/` | Trakt OAuth, watchlist sync, watched status, scrobble, auto-request |
 | `webdav.py` | Optional WebDAV server for Plex/Emby |
-| `app.py` | Flask app, scheduler, all routes |
+| `appcore.py` | The Flask app itself |
+| `app.py` | Startup: scheduler, plugin loading, entrypoint |
+| `routes/` | All routes, one blueprint module per area (auth, integration, setup, stream, admin_library, admin_misc, spa) |
+| `version.py` | `APP_VERSION` |
 
 ---
 
@@ -420,53 +423,29 @@ flowchart LR
 
 Most settings are hot-reloadable via the Settings tab. Only scheduler intervals require a restart.
 
-Full reference: [`.env.example`](.env.example). Key variables:
-
-Talking to the rest of the stack (Radarr, Sonarr, Seerr, Jellyfin webhooks and targeted refresh): [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
-
-Release filtering is a four-state rule model. Every one of seven categories -
-`RESOLUTION`, `SOURCE`, `ENCODE`, `VISUAL_TAG`, `AUDIO_TAG`, `AUDIO_CHANNELS`,
-`LANGUAGE` - has its own `{CATEGORY}_PREFERRED` / `_EXCLUDED` / `_REQUIRED` /
-`_INCLUDED` / `_STRICT` settings (35 keys total, edited via Settings >
-Filtering rules or set directly in `.env`). Every category is evaluated
-against the full candidate pool independently, so the result never depends on
-which rule happens to run first, and a dropped candidate always carries its
-reason (visible in the logs and the per-candidate verdicts). `preferred`
-never rescues - it only breaks ties among survivors. `included` overrides
-every other rule in every category, so use it deliberately.
+Full reference, every variable by tier (supported, advanced, deployment) with
+its default and meaning: [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md). The
+ten most common:
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `TORBOX_API_KEY` | *(wizard)* | From [torbox.app](https://torbox.app) > Settings > API |
 | `CATBOX_MODE` | `false` | Lazy materialization via proxy URLs (recommended) |
 | `CATBOX_HOST` | *(wizard)* | Externally reachable URL for proxy strm URLs |
-| `CATBOX_IDLE_MINUTES` | `1440` | Idle time before torrent is released (1 day) |
-| `{CATEGORY}_PREFERRED` | *(empty)* | Tie-break only, ranks a matching value ahead of others. Never rescues a value another rule dropped. |
-| `{CATEGORY}_EXCLUDED` | *(empty)* | Drops a matching candidate. Self-relaxes (with a log line) if it would empty the whole candidate pool, unless `{CATEGORY}_STRICT` is set. |
-| `{CATEGORY}_REQUIRED` | *(empty)* | Drops every candidate that does not match. A release the scraper could not tag for this category ("unknown") always survives - it never counts as a mismatch. |
-| `{CATEGORY}_INCLUDED` | *(empty)* | Rescues a matching candidate from every other rule, in every category - even `_REQUIRED`/`_EXCLUDED` on an unrelated category. The one setting that can seriously surprise you; use it deliberately. |
-| `{CATEGORY}_STRICT` | `false` | Hard-fail `{CATEGORY}_EXCLUDED`/`_REQUIRED` instead of self-relaxing when they would empty the pool |
-| `MIN_SEEDERS` | `3` | Minimum seeder count |
-| `SORT_ORDER` | `season_pack,resolution,language,source,encode,seeders,size` | Tie-break order for survivors. `cached`, `visual_tag`, `audio_tag` also exist but are off by default so they don't silently change what you download |
-| `AUTO_UPGRADE_ENABLED` | `true` | Periodic upgrade scan |
-| `MULTI_DEBRID_ENABLED` | `false` | RealDebrid fallback when TorBox misses |
-| `WEBDAV_ENABLED` | `false` | Serve library as virtual .mkv files (Plex) |
-| `DISCORD_WEBHOOK_URL` | *(empty)* | Optional notifications (also configurable in Settings > Notifications) |
-| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | *(empty)* | Optional notifications |
-| `OPENSUBTITLES_API_KEY` | *(empty)* | Auto subtitle download |
-| `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` | *(empty)* | Trakt app credentials, from [trakt.tv/oauth/applications](https://trakt.tv/oauth/applications) |
-| `TRAKT_AUTO_REQUEST_CAP` / `MDBLIST_AUTO_REQUEST_CAP` | `10` | Max new items auto-requested per sync run |
-| `AUTO_APPROVE_DAILY_LIMIT` / `AUTO_APPROVE_ACTOR_DAILY_LIMIT` | `5` | Daily budget for genre-rule fill / favorite-actor fill |
-| `EXCLUDE_UNDERSIZED_RELEASES` / `EXCLUDE_UNDERSIZED_STRICT` | `true` / `false` | Reject releases too small to be real for their claimed quality + runtime; `_STRICT` hard-fails instead of falling back when only undersized candidates remain |
-| `METRICS_TOKEN` | *(empty)* | Bearer token for `/metrics` scraping |
-| `ARR_SYNC_ENABLED` | `false` | Mirror every title into Radarr/Sonarr as a monitored, search-off entry; remove on purge |
-| `ARR_SYNC_INTERVAL_MINUTES` | `60` | Minutes between reconciles with the arrs; adds what they lack and purges what was deleted there. `0` disables it |
-| `DISK_SYNC_INTERVAL_MINUTES` | `60` | Minutes between checks for titles whose `.strm` files were deleted on disk. `0` disables it |
-| `ARR_STUBS_ENABLED` / `ARR_STUB_PATH` | `false` / `/arr-stubs` | Stub `.mkv` per title in a folder the arrs mount as their root, so titles show as owned. Needs `CATBOX_MODE` |
-| `RADARR_ROOT_FOLDER` / `SONARR_ROOT_FOLDER` | *(empty)* | The arr's root folder for mirrored titles; pick with Load in Settings |
-| `RADARR_QUALITY_PROFILE` / `SONARR_QUALITY_PROFILE` | *(empty)* | Quality profile for mirrored titles, by name; pick with Load in Settings. Blank uses the arr's first profile |
-| `JELLYFIN_MEDIA_PATH` | *(empty)* | Where Jellyfin's container sees `MEDIA_PATH`, for the targeted refresh; blank means the same path |
-| `SEERR_REPORT_STATUS` / `SEERR_DECLINE_WANTED_AFTER_DAYS` | `true` / `30` | Report outcomes to Seerr; decline a title still wanted after this many days |
+| `JELLYFIN_URL` | *(wizard)* | Address Mycelium can reach Jellyfin on |
+| `JELLYFIN_API_KEY` | *(wizard)* | Dashboard, API Keys in Jellyfin; sent as `Authorization: MediaBrowser Token` |
+| `TMDB_API_KEY` | *(wizard)* | Powers Discover, posters and stub metadata |
+| `SEERR_URL` / `SEERR_API_KEY` | *(empty)* | Only if you run Seerr/Jellyseerr/Overseerr as an additional request portal |
+| `WEBHOOK_SECRET` | *(empty)* | Shared secret for `/webhook`, `/torbox-webhook` and `/webhook/arr`; rotatable from Settings |
+| `ARR_SYNC_ENABLED` | `false` | Mirror every title into Radarr/Sonarr as a monitored, search-off entry |
+| `AUTH_ENABLED` | `false` | Ask for a login; off is only safe behind another login |
+
+Release filtering is a four-state rule model: every one of seven categories
+(resolution, source, encode, visual tag, audio tag, audio channels, language)
+has its own preferred/excluded/required/included/strict settings, edited via
+Settings > Filtering rules or set directly in `.env`. Talking to the rest of
+the stack (Radarr, Sonarr, Seerr, Jellyfin webhooks and targeted refresh):
+[docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 
 ---
 
