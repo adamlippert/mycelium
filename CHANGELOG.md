@@ -57,6 +57,14 @@ All notable changes to Mycelium are documented in this file.
   proxy's own address, same as before this fix. On a default install the
   outer proxy runs in its own container, so operators who want the
   limiter to key per visitor need to list that proxy's network there.
+  Upgrading matters for one setup in particular: an install with the
+  streaming front enabled that relied on TRUSTED_PROXY_AUTH while
+  TRUSTED_PROXY_NETWORKS was left at its default accepted a forwarded
+  username from everyone before this release and accepts it from nobody
+  after it, because the address checked is now the real peer instead of
+  loopback. Listing the network the proxy connects from in Settings,
+  Security, Trusted networks restores it, and is what the setting was
+  always meant to hold.
 - torrentio.py no longer logs the full Torrentio request URL at INFO.
   TORRENTIO_OPTS, appended into that URL, is a config segment users paste
   from Torrentio's own configure page and can carry a debrid API key; the
@@ -97,6 +105,40 @@ All notable changes to Mycelium are documented in this file.
   catbox_packs.py. Their log lines now carry catbox_jobs or catbox_packs
   as the logger name instead of catbox; the messages themselves are
   unchanged.
+- Internal: app.py is split. Every route now lives in the `routes/`
+  package, one blueprint module per area; the Flask app object, its
+  extensions and its error handlers live in appcore.py; `APP_VERSION`
+  lives in version.py, and app.py keeps only startup (scheduler, plugin
+  loading, entrypoint). No route path, method, response shape or variable
+  changed. A route table frozen before the split
+  (`tests/fixtures/route_table.json`) is compared against the registered
+  routes on every run, so a path that moves, gains a method or disappears
+  fails the suite.
+- Internal: the two long functions on the play path are split into named
+  decisions. catbox.materialize's ladder became three helpers, and
+  _prepare_stream's branches moved into stream_decisions.py. Same
+  decisions in the same order, same responses; the split is what makes
+  each branch testable on its own.
+- Internal: radarr.py and sonarr.py no longer carry byte-identical copies
+  of root_folders and quality_profiles. Both now come from a shared
+  arr_api.py and are re-exported, so radarr.root_folders(...) and
+  sonarr.root_folders(...) keep working unchanged, including the picker
+  lookups that import either module by name.
+- Internal: a safe-cleanup pass removed code that nothing called (dead
+  functions, unused imports, an unused frontend hook) and the retired
+  `EXCLUDE_DV_P5` line in config.py, which the four-state filter rules
+  replaced and nothing read any more. Comments that still described the
+  Jinja templates or a task number from an old plan were rewritten, and
+  three misleadingly named helpers renamed. No behaviour changed.
+- The documentation was swept against 0.17 through 0.29 (README, the
+  install guide, docs/INTEGRATIONS.md, docs/SCALING.md). A new guard,
+  `tests/test_docs_references.py`, fails the suite when a document names
+  an environment variable or a route that does not exist, so a later
+  removal cannot leave the docs pointing at it.
+- Added `docs/superpowers/reports/2026-09-14-catbox-comparison.md`, a
+  written comparison between this project's catbox mode and ElfHosted's
+  CatBox, kept as background for the design decisions the play path
+  rests on.
 
 ## [0.29.0] - 2026-09-14
 
