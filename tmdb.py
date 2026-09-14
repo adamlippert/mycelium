@@ -397,24 +397,6 @@ def list_providers(media_type: str = "movie", region: str = "NL") -> list[dict]:
     return out
 
 
-def watch_providers_for(tmdb_id: int, media_type: str = "movie", region: str = "NL") -> dict:
-    """Return where a specific title streams in a region."""
-    kind = "movie" if media_type == "movie" else "tv"
-    data = _get(f"/{kind}/{tmdb_id}/watch/providers")
-    if not data:
-        return {}
-    by_region = (data.get("results") or {}).get(region) or {}
-    def _names(key):
-        return [{"id": x.get("provider_id"), "name": x.get("provider_name"),
-                 "logo_path": x.get("logo_path")} for x in (by_region.get(key) or [])]
-    return {
-        "flatrate": _names("flatrate"),
-        "rent": _names("rent"),
-        "buy": _names("buy"),
-        "link": by_region.get("link"),
-    }
-
-
 def details(media_type: str, tmdb_id: int, region: str = "NL") -> dict | None:
     """Full detail page payload: metadata, credits, videos, providers, external IDs."""
     kind = "movie" if media_type == "movie" else "tv"

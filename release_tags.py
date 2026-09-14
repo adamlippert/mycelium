@@ -224,11 +224,6 @@ def values_for(category: str) -> tuple[str, ...]:
     return _STATIC_CATEGORY_VALUES[category]
 
 
-def language_values() -> tuple[str, ...]:
-    """Resolved lazily because streams imports release_tags indirectly."""
-    return values_for("language")
-
-
 def detect_audio_tags(text: str) -> tuple[str, ...]:
     blob = text or ""
     return tuple(v for v, p in _AUDIO_TAG_PATTERNS if p.search(blob))

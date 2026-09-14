@@ -164,10 +164,6 @@ def _content_length(strm_path: Path) -> int:
     return size
 
 
-def _mime_for(disk_path: Path) -> str:
-    return _VIDEO_MIME.get(disk_path.suffix.lower(), "application/octet-stream")
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # PROPFIND helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -356,14 +352,3 @@ def dispatch(path_suffix: str) -> Response:
 
     return Response("Method not allowed", status=405,
                      headers={"Allow": "OPTIONS, GET, HEAD, PROPFIND"})
-
-
-def invalidate_cache(path: Path | None = None) -> None:
-    """Drop cached URL/size for a single .strm (or everything)."""
-    with _cache_lock:
-        if path is None:
-            _url_cache.clear()
-            _size_cache.clear()
-        else:
-            _url_cache.pop(path, None)
-            _size_cache.pop(path, None)

@@ -10,11 +10,6 @@ def _threshold() -> int:
     return settings.get("BLACKLIST_FAIL_THRESHOLD", 3)
 
 
-def is_blacklisted(info_hash: str) -> bool:
-    rec = db.get_failed_hash(info_hash)
-    return bool(rec and rec["fail_count"] >= _threshold())
-
-
 def record_failure(info_hash: str, error: str | None = None) -> None:
     db.record_failed_hash(info_hash, error)
     try:

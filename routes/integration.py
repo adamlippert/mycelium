@@ -23,11 +23,6 @@ bp = Blueprint("integration", __name__)
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
-def _effective_webhook_secret() -> str:
-    """Return the active webhook secret: env var takes priority, else auto-generated."""
-    return webhook_secret.effective()
-
-
 def _check_auth() -> None:
     if not webhook_secret.effective():
         return

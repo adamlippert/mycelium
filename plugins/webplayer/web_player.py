@@ -1087,20 +1087,6 @@ def _extract_subtitles(cdn_url: str, sub_tracks: list,
             log.warning("web_player: sub extract failed track=%d", track["index"])
 
 
-def _subtitles_task(cdn_url: str, file_info: dict,
-                    imdb_id: str, media_type: str,
-                    season: int | None, episode: int | None,
-                    token: str, tmp_dir: Path) -> None:
-    """Extract embedded subs; fall back to OpenSubtitles when none found."""
-    _extract_subtitles(cdn_url, file_info["subtitle_tracks"], token, tmp_dir)
-
-    # If embedded extraction produced at least one VTT, we're done.
-    if list(tmp_dir.glob("sub_*.vtt")):
-        return
-
-    _fetch_external_subtitles(imdb_id, media_type, season, episode, tmp_dir)
-
-
 def _fetch_external_subtitles(imdb_id: str, media_type: str,
                                season: int | None, episode: int | None,
                                tmp_dir: Path) -> None:

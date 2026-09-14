@@ -331,11 +331,6 @@ def _get_season_episodes(imdb_id: str, season: int) -> tuple[int | None, list[di
         return None, []
 
 
-def _get_season_episode_count(imdb_id: str, season: int) -> int:
-    """Ask TMDB how many episodes a season has. Returns 0 on failure."""
-    return len(_get_season_episodes(imdb_id, season)[1])
-
-
 def _pack_contents(pack: TorrentioStream, season: int, episodes: list[int],
                    count_known: bool) -> tuple[list[int], list[int], dict[int, int]]:
     """Which of `episodes` a cached pack contains, from TorBox's file list:

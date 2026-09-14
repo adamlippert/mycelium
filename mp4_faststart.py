@@ -150,20 +150,6 @@ def _rewrite_offsets(moov: bytearray, delta: int, moov_offset: int) -> None:
     _walk(0, len(moov))
 
 
-def _find_box_in(data: bytes, typ: bytes) -> int:
-    """Return offset of first top-level box with the given type, or -1."""
-    pos = 0
-    while pos + 8 <= len(data):
-        try:
-            t, size, _ = _box_header(data, pos)
-        except ValueError:
-            break
-        if t == typ:
-            return pos
-        pos += size
-    return -1
-
-
 # ── Fetch + cache ─────────────────────────────────────────────────────────────
 
 def _get(url: str, start: int, end: int, max_retries: int = _MAX_429_RETRIES) -> bytes:
@@ -401,16 +387,6 @@ def extract_codec_private(token: str) -> bytes | None:
 
 
 # ── Virtual offset mapping ────────────────────────────────────────────────────
-
-def virtual_to_cdn(virtual_offset: int, info: dict) -> int | None:
-    """
-    Map a virtual fast-start file offset to the real CDN offset.
-    Returns None if the offset is inside the cached header (no CDN fetch needed).
-    """
-    if virtual_offset < info["header_size"]:
-        return None  # served from cached header
-    return virtual_offset - info["moov_size"]
-
 
 def serve_bytes(info: dict, cdn_url: str, v_start: int, v_end: int) -> bytes:
     """

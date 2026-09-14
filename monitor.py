@@ -309,26 +309,6 @@ def search_episode_now(imdb_id: str, title: str, season: int, episode: int) -> b
     return strm_exists_episode(title, season, episode)
 
 
-def _search_and_add_season(imdb_id: str, title: str, seasons: list[int]) -> None:
-    for season in seasons:
-        candidates = scrapers.fetch_candidates("series", imdb_id, season=season, episode=1,
-                                                prefer_season_pack=True)
-        if not candidates:
-            continue
-        cached_hashes = torbox.check_cached([s.info_hash for s in candidates])
-        ordered = [s for s in candidates if s.info_hash in cached_hashes] or candidates[:1]
-        import torbox_pool
-        acct = torbox_pool.choose_for_add().id
-        for stream in ordered:
-            try:
-                torbox.add_magnet(acct, stream.magnet, reason="seerr-sync", cached=stream.info_hash in cached_hashes)
-                torbox.wait_until_ready(acct, stream.info_hash)
-                log.info("Monitor: added new season %s S%02d", title, season)
-                break
-            except Exception as exc:
-                log.warning("Monitor: failed adding %s S%02d: %s", title, season, exc)
-
-
 # ── Movie sync ────────────────────────────────────────────────────────────────
 
 def sync_movies() -> None:

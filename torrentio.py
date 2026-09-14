@@ -130,22 +130,3 @@ def fetch_streams(
     parsed = [s for s in (_to_stream(r, season) for r in raw_streams) if s is not None]
     log.info("Torrentio returned %d streams (%d parsed)", len(raw_streams), len(parsed))
     return parsed
-
-
-def pick_best(
-    streams: list[TorrentioStream],
-    prefer_season_pack: bool = False,
-) -> TorrentioStream | None:
-    ranked = rank_streams(streams, prefer_season_pack=prefer_season_pack)
-    if not ranked:
-        return None
-    best = ranked[0]
-    log.info(
-        "Selected stream: quality=%s seeders=%d size=%.2fGB pack=%s hash=%s",
-        best.quality,
-        best.seeders,
-        best.size_gb,
-        best.is_season_pack,
-        best.info_hash,
-    )
-    return best

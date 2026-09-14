@@ -60,10 +60,6 @@ def loaded_plugins() -> list[dict]:
     return [p["meta"] for p in _loaded.values()]
 
 
-def is_loaded(name: str) -> bool:
-    return name in _loaded
-
-
 def session_fields(user_record: dict) -> dict:
     """Extra fields each plugin contributes to the session response."""
     extra: dict = {}

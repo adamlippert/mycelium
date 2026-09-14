@@ -673,20 +673,6 @@ def _metrics_inc(result: str) -> None:
         pass
 
 
-def _remove_strm(item: dict) -> None:
-    """Delete the .strm file for a definitively dead item so Jellyfin stops showing it."""
-    import os
-    strm_path = item.get("strm_path")
-    if not strm_path:
-        return
-    try:
-        if os.path.exists(strm_path):
-            os.remove(strm_path)
-            log.info("Catbox: removed dead .strm %s", strm_path)
-    except Exception as exc:
-        log.warning("Catbox: could not remove .strm %s: %s", strm_path, exc)
-
-
 _SEARCH_UNAVAILABLE = object()  # sentinel: search couldn't run (no imdb_id, network error)
 
 

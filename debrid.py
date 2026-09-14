@@ -32,11 +32,3 @@ def check_cached_multi(hashes: list[str]) -> dict[str, set[str]]:
     except Exception as exc:
         log.warning("RealDebrid check failed: %s", exc)
     return out
-
-
-def any_cached(hashes: list[str]) -> set[str]:
-    """Hashes cached on any provider."""
-    result: set[str] = set()
-    for s in check_cached_multi(hashes).values():
-        result |= s
-    return result
