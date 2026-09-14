@@ -147,6 +147,8 @@ sequenceDiagram
     Jellyfin->>TorBox: stream from CDN
 ```
 
+For larger libraries or busy installs, the hourly 60-add budget can become a constraint. Configure multiple TorBox API keys in Settings to scale the budget linearly: a new torrent goes to the least loaded healthy account, every play uses the account that holds its torrent, and a disabled or failing account hands its titles over on their next play. A single-key install is unchanged after the upgrade.
+
 </details>
 
 <details>

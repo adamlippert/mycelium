@@ -151,6 +151,41 @@ Deleting a single **episode** in Jellyfin removes that `.strm` file (Jellyfin
 has the rights to do so) but is not a title deletion, so it is ignored here;
 the repair job may regenerate the file. Delete the series instead.
 
+## TorBox: several accounts
+
+Mycelium can use multiple TorBox API keys as equal peers, so the hourly
+add budget scales with the number of accounts. Configure them in Settings,
+section Debrid, card "TorBox accounts": label each one, add its API key,
+then Test and Enable it. The existing `TORBOX_API_KEY` setting becomes
+account 1 labelled "main"; editing that setting updates account 1's key
+without losing its history.
+
+A new torrent goes to the enabled account holding the fewest torrents,
+ties broken by the most hourly budget remaining and then lowest id.
+Every play of a title uses the account that holds its torrent: a play
+never rebalances. When an account is disabled, its titles move to another
+account on their next play; Disable is the safe way to rotate keys without
+stopping streams. Removing an account is refused if it still holds titles;
+disable it instead. Account 1 cannot be removed.
+
+Accounts that answered 429 (budget exceeded) or 401/403 (auth failure) in
+the last ten minutes, or have fewer than two uncached adds left this hour,
+are skipped when distributing new torrents. If every account is excluded
+the one with the oldest 429 is used anyway, so a burst degrades to a 429
+and the usual cooldown.
+
+The Overview's TorBox card shows one column per enabled account, with its
+uncached adds against sixty, cached adds, torrents held and the time of its
+last 429 or auth failure. The status strip's "TorBox adds" cell sums across
+accounts and turns amber at 45. Health rows show "TorBox <label>" and
+"TorBox adds this hour (<label>)" per account when more than one account is
+configured; single-account installs keep the old names. The Library drawer's
+release card shows the account label next to the TorBox id when there is
+more than one account. Prometheus gauges include an `account` label on
+`mycelium_torbox_torrent_count` and `mycelium_torbox_total_bytes`, and
+new gauges `mycelium_torbox_createtorrent_used` (uncached adds this hour)
+and `mycelium_torbox_account_up` (0 if the account's key is being rejected).
+
 ## Jellyfin: versions and authentication
 
 Jellyfin 10.x and 12.x are supported. Mycelium authenticates every request

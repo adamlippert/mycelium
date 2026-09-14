@@ -30,7 +30,9 @@ touches:
 1. **TorBox allows 60 uncached `createtorrent` calls per hour, per API key.**
    That is about 1,440 distinct new plays per day across every user you have.
    It is enforced server-side and synchronised across their servers, so extra
-   IPs buy nothing; only extra accounts would.
+   IPs buy nothing; only extra accounts would. Mycelium's TorBox account pool
+   (0.29.0+) does exactly this: add multiple API keys in Settings to scale
+   the add budget linearly.
 2. **The app is pinned to one gunicorn worker.** Catbox's single-flight
    locks, the scan-burst detector and Flask-Limiter's `memory://` counters
    all live in process memory. Moving to Postgres without also moving that
