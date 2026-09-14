@@ -29,15 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 
-# test_strm_generator.py may leave a MagicMock in sys.modules["torbox"];
-# grab the real module the same way test_torbox_ratelimit.py does.
-_prior_torbox = sys.modules.get("torbox")
-sys.modules.pop("torbox", None)
 import torbox  # noqa: E402
-if _prior_torbox is not None:
-    sys.modules["torbox"] = _prior_torbox
-else:
-    sys.modules.pop("torbox", None)
 
 _ROOT = os.path.join(os.path.dirname(__file__), "..")
 

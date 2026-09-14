@@ -16,20 +16,7 @@ os.environ.setdefault("TORBOX_API_KEY", "test")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# Other test modules (test_strm_generator.py) replace sys.modules["torbox"]
-# with a MagicMock at collection time and only restore it once their own
-# tests run. Grab a real import for our own use, then put back whatever was
-# there so those other files' torbox_mod references stay mocked as they
-# expect - our own `torbox` name below stays bound to the real module either way.
-_prior_torbox = sys.modules.get("torbox")
-sys.modules.pop("torbox", None)
 import torbox  # noqa: E402
-if _prior_torbox is not None:
-    sys.modules["torbox"] = _prior_torbox
-else:
-    sys.modules.pop("torbox", None)
-
-
 import db
 
 

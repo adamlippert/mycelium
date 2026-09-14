@@ -6,13 +6,6 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-_prior_torbox = sys.modules.get("torbox")
-sys.modules.pop("torbox", None)
-import torbox  # noqa: E402
-if _prior_torbox is not None:
-    sys.modules["torbox"] = _prior_torbox
-else:
-    sys.modules.pop("torbox", None)
 
 import catbox  # noqa: E402
 import catbox_jobs  # noqa: E402
