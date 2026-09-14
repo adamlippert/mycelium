@@ -211,10 +211,10 @@ users, the playability state. That is the irreplaceable part.
 
 It does **not** include, and does not need to:
 
-- **`.strm` files** -- regenerated from the database by the repair job
-- **`.nfo` files, posters, artwork** -- regenerated
-- **The `.fsh` moov cache** -- rebuilt on the next play of each title
-- **The native Zilean index** (`/data/zilean_native.db`) -- re-syncs from
+- **`.strm` files**: regenerated from the database by the repair job
+- **`.nfo` files, posters, artwork**: regenerated
+- **The `.fsh` moov cache**: rebuilt on the next play of each title
+- **The native Zilean index** (`/data/zilean_native.db`): re-syncs from
   upstream, though a full rebuild is a large download
 
 So a restored database plus a repair pass gets you back. Nothing else has

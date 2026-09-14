@@ -69,7 +69,7 @@ that streams directly from TorBox or RealDebrid. No FUSE, no rclone, no local do
 | | Path | Purpose |
 |--|--|--|
 | **SPA** | `/` | Discover, Library, Watchlist, multi-user request management |
-| **Admin** | `/admin` | The Overview opens with a status strip (services, scrapers, TorBox adds, failures, queue, titles needing attention, pending approvals), then activity (plays today and this week, requests, egress), the library, one TorBox card, and collapsed reference sections, Library (every title with its status, requester, playability and queue state, plus a drawer with retry, re-resolve, purge, mirror and blacklist actions, and a candidate list to pick another release for a movie or an episode), Requests (every user request with approve, inline deny and reopen; per-user quotas; auto-approve rules), Users, Settings, Filtering rules, Scrapers, Blacklist, Maintenance, Logs, Releases |
+| **Admin** | `/admin` | The Overview opens with a status strip (services, scrapers, TorBox adds, failures, queue, titles needing attention, pending approvals), then activity (plays today and this week, requests, egress), the library, one TorBox card, and collapsed reference sections, Library (every title with its status, requester, playability and queue state, plus a drawer with retry, re-resolve, purge, mirror and blacklist actions, and a candidate list to pick another release for a movie, an episode or a whole season), Requests (every user request with approve, inline deny and reopen; per-user quotas; auto-approve rules), Users, Settings, Filter rules, Scrapers, Blacklist, Maintenance, Logs, Releases |
 
 **Works with:**
 
@@ -443,7 +443,7 @@ ten most common:
 Release filtering is a four-state rule model: every one of seven categories
 (resolution, source, encode, visual tag, audio tag, audio channels, language)
 has its own preferred/excluded/required/included/strict settings, edited via
-Settings > Filtering rules or set directly in `.env`. Talking to the rest of
+Settings > Filter rules or set directly in `.env`. Talking to the rest of
 the stack (Radarr, Sonarr, Seerr, Jellyfin webhooks and targeted refresh):
 [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 

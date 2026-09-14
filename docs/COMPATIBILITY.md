@@ -579,7 +579,7 @@ ZILEAN_URL
 | `SONARR_QUALITY_PROFILE` | `(empty)` | Profile new entries get. Blank uses the first profile. |
 | `SONARR_ROOT_FOLDER` | `(empty)` | Where mirrored series are filed in Sonarr. Blank uses its first root folder. |
 | `SONARR_URL` | `(empty)` | Address Mycelium can reach Sonarr on. |
-| `SORT_ORDER` | `(empty)` | Which properties decide between surviving releases, most important first. |
+| `SORT_ORDER` | `season_pack,resolution,language,source,encode,seeders,size` | Which properties decide between surviving releases, most important first. |
 | `SOURCE_EXCLUDED` | `remux,cam,ts,tc,scr,r5,ppvrip,workprint` | Drops a candidate whose source matches. Self-relaxes (with a log line) if it would empty the whole candidate pool, unless SOURCE_STRICT is set. |
 | `SOURCE_INCLUDED` | `(empty)` | Rescues a matching candidate from every other rule, in every category, even `_REQUIRED`/`_EXCLUDED` on an unrelated category. The one setting that can seriously surprise you; use it deliberately. |
 | `SOURCE_PREFERRED` | `webdl,webrip,web` | Tie-break only, ranks a matching source ahead of others. Never rescues a value another rule dropped. |
