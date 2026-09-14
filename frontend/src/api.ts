@@ -818,7 +818,7 @@ export interface SetupSchema {
   needs_first_admin: boolean;
 }
 
-/** GET /ui/api/library row shape (Task 2's read model). */
+/** GET /ui/api/library row shape. */
 export interface LibraryRow {
   id: number;
   imdb_id: string;
