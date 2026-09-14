@@ -14,6 +14,7 @@ import db
 import egress_estimate
 import settings as _settings_mod
 import strm_generator
+import stream_decisions
 import torbox
 from appcore import _csrf
 
@@ -235,8 +236,11 @@ def _prepare_cold(token: str, cdn_url: str) -> dict:
 
     # Cold cache: build .fsh in background, serve Range passthrough
     # meanwhile. _spore_cold_sizes caches file_size so repeated Range
-    # requests (FFmpeg seeks) skip the HEAD round-trip.
-    if token not in _spore_cold_sizes:
+    # requests (FFmpeg seeks) skip the HEAD round-trip, and a cached size is
+    # how we know an earlier request already started the build. There is no
+    # .fsh here by construction: _prepare_stream only calls this when
+    # mp4_faststart.load() came back None.
+    if stream_decisions.should_start_build(False, token in _spore_cold_sizes):
         threading.Thread(
             target=_build_then_probe,
             args=(cdn_url, token),
@@ -281,6 +285,13 @@ def _prepare_cold(token: str, cdn_url: str) -> dict:
     return {"mode": "cold", "cdn_url": cdn_url, "size": size}
 
 
+def _head_status(url: str) -> int:
+    """The CDN liveness probe stream_decisions.link_is_alive calls."""
+    import requests as _req
+
+    return _req.head(url, timeout=5, allow_redirects=True).status_code
+
+
 def _prepare_fast(token: str, cdn_url: str, info: dict) -> dict:
     """The CDN file needs no moov rewrite: redirect an MKV (after checking
     the cached link is still alive) or proxy an already fast-start MP4, and
@@ -306,19 +317,9 @@ def _prepare_fast(token: str, cdn_url: str, info: dict) -> dict:
         # page with no recovery. Cheaply confirm it's alive first and re-resolve
         # once if not. A short local cache avoids re-checking with the CDN on
         # every reopen/seek within the same playback session.
-        now_mono = _t.monotonic()
-        cached_until = _spore_alive_cache.get(cdn_url)
-        if cached_until and cached_until > now_mono:
-            alive = True
-        else:
-            import requests as _req
-            try:
-                head = _req.head(cdn_url, timeout=5, allow_redirects=True)
-                alive = head.status_code < 400
-            except Exception:
-                alive = False
-            if alive:
-                _spore_alive_cache[cdn_url] = now_mono + _ALIVE_CHECK_TTL_SEC
+        alive = stream_decisions.link_is_alive(
+            cdn_url, _head_status, _spore_alive_cache, _t.monotonic(),
+            _ALIVE_CHECK_TTL_SEC)
         if not alive:
             log.warning("spore-stream: cached CDN url dead for token=%s, re-resolving", token)
             catbox.invalidate_url_cache(token)
