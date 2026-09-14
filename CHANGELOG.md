@@ -26,6 +26,14 @@ All notable changes to Mycelium are documented in this file.
   could previously dump and redistribute the entire library as anonymous
   stream links.
 
+### Fixed
+
+- Web Player: `_check_enabled()` no longer aborts 403 when auth is disabled.
+  `auth.current_user_record()` is always None in that single-user no-auth
+  mode, so the gate previously locked the entire Web Player out on any
+  no-auth install; it now allows the request there, matching every other
+  gate in the codebase.
+
 ### Changed
 
 - Internal: catbox.py's idle release, hourly TorBox id check and

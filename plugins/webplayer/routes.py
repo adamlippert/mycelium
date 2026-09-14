@@ -7,6 +7,12 @@ bp = Blueprint("webplayer_routes", __name__)
 
 
 def _check_enabled():
+    # Auth disabled -> single-user mode, full access, same as auth.is_admin()
+    # and every other gate in the codebase. current_user_record() is always
+    # None in that mode (there is no session to resolve), so without this
+    # check the Web Player would be entirely unreachable on a no-auth install.
+    if not auth.is_enabled():
+        return auth.current_user_record()
     rec = auth.current_user_record()
     if not rec or not rec.get("webplayer_enabled"):
         abort(403)
