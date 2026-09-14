@@ -572,6 +572,9 @@ _UNLISTED_KEYS = {
     "PREFER_WEBDL", "PREFER_HEVC", "QUALITY_PREFERENCE",
     "AUDIO_LANGUAGE_PREFERENCE", "EXCLUDE_LANGUAGES",
     "FILTER_RULES_MIGRATED", "SOURCE_LABELS_MIGRATED",
+    # Written after migrations run; read at startup to log the schema the
+    # database was last migrated from (docs/RECOVERY.md).
+    "SCHEMA_VERSION",
 }
 
 # The four filter-rule keys the setup wizard edits. They live in the Filter

@@ -66,6 +66,9 @@ except Exception:
     log.exception("Filter migration failed; leaving the new rule settings "
                   "untouched. The service starts with defaults and the rules "
                   "can be set in the admin UI.")
+
+import deprecations
+deprecations.warn_deprecated_env()
 import migrate_source
 try:
     migrate_source.migrate()
