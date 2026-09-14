@@ -201,7 +201,6 @@ def _prepare_stream(token: str) -> dict:
       {"mode": "warm", "cdn_url": ..., "cdn_size": n,
        "fsh_path": ..., "info": <mp4_faststart.load dict>}        moov-first
     """
-    import time as _t
     import mp4_faststart
 
     url = catbox.materialize(token)
@@ -212,52 +211,7 @@ def _prepare_stream(token: str) -> dict:
     cdn_url = url
 
     if info is None:
-        # Cold cache: build .fsh in background, serve Range passthrough
-        # meanwhile. _spore_cold_sizes caches file_size so repeated Range
-        # requests (FFmpeg seeks) skip the HEAD round-trip.
-        if token not in _spore_cold_sizes:
-            threading.Thread(
-                target=_build_then_probe,
-                args=(cdn_url, token),
-                daemon=True,
-                name=f"fsh-{token[:8]}",
-            ).start()
-            import requests as _req
-            status = None
-            size = 0
-            try:
-                for attempt in (1, 2):
-                    head = _req.head(cdn_url, timeout=10, allow_redirects=True)
-                    status = head.status_code
-                    if status == 429 and attempt == 1:
-                        # Transient CDN rate limit: one short backoff, then
-                        # give up honestly rather than serve garbage.
-                        _t.sleep(0.5)
-                        continue
-                    if status < 400:
-                        size = int(head.headers.get("Content-Length", 0) or 0)
-                    break
-            except Exception as exc:
-                log.warning("spore-stream: HEAD failed for cold token=%s: %s", token, exc)
-                return {"error": 502, "reason": "HEAD failed"}
-            if not size:
-                # An error response's Content-Length is the size of its error
-                # page, not of the file. Caching it here once served clients a
-                # 162-byte "movie" with a 206 status (found by the stream load
-                # test under a CDN 429 storm). Do not cache failures: the next
-                # request retries the HEAD.
-                log.warning("spore-stream: cold HEAD status=%s size=%s for token=%s",
-                            status, size, token)
-                return {"error": 503 if status == 429 else 502,
-                        "reason": f"HEAD status {status}"}
-            _spore_cold_sizes[token] = size
-        size = _spore_cold_sizes.get(token, 0)
-        if not size:
-            return {"error": 502, "reason": "no file size"}
-        # Remove the cold size once .fsh is ready so the next request warms up
-        if mp4_faststart.load(token) is not None:
-            _spore_cold_sizes.pop(token, None)
-        return {"mode": "cold", "cdn_url": cdn_url, "size": size}
+        return _prepare_cold(token, cdn_url)
 
     # CDN file is already moov-first (or MKV redirect sentinel).
     # MKV files (ftyp_size == 0): redirect to CDN - FFmpeg reads MKV from byte 0,
@@ -267,55 +221,126 @@ def _prepare_stream(token: str) -> dict:
     #   URL instead; when any client (MiTV, Shield, etc.) plays, they always hit
     #   our server which resolves a fresh CDN URL - expired URLs never reach clients.
     if info.get("already_fast"):
-        existing = db.load_spore_tracks(token)
-        if (not existing or "preferred_audio_idx" not in existing) and token not in _spore_probing:
-            _spore_probing.add(token)
-            threading.Thread(
-                target=_build_then_probe,
-                args=(cdn_url, token),
-                daemon=True,
-                name=f"probe-{token[:8]}",
-            ).start()
-            log.info("spore-stream: token=%s triggering background probe", token)
-        if info["ftyp_size"] == 0:
-            # Non-MP4 sentinel (MKV/other): 302 to CDN, no moov seeking required.
-            # catbox's URL cache holds a resolved link for up to 23h, but TorBox's
-            # CDN links can go dead sooner than that -- sending a stale one straight
-            # to the client (rather than proxying through mp4_faststart, which does
-            # validate) left Jellyfin/ffmpeg following a redirect into a 400 error
-            # page with no recovery. Cheaply confirm it's alive first and re-resolve
-            # once if not. A short local cache avoids re-checking with the CDN on
-            # every reopen/seek within the same playback session.
-            now_mono = _t.monotonic()
-            cached_until = _spore_alive_cache.get(cdn_url)
-            if cached_until and cached_until > now_mono:
-                alive = True
-            else:
-                import requests as _req
-                try:
-                    head = _req.head(cdn_url, timeout=5, allow_redirects=True)
-                    alive = head.status_code < 400
-                except Exception:
-                    alive = False
-                if alive:
-                    _spore_alive_cache[cdn_url] = now_mono + _ALIVE_CHECK_TTL_SEC
-            if not alive:
-                log.warning("spore-stream: cached CDN url dead for token=%s, re-resolving", token)
-                catbox.invalidate_url_cache(token)
-                _spore_alive_cache.pop(cdn_url, None)
-                fresh = catbox.materialize(token)
-                if not fresh:
-                    return {"error": 502, "reason": "re-resolve failed"}
-                cdn_url = fresh
-            _spore_cold_sizes.pop(token, None)
-            # No bytes pass through us on this branch, so count the file once
-            # per play as an estimate (see egress_estimate.py).
-            egress_estimate.note_redirect(token, info["cdn_size"])
-            return {"mode": "redirect", "url": cdn_url}
-        # Already fast-start MP4: proxy bytes; Plex stores our URL not the CDN URL.
-        log.info("spore-stream: token=%s already fast-start MP4, proxying bytes", token)
-        _spore_cold_sizes[token] = info["cdn_size"]
-        return {"mode": "cold", "cdn_url": cdn_url, "size": info["cdn_size"]}
+        return _prepare_fast(token, cdn_url, info)
+
+    return _prepare_warm(token, cdn_url, info)
+
+
+def _prepare_cold(token: str, cdn_url: str) -> dict:
+    """No .fsh cache yet: HEAD the CDN for a size, start the background
+    build, and let the caller serve Range passthrough meanwhile. Returns
+    the cold mode dict, or an error dict when the HEAD is not usable."""
+    import time as _t
+    import mp4_faststart
+
+    # Cold cache: build .fsh in background, serve Range passthrough
+    # meanwhile. _spore_cold_sizes caches file_size so repeated Range
+    # requests (FFmpeg seeks) skip the HEAD round-trip.
+    if token not in _spore_cold_sizes:
+        threading.Thread(
+            target=_build_then_probe,
+            args=(cdn_url, token),
+            daemon=True,
+            name=f"fsh-{token[:8]}",
+        ).start()
+        import requests as _req
+        status = None
+        size = 0
+        try:
+            for attempt in (1, 2):
+                head = _req.head(cdn_url, timeout=10, allow_redirects=True)
+                status = head.status_code
+                if status == 429 and attempt == 1:
+                    # Transient CDN rate limit: one short backoff, then
+                    # give up honestly rather than serve garbage.
+                    _t.sleep(0.5)
+                    continue
+                if status < 400:
+                    size = int(head.headers.get("Content-Length", 0) or 0)
+                break
+        except Exception as exc:
+            log.warning("spore-stream: HEAD failed for cold token=%s: %s", token, exc)
+            return {"error": 502, "reason": "HEAD failed"}
+        if not size:
+            # An error response's Content-Length is the size of its error
+            # page, not of the file. Caching it here once served clients a
+            # 162-byte "movie" with a 206 status (found by the stream load
+            # test under a CDN 429 storm). Do not cache failures: the next
+            # request retries the HEAD.
+            log.warning("spore-stream: cold HEAD status=%s size=%s for token=%s",
+                        status, size, token)
+            return {"error": 503 if status == 429 else 502,
+                    "reason": f"HEAD status {status}"}
+        _spore_cold_sizes[token] = size
+    size = _spore_cold_sizes.get(token, 0)
+    if not size:
+        return {"error": 502, "reason": "no file size"}
+    # Remove the cold size once .fsh is ready so the next request warms up
+    if mp4_faststart.load(token) is not None:
+        _spore_cold_sizes.pop(token, None)
+    return {"mode": "cold", "cdn_url": cdn_url, "size": size}
+
+
+def _prepare_fast(token: str, cdn_url: str, info: dict) -> dict:
+    """The CDN file needs no moov rewrite: redirect an MKV (after checking
+    the cached link is still alive) or proxy an already fast-start MP4, and
+    trigger the background probe the stub update needs."""
+    import time as _t
+
+    existing = db.load_spore_tracks(token)
+    if (not existing or "preferred_audio_idx" not in existing) and token not in _spore_probing:
+        _spore_probing.add(token)
+        threading.Thread(
+            target=_build_then_probe,
+            args=(cdn_url, token),
+            daemon=True,
+            name=f"probe-{token[:8]}",
+        ).start()
+        log.info("spore-stream: token=%s triggering background probe", token)
+    if info["ftyp_size"] == 0:
+        # Non-MP4 sentinel (MKV/other): 302 to CDN, no moov seeking required.
+        # catbox's URL cache holds a resolved link for up to 23h, but TorBox's
+        # CDN links can go dead sooner than that -- sending a stale one straight
+        # to the client (rather than proxying through mp4_faststart, which does
+        # validate) left Jellyfin/ffmpeg following a redirect into a 400 error
+        # page with no recovery. Cheaply confirm it's alive first and re-resolve
+        # once if not. A short local cache avoids re-checking with the CDN on
+        # every reopen/seek within the same playback session.
+        now_mono = _t.monotonic()
+        cached_until = _spore_alive_cache.get(cdn_url)
+        if cached_until and cached_until > now_mono:
+            alive = True
+        else:
+            import requests as _req
+            try:
+                head = _req.head(cdn_url, timeout=5, allow_redirects=True)
+                alive = head.status_code < 400
+            except Exception:
+                alive = False
+            if alive:
+                _spore_alive_cache[cdn_url] = now_mono + _ALIVE_CHECK_TTL_SEC
+        if not alive:
+            log.warning("spore-stream: cached CDN url dead for token=%s, re-resolving", token)
+            catbox.invalidate_url_cache(token)
+            _spore_alive_cache.pop(cdn_url, None)
+            fresh = catbox.materialize(token)
+            if not fresh:
+                return {"error": 502, "reason": "re-resolve failed"}
+            cdn_url = fresh
+        _spore_cold_sizes.pop(token, None)
+        # No bytes pass through us on this branch, so count the file once
+        # per play as an estimate (see egress_estimate.py).
+        egress_estimate.note_redirect(token, info["cdn_size"])
+        return {"mode": "redirect", "url": cdn_url}
+    # Already fast-start MP4: proxy bytes; Plex stores our URL not the CDN URL.
+    log.info("spore-stream: token=%s already fast-start MP4, proxying bytes", token)
+    _spore_cold_sizes[token] = info["cdn_size"]
+    return {"mode": "cold", "cdn_url": cdn_url, "size": info["cdn_size"]}
+
+
+def _prepare_warm(token: str, cdn_url: str, info: dict) -> dict:
+    """The .fsh cache is built: the caller serves moov-first bytes."""
+    import mp4_faststart
 
     return {"mode": "warm", "cdn_url": cdn_url, "cdn_size": info["cdn_size"],
             "fsh_path": str(mp4_faststart._cache_path(token)), "info": info}

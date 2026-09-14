@@ -120,8 +120,9 @@ def test_cold_head_validates_the_cdn_status():
     status, retry a 429 once, refuse to cache failures, and answer 503 (rate
     limited) or 502 rather than success."""
     src = src_for_route("/spore-stream/<token>")
-    m = re.search(r"def _prepare_stream\(.*?\n(.*?)\n    # CDN file is", src, re.S)
-    assert m, "cold branch of _prepare_stream not found"
+    # The cold branch is _prepare_stream's first helper; read that body.
+    m = re.search(r"def _prepare_cold\(.*?\n(.*?)\n\n\ndef ", src, re.S)
+    assert m, "cold branch (_prepare_cold) not found"
     body = m.group(1)
     assert "head.status_code" in body, "HEAD status is never checked"
     assert "429" in body, "no rate-limit handling on the HEAD"
