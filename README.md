@@ -19,14 +19,14 @@
   Inspired by <a href="https://docs.elfhosted.com/app/catbox/">elfhosted CatBox</a>:
   torrents are added on-demand at playback, released after idle time.
   Your library can be as large as you want.<br>
-  Also includes <strong>Mycelium Spore</strong>  -  a custom-built Plex integration that streams
+  Also includes <strong>Mycelium Spore</strong>, a custom-built Plex integration that streams
   directly from TorBox CDN without rclone, FUSE, or local storage. <em>(experimental)</em>
 </p>
 
 <p>
   <a href="#-quick-start">Quick start</a> ·
   <a href="#-features">Features</a> ·
-  <a href="#-mycelium-spore-experimental--work-in-progress">Spore</a> ·
+  <a href="#-mycelium-spore-experimental-work-in-progress">Spore</a> ·
   <a href="#-full-vs-lite">Full vs Lite</a> ·
   <a href="#-architecture">Architecture</a> ·
   <a href="#%EF%B8%8F-configuration">Configuration</a> ·
@@ -44,7 +44,7 @@
 > [!NOTE]
 > **Beta.** Mycelium is in active use and works reliably, but it's still evolving.
 > Primarily tested on Synology NAS + Jellyfin + TorBox. The setup wizard handles
-> initial configuration - no `.env` editing required.
+> initial configuration, no `.env` editing required.
 > [Open an issue](https://github.com/adamlippert/mycelium/issues) if something breaks.
 
 ---
@@ -220,7 +220,7 @@ Admin-configurable automatic requesting, on top of the manual SPA/webhook paths.
 <details>
 <summary><b>Web Player</b></summary>
 
-Stream directly in the browser - no Jellyfin client needed.
+Stream directly in the browser, no Jellyfin client needed.
 
 - Works in Chrome, Firefox, Safari, Edge, Android
 - Remux-only: video always copied, zero NAS CPU
@@ -266,7 +266,7 @@ Backups are automatic (daily, fourteen kept) and restorable from
 **Admin → Maintenance → Backup restore**. A restore requires a container
 restart to take effect.
 
-## 🍄 Mycelium Spore *(experimental  -  work in progress)*
+## 🍄 Mycelium Spore *(experimental, work in progress)*
 
 > **Status (August 2026):** Spore was built and used in production on a
 > Synology-based deployment through mid-2026. The code ships and its tests
@@ -276,7 +276,7 @@ restart to take effect.
 > setup below as a working recipe from that earlier deployment, expect rough
 > edges, and please open an issue with your results if you run it.
 
-**Mycelium Spore** is a custom-built Plex integration developed specifically for Mycelium. Unlike solutions that require rclone, FUSE mounts, or virtual filesystems, Spore works entirely through a lightweight transcoder wrapper  -  no kernel modules, no extra daemons, no local storage.
+**Mycelium Spore** is a custom-built Plex integration developed specifically for Mycelium. Unlike solutions that require rclone, FUSE mounts, or virtual filesystems, Spore works entirely through a lightweight transcoder wrapper: no kernel modules, no extra daemons, no local storage.
 
 Plex streams directly from TorBox CDN on demand.
 
@@ -289,7 +289,7 @@ Plex scans stub .mkv files  →  user presses Play
 ```
 
 **How it works:**
-- Mycelium writes a small stub `.mkv` per item into a Plex-scanned folder  -  no real video data, just enough metadata for Plex to display the library
+- Mycelium writes a small stub `.mkv` per item into a Plex-scanned folder, no real video data, just enough metadata for Plex to display the library
 - A transcoder wrapper intercepts every playback request and replaces the stub path with a live CDN stream URL
 - On first play, Mycelium builds a fast-start cache in the background so subsequent seeks are instant
 - Audio and subtitle tracks are automatically updated in the stub after first play
@@ -320,7 +320,7 @@ entrypoint:
     exec /init
 ```
 
-> **Status:** Confirmed working on Android (Plex app) and Linux desktop. Shield TV testing in progress. Dolby Vision and lossless audio passthrough are not supported  -  Plex always transcodes via the wrapper.
+> **Status:** Confirmed working on Android (Plex app) and Linux desktop. Shield TV testing in progress. Dolby Vision and lossless audio passthrough are not supported: Plex always transcodes via the wrapper.
 
 ---
 
@@ -347,25 +347,25 @@ cd mycelium
 docker compose up -d
 ```
 
-Open **`http://<your-host>:8088`** - the setup wizard walks you through everything. The wizard shows the same fields as Settings, pre-filled on a re-run, with Test buttons for most services and Load buttons for Radarr and Sonarr folders and profiles. Lite mode skips the Trakt, subtitle, Zilean and arr steps. The first account you create becomes admin.
+Open **`http://<your-host>:8088`**: the setup wizard walks you through everything. The wizard shows the same fields as Settings, pre-filled on a re-run, with Test buttons for most services and Load buttons for Radarr and Sonarr folders and profiles. Lite mode skips the Trakt, subtitle, Zilean and arr steps. The first account you create becomes admin.
 
 **Optional add-ons** (not needed to get started):
-- [Zilean](https://github.com/iPromKnight/zilean) - self-hosted hash index, faster and private. Two modes: **external**
+- [Zilean](https://github.com/iPromKnight/zilean): self-hosted hash index, faster and private. Two modes: **external**
   (point at your own Zilean + Postgres service via `ZILEAN_URL`) or **native** (`ZILEAN_MODE=native`, built directly
-  into Mycelium - no separate container, syncs the DMM hashlist into a local SQLite index). Switching from external to
+  into Mycelium, no separate container, syncs the DMM hashlist into a local SQLite index). Switching from external to
   native doesn't mean starting over: the Settings tab has a one-time Postgres import that pulls your existing hashes
   straight from your external Zilean's database.
-- [RealDebrid](https://real-debrid.com) - fallback debrid when TorBox misses
-- [Jellyseerr](https://jellyseerr.dev) / [Overseerr](https://overseerr.dev) - request portal via webhook
-- [OpenSubtitles](https://www.opensubtitles.com/en/consumers) - auto subtitle download
-- [Trakt](https://trakt.tv) - watched badges, scrobbling, watchlist auto-request
-- [MDBList](https://mdblist.com) - list sync + auto-request
+- [RealDebrid](https://real-debrid.com): fallback debrid when TorBox misses
+- [Jellyseerr](https://jellyseerr.dev) / [Overseerr](https://overseerr.dev): request portal via webhook
+- [OpenSubtitles](https://www.opensubtitles.com/en/consumers): auto subtitle download
+- [Trakt](https://trakt.tv): watched badges, scrobbling, watchlist auto-request
+- [MDBList](https://mdblist.com): list sync + auto-request
 
 ---
 
 ## 📖 Community guides
 
-- **[Proxmox / NAS install guide](docs/install-guide.html)** - step-by-step for Proxmox LXC and Synology NAS.
+- **[Proxmox / NAS install guide](docs/install-guide.html)**: step-by-step for Proxmox LXC and Synology NAS.
   Written by [Ventrex](https://github.com/Ventrex07).
 
 ---
@@ -413,7 +413,7 @@ flowchart LR
 
 - All UI and API routes require login. CSRF protection on all forms.
 - **Webhook secret** auto-generated on first start, shown in Admin > Integration Endpoints. Preferred: header `X-Webhook-Secret`. Seerr/Jellyseerr don't support custom headers in their webhook config, so append it to the URL instead: `http://<mycelium-url>/webhook?secret=<secret>`. Override the secret with `WEBHOOK_SECRET` in `.env`. The Settings card has a **Rotate** button that issues a new secret; the previous one keeps working for 24 hours so Seerr, the arrs and the Jellyfin plugin can be updated one by one.
-- `/setup` locked after first run - admin only via Settings > Re-run wizard.
+- `/setup` locked after first run, admin only via Settings > Re-run wizard.
 - `/metrics` requires admin session or `X-Metrics-Token` header (`METRICS_TOKEN` in `.env`).
 - WebDAV (`/dav`) uses HTTP Basic Auth against the Mycelium user database.
 
@@ -453,8 +453,8 @@ the stack (Radarr, Sonarr, Seerr, Jellyfin webhooks and targeted refresh):
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /health` | Liveness probe - wired to Docker `HEALTHCHECK` |
-| `GET /healthz` | Deep readiness - 503 if scrapers down |
+| `GET /health` | Liveness probe, wired to Docker `HEALTHCHECK` |
+| `GET /healthz` | Deep readiness (503 if scrapers down) |
 | `GET /metrics` | Prometheus, ~20 metrics. Requires auth (see Security) |
 
 A ready-made Grafana dashboard lives at [`assets/grafana-dashboard.json`](assets/grafana-dashboard.json).
@@ -489,7 +489,7 @@ CatBox is a managed hosting service. Mycelium runs on your own hardware with you
 </details>
 
 <details>
-<summary><b>Fixed strm vs Catbox mode - what's the difference?</b></summary>
+<summary><b>Fixed strm vs Catbox mode: what's the difference?</b></summary>
 
 **Fixed**: each `.strm` contains a direct TorBox CDN URL. Simple, but URLs expire after ~24h.
 
@@ -499,7 +499,7 @@ CatBox is a managed hosting service. Mycelium runs on your own hardware with you
 <details>
 <summary><b>How does Plex work?</b></summary>
 
-Use **Mycelium Spore**  -  see the [Spore section](#-mycelium-spore-experimental--work-in-progress) for setup. No rclone or FUSE required.
+Use **Mycelium Spore**: see the [Spore section](#-mycelium-spore-experimental-work-in-progress) for setup. No rclone or FUSE required.
 </details>
 
 <details>
@@ -536,7 +536,7 @@ See [open issues](https://github.com/adamlippert/mycelium/issues) and [discussio
 
 ## 🤝 Contributing
 
-PRs and issues welcome. Keep changes focused, run the tests in `tests/`, and don't break the dashboard. Please don't open issues asking for piracy support - this is for legitimate TorBox subscribers managing their own content.
+PRs and issues welcome. Keep changes focused, run the tests in `tests/`, and don't break the dashboard. Please don't open issues asking for piracy support: this is for legitimate TorBox subscribers managing their own content.
 
 ---
 

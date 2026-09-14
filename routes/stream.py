@@ -93,7 +93,7 @@ def spore_nfs_tree():
             continue
         parts = Path(strm_path_str).parts
         # Take everything from the last "movies"/"series" segment onward,
-        # regardless of what absolute prefix precedes it -- strm_path in the
+        # regardless of what absolute prefix precedes it: strm_path in the
         # DB isn't guaranteed to have been written with today's MEDIA_PATH
         # (older rows can predate an env change or come from a different
         # mount context), so relative_to() against the current MEDIA_PATH
@@ -134,7 +134,7 @@ def spore_nfs_size(token: str):
     files = entry.get("files") or []
     main = strm_generator._pick_main_movie_file(files) if files else None
     # Single-file torrents (the common case for movies) have no "files"
-    # list at all -- size/name live directly on the entry.
+    # list at all: size/name live directly on the entry.
     size = main.get("size") if main else entry.get("size")
     return jsonify({"size": int(size or 0)})
 
@@ -381,7 +381,7 @@ def _cold_proxy_response(file_size: int, cdn_url: str, token: str, ua: str):
                 # had no status check at all, so a CDN error body would
                 # get piped to the client as if it were video data.
                 # This runs inline on a live gunicorn request thread
-                # (small, fixed pool -- see Dockerfile), so it gets the
+                # (small, fixed pool, see Dockerfile), so it gets the
                 # same reduced retry budget as mp4_faststart.serve_bytes.
                 data = mp4_faststart._get(
                     cdn_url, pos, end,
