@@ -24,6 +24,7 @@ import torbox
 import trending
 import upgrader
 import watchdog
+from version import APP_VERSION
 from config import (
     AUTO_APPROVE_INTERVAL_HOURS,
     AUTO_UPGRADE_ENABLED,
@@ -55,7 +56,11 @@ log_buffer.install()
 log = logging.getLogger("mycelium")
 
 
+_previous_schema_version = db.ensure_schema_version(APP_VERSION)
 db.init()
+db.record_schema_version(APP_VERSION)
+log.info("Mycelium %s, database schema from %s", APP_VERSION,
+         _previous_schema_version or "fresh")
 
 import settings as _settings_mod
 import migrate_filters

@@ -6,6 +6,7 @@ import threading
 import time
 from contextlib import contextmanager
 
+import backup
 from config import DB_PATH
 
 log = logging.getLogger(__name__)
@@ -47,6 +48,42 @@ def _connect():
         except Exception:
             pass
         raise
+
+
+def ensure_schema_version(app_version: str) -> str | None:
+    """Read the SCHEMA_VERSION setting through a raw connection, ahead of
+    init() and any migration. Works against any schema that already has a
+    settings table; returns None on a fresh install (no database file yet,
+    or no settings table), without creating either.
+
+    When a stored version exists and differs from app_version, a version
+    change (and its migrations) is about to run, so this takes a backup via
+    backup.run() first. A failing backup is logged and ignored - it must
+    never block startup. Returns the previous version either way; the
+    caller logs it and, once init()/record_schema_version() have run,
+    calling again with the same app_version returns app_version itself."""
+    if not os.path.exists(DB_PATH):
+        return None
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        table = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='settings'"
+        ).fetchone()
+        if not table:
+            return None
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key='SCHEMA_VERSION'"
+        ).fetchone()
+    finally:
+        conn.close()
+    previous = row[0] if row else None
+    if previous is not None and previous != app_version:
+        try:
+            backup.run()
+        except Exception as exc:
+            log.warning("Pre-upgrade backup failed, continuing startup without it: %s", exc)
+    return previous
+
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS requests (
@@ -2161,6 +2198,13 @@ def get_all_settings() -> dict[str, str]:
     with _connect() as conn:
         rows = conn.execute("SELECT key, value FROM settings").fetchall()
         return {r["key"]: r["value"] for r in rows}
+
+
+def record_schema_version(app_version: str) -> None:
+    """Write SCHEMA_VERSION after init()/migrations have run, through the
+    normal settings path. Pairs with ensure_schema_version(), which reads
+    it back on the next startup, before init() runs."""
+    set_setting("SCHEMA_VERSION", app_version)
 
 
 def get_repair_items(limit: int = 200) -> list[dict]:
