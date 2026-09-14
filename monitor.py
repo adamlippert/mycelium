@@ -257,15 +257,17 @@ def _retry_episode(ep: dict) -> bool:
 
     cached_hashes = torbox.check_cached([s.info_hash for s in candidates])
     ordered = [s for s in candidates if s.info_hash in cached_hashes] or candidates[:1]
+    import torbox_pool
+    acct = torbox_pool.choose_for_add().id
     for stream in ordered:
         # Skip createtorrent if already in the TorBox library.
-        existing = torbox.find_by_hash(stream.info_hash)
+        existing = torbox.find_by_hash(acct, stream.info_hash)
         if existing and torbox._is_ready(existing):
             log.info("Monitor: %s S%02dE%02d already in TorBox library", title, season, episode)
             return True
         try:
-            torbox.add_magnet(stream.magnet, reason="series-monitor", cached=stream.info_hash in cached_hashes)
-            added_item = torbox.wait_until_ready(stream.info_hash)
+            torbox.add_magnet(acct, stream.magnet, reason="series-monitor", cached=stream.info_hash in cached_hashes)
+            added_item = torbox.wait_until_ready(acct, stream.info_hash)
             if not added_item or not torbox._is_ready(added_item):
                 log.info("Monitor: %s S%02dE%02d still downloading  -  strm will follow once ready",
                          title, season, episode)
@@ -310,10 +312,12 @@ def _search_and_add_season(imdb_id: str, title: str, seasons: list[int]) -> None
             continue
         cached_hashes = torbox.check_cached([s.info_hash for s in candidates])
         ordered = [s for s in candidates if s.info_hash in cached_hashes] or candidates[:1]
+        import torbox_pool
+        acct = torbox_pool.choose_for_add().id
         for stream in ordered:
             try:
-                torbox.add_magnet(stream.magnet, reason="seerr-sync", cached=stream.info_hash in cached_hashes)
-                torbox.wait_until_ready(stream.info_hash)
+                torbox.add_magnet(acct, stream.magnet, reason="seerr-sync", cached=stream.info_hash in cached_hashes)
+                torbox.wait_until_ready(acct, stream.info_hash)
                 log.info("Monitor: added new season %s S%02d", title, season)
                 break
             except Exception as exc:

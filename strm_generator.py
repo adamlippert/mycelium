@@ -198,23 +198,18 @@ def _strm_path(info: dict) -> Path:
     return media / 'series' / title / f"Season {s:02d}" / f"{title} S{s:02d}E{e:02d}.strm"
 
 
-def _get_stream_url(torrent_id: int, file_id: int) -> str | None:
-    torbox_base_url = settings.get("TORBOX_BASE_URL", _TORBOX_BASE_URL_DEFAULT)
-    url = f"{torbox_base_url.rstrip('/')}/torrents/requestdl"
-    params = {
-        "token": settings.get("TORBOX_API_KEY", ""),
-        "torrent_id": torrent_id,
-        "file_id": file_id,
-        "zip_link": "false",
-    }
+def _default_torbox_account() -> int:
+    """Best-effort account for a TorBox call with no item to home against
+    (the legacy fixed-mode library scans). Task 3 replaces this with real
+    per-item homing; until then the first enabled account stands in, and a
+    pool that cannot be read at all falls back to account 1 so a scan never
+    crashes on an unconfigured pool."""
     try:
-        resp = req_lib.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        data = resp.json() or {}
-        return data.get("data") or None
-    except Exception as exc:
-        log.warning("requestdl failed torrent=%s file=%s: %s", torrent_id, file_id, exc)
-        return None
+        import torbox_pool
+        accts = torbox_pool.accounts()
+        return accts[0].id if accts else 1
+    except Exception:
+        return 1
 
 
 def _extract_year(name: str) -> int | None:
@@ -569,18 +564,19 @@ def _cache_cdn_url(info_hash: str, ready_item: dict, title: str) -> None:
         files = ready_item.get("files") or []
         if not torrent_id:
             return
+        all_items = db.get_virtual_items_by_hash(info_hash)
+        if not all_items:
+            return
+        home = all_items[0].get("torbox_account") or _default_torbox_account()
+
         if not files:
             # TorBox sometimes omits the files list; force a fresh lookup
-            fresh = torbox_mod.find_by_hash(info_hash, force_refresh=True)
+            fresh = torbox_mod.find_by_hash(home, info_hash, force_refresh=True)
             if fresh:
                 files = fresh.get("files") or []
                 torrent_id = fresh.get("id") or torrent_id
         if not files or not torrent_id:
             log.debug("Preload: no files for %s, CDN cache skipped", title)
-            return
-
-        all_items = db.get_virtual_items_by_hash(info_hash)
-        if not all_items:
             return
 
         cached_count = 0
@@ -602,7 +598,7 @@ def _cache_cdn_url(info_hash: str, ready_item: dict, title: str) -> None:
                 main = _pick_main_movie_file(files)
                 file_id = (main or files[0]).get("id")
 
-            cdn_url = _get_stream_url(torrent_id, file_id)
+            cdn_url = torbox_mod.request_download_link(vi.get("torbox_account") or home, torrent_id, file_id)
             if not cdn_url:
                 continue
             _catbox.cache_url(token, cdn_url)
@@ -739,7 +735,9 @@ def _preload_torrent(info_hash: str, magnet: str, title: str) -> None:
         _preload_in_flight.add(info_hash)
     with _preload_semaphore:
         try:
-            existing = torbox_mod.find_by_hash(info_hash)
+            import torbox_pool
+            acct = torbox_pool.choose_for_add().id
+            existing = torbox_mod.find_by_hash(acct, info_hash)
             if existing and torbox_mod._is_ready(existing):
                 log.debug("Preload: %s already ready in TorBox", title)
                 ready = existing
@@ -751,8 +749,8 @@ def _preload_torrent(info_hash: str, magnet: str, title: str) -> None:
                         if elapsed < _PRELOAD_MIN_INTERVAL:
                             time.sleep(_PRELOAD_MIN_INTERVAL - elapsed)
                         _preload_state["last_add"] = time.time()
-                    torbox_mod.add_magnet(magnet, reason="preload")
-                ready = torbox_mod.wait_until_ready(info_hash, timeout=600)
+                    torbox_mod.add_magnet(acct, magnet, reason="preload")
+                ready = torbox_mod.wait_until_ready(acct, info_hash, timeout=600)
             if not ready:
                 log.debug("Preload: %s not ready within timeout", title)
                 return
@@ -1458,7 +1456,8 @@ def probe_pending_stubs() -> dict:
 
     for info_hash, hash_items in by_hash.items():
         try:
-            ready = torbox_mod.find_by_hash(info_hash)
+            home = hash_items[0].get("torbox_account") or _default_torbox_account()
+            ready = torbox_mod.find_by_hash(home, info_hash)
             if not ready or not torbox_mod._is_ready(ready):
                 skipped += len(hash_items)
                 continue
@@ -1466,7 +1465,7 @@ def probe_pending_stubs() -> dict:
             torrent_id = ready.get("id")
             files = ready.get("files") or []
             if not files or not torrent_id:
-                fresh = torbox_mod.find_by_hash(info_hash, force_refresh=True)
+                fresh = torbox_mod.find_by_hash(home, info_hash, force_refresh=True)
                 if fresh:
                     files = fresh.get("files") or []
                     torrent_id = fresh.get("id") or torrent_id
@@ -1497,7 +1496,7 @@ def probe_pending_stubs() -> dict:
                     main = _pick_main_movie_file(files)
                     file_id = (main or files[0]).get("id")
 
-                cdn_url = _get_stream_url(torrent_id, file_id)
+                cdn_url = torbox_mod.request_download_link(vi.get("torbox_account") or home, torrent_id, file_id)
                 if not cdn_url:
                     skipped += 1
                     continue
@@ -1660,7 +1659,7 @@ def _resolve_url(item: dict, file_id: int, file_name: str, info: dict, media_typ
             file_id=file_id,
         )
         return catbox.proxy_url(token)
-    return _get_stream_url(torrent_id, file_id)
+    return torbox_mod.request_download_link(item.get("torbox_account") or _default_torbox_account(), torrent_id, file_id)
 
 
 def _ensure_request_row(imdb_id: str | None, title: str, is_series: bool,
@@ -1775,7 +1774,7 @@ def process_torrent(item: dict, canonical_title: str | None = None,
     return written
 
 
-def create_strm_for_torrent(torrent_id: int, title: str, media_type: str,
+def create_strm_for_torrent(account_id: int, torrent_id: int, title: str, media_type: str,
                              imdb_id: str | None = None, tmdb_id: int | None = None) -> int:
     """
     Immediately create .strm file(s) for a just-added torrent.
@@ -1783,10 +1782,11 @@ def create_strm_for_torrent(torrent_id: int, title: str, media_type: str,
     For series: fetches the torrent's file list from mylist and creates per-episode .strm files.
     Returns count of new files written.
     """
-    item = torbox_mod.find_by_id(torrent_id)
+    item = torbox_mod.find_by_id(account_id, torrent_id)
     if not item:
         log.warning("Torrent %s not found in mylist for strm creation", torrent_id)
         return 0
+    item["torbox_account"] = account_id
     if not torbox_mod._is_ready(item):
         log.info("Torrent %s (%s) not ready yet  -  skipping strm creation for now", torrent_id, title)
         return 0
@@ -1824,7 +1824,8 @@ def scan_torbox_library() -> dict:
     normal requests use), and falls back to the raw parsed name otherwise.
     """
     import tmdb
-    items = torbox_mod.list_torrents(force_refresh=True)
+    acct_id = _default_torbox_account()
+    items = torbox_mod.list_torrents(acct_id, force_refresh=True)
     scanned = imported = skipped = failed = 0
     for item in items:
         if not torbox_mod._is_ready(item):
@@ -1859,7 +1860,7 @@ def scan_torbox_library() -> dict:
                 title = f"{guess['title']} ({guess['year']})"
             else:
                 title = guess['title']
-            written = create_strm_for_torrent(item['id'], title, media_type, imdb_id=imdb_id)
+            written = create_strm_for_torrent(acct_id, item['id'], title, media_type, imdb_id=imdb_id)
             if written:
                 imported += 1
             else:
@@ -1984,11 +1985,14 @@ def run_once(import_unknown: bool = True) -> int:
         log.debug("strm_generator: skipping the TorBox mylist scan (unattended run)")
         return 0
     log.info("strm_generator: scanning TorBox mylist")
+    acct_id = _default_torbox_account()
     try:
-        torrents = torbox_mod.list_torrents()
+        torrents = torbox_mod.list_torrents(acct_id)
     except Exception as exc:
         log.error("strm_generator: mylist failed: %s", exc)
         return 0
+    for t in torrents:
+        t["torbox_account"] = acct_id
     total = sum(process_torrent(t) for t in torrents)
     log.info("strm_generator: %d new .strm file(s) created", total)
     return total

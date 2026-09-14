@@ -200,13 +200,15 @@ def _repair_strm(path: Path, run_id: int, mylist: list[dict]) -> str:
     cached = [s for s in candidates if s.info_hash in cached_hashes]
     to_try = cached[:1] or candidates[:1]
 
+    import torbox_pool
+    acct = torbox_pool.choose_for_add().id
     winner: TorrentioStream | None = None
     winner_item: dict | None = None
     rate_limited = False
     for stream in to_try:
         try:
-            torbox.add_magnet(stream.magnet, reason="cleanup-repair", cached=stream.info_hash in cached_hashes)
-            winner_item = torbox.wait_until_ready(stream.info_hash)
+            torbox.add_magnet(acct, stream.magnet, reason="cleanup-repair", cached=stream.info_hash in cached_hashes)
+            winner_item = torbox.wait_until_ready(acct, stream.info_hash)
             winner = stream
             break
         except Exception as exc:
@@ -220,6 +222,7 @@ def _repair_strm(path: Path, run_id: int, mylist: list[dict]) -> str:
         raise _RateLimitedError()
 
     if winner and winner_item:
+        winner_item["torbox_account"] = acct
         # Write new strm(s) first; only then remove old files to avoid a window with no strm.
         new_count = strm_generator.process_torrent(winner_item)
         if not new_count:
@@ -366,7 +369,9 @@ def _regenerate_wrong_files(strm_files: list[Path], mylist: list[dict], run_id: 
         # Current strm points to a wrong/smaller file (likely trailer)  -  regenerate
         log.info("Wrong file detected: %s (file_id=%s, should be %s)  -  regenerating",
                  path.name, file_id, main.get("id"))
-        new_url = strm_generator._get_stream_url(int(torrent_id), main["id"])
+        import torbox_pool
+        acct = item.get("_account") or torbox_pool.accounts()[0].id
+        new_url = torbox.request_download_link(acct, int(torrent_id), main["id"])
         if not new_url:
             continue
         try:
@@ -841,7 +846,13 @@ def _run_cleanup_locked() -> None:
         return
 
     try:
-        mylist = torbox.list_torrents()
+        import torbox_pool
+        mylist = []
+        for a in torbox_pool.accounts():
+            for it in torbox.list_torrents(a.id):
+                it = dict(it)
+                it["_account"] = a.id
+                mylist.append(it)
     except Exception as exc:
         log.error("Cleanup: could not fetch TorBox mylist: %s  -  aborting", exc)
         db.update_cleanup_run(run_id, scanned, 0, 0, 0)

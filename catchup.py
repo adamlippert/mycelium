@@ -66,7 +66,10 @@ def run() -> None:
     log.info("Catch-up: %d approved request(s) to check", len(items))
 
     try:
-        torbox_list = torbox.list_torrents()
+        import torbox_pool
+        torbox_list = []
+        for a in torbox_pool.accounts():
+            torbox_list.extend(torbox.list_torrents(a.id))
     except Exception as exc:
         log.error("Catch-up: failed to fetch TorBox list: %s", exc)
         torbox_list = []

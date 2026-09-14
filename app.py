@@ -1187,18 +1187,22 @@ def ui_api_logs():
 @app.get("/ui/api/torbox-list")
 def ui_api_torbox_list():
     try:
-        items = torbox.list_torrents()
-        out = [{
-            "id": t.get("id"),
-            "name": t.get("name"),
-            "hash": t.get("hash"),
-            "size": t.get("size"),
-            "download_state": t.get("download_state"),
-            "download_finished": t.get("download_finished"),
-            "progress": t.get("progress"),
-            "created_at": t.get("created_at"),
-            "file_count": len(t.get("files") or []),
-        } for t in items]
+        import torbox_pool
+        out = []
+        for acct in torbox_pool.accounts():
+            for t in torbox.list_torrents(acct.id):
+                out.append({
+                    "id": t.get("id"),
+                    "name": t.get("name"),
+                    "hash": t.get("hash"),
+                    "size": t.get("size"),
+                    "download_state": t.get("download_state"),
+                    "download_finished": t.get("download_finished"),
+                    "progress": t.get("progress"),
+                    "created_at": t.get("created_at"),
+                    "file_count": len(t.get("files") or []),
+                    "account": acct.id,
+                })
         return jsonify(torrents=out)
     except Exception as exc:
         return jsonify(error=str(exc)), 500
@@ -1211,9 +1215,11 @@ def ui_torbox_delete():
     torrent_id = request.form.get("torrent_id")
     if not torrent_id:
         return jsonify(error="missing torrent_id"), 400
-    ok = torbox.delete_torrent(int(torrent_id))
+    import torbox_pool
+    account_id = int(request.form.get("account") or torbox_pool.accounts()[0].id)
+    ok = torbox.delete_torrent(account_id, int(torrent_id))
     if not ok:
-        log.warning("torbox-delete: failed to delete torrent %s", torrent_id)
+        log.warning("torbox-delete: failed to delete torrent %s (account=%s)", torrent_id, account_id)
     return redirect(url_for("ui_dashboard") + "#torbox")
 
 
@@ -1271,7 +1277,9 @@ def ui_add_magnet():
     if not magnet.startswith("magnet:"):
         return redirect(url_for("ui_dashboard") + "#search")
     try:
-        torbox.add_magnet(magnet, reason="manual")
+        import torbox_pool
+        acct = torbox_pool.choose_for_add().id
+        torbox.add_magnet(acct, magnet, reason="manual")
         threading.Thread(target=strm_generator.run_and_refresh, name="strm-after-add", daemon=True).start()
     except Exception as exc:
         log.warning("add-magnet failed: %s", exc)
@@ -2387,8 +2395,11 @@ def ui_api_purge_request(row_id: int):
 
 @app.get("/ui/api/torbox-usage")
 def ui_api_torbox_usage():
-    summary = torbox.get_usage_summary()
-    user = torbox.get_user_info() or {}
+    import torbox_pool
+    # Account 1 for now; Task 6 reports usage and plan per account.
+    acct_id = torbox_pool.accounts()[0].id
+    summary = torbox.get_usage_summary(acct_id)
+    user = torbox.get_user_info(acct_id) or {}
     return jsonify(usage=summary, plan=user.get("plan") if isinstance(user, dict) else None)
 
 

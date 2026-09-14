@@ -132,19 +132,18 @@ def test_reserve_refuses_when_the_hour_budget_is_gone(tmp_path, monkeypatch):
 def test_concurrent_expiry_triggers_exactly_one_fetch(monkeypatch):
     calls = {"n": 0}
 
-    def fake_fetch(timeout):
+    def fake_fetch(account_id, timeout):
         calls["n"] += 1
         time.sleep(0.05)
         items = [{"id": 1}]
         with torbox._mylist_lock:
-            torbox._mylist_cache["items"] = items
-            torbox._mylist_cache["ts"] = time.monotonic()
+            torbox._mylist[account_id] = {"items": items, "ts": time.monotonic()}
         return items
 
     monkeypatch.setattr(torbox, "_fetch_mylist", fake_fetch)
 
     results = []
-    threads = [threading.Thread(target=lambda: results.append(torbox.list_torrents()))
+    threads = [threading.Thread(target=lambda: results.append(torbox.list_torrents(1)))
                for _ in range(6)]
     for t in threads:
         t.start()
@@ -158,18 +157,18 @@ def test_concurrent_expiry_triggers_exactly_one_fetch(monkeypatch):
 def test_stale_copy_is_served_while_a_refresh_is_in_flight(monkeypatch):
     stale = [{"id": 99}]
     with torbox._mylist_lock:
-        torbox._mylist_cache["items"] = stale
-        torbox._mylist_cache["ts"] = time.monotonic() - 10_000  # long expired
+        torbox._mylist[1] = {"items": stale, "ts": time.monotonic() - 10_000}  # long expired
 
-    def must_not_run(timeout):
+    def must_not_run(account_id, timeout):
         raise AssertionError("a second fetch ran during an in-flight refresh")
     monkeypatch.setattr(torbox, "_fetch_mylist", must_not_run)
 
-    assert torbox._mylist_refresh_lock.acquire(blocking=False)
+    lock = torbox._refresh_lock(1)
+    assert lock.acquire(blocking=False)
     try:
-        assert torbox.list_torrents() == stale
+        assert torbox.list_torrents(1) == stale
     finally:
-        torbox._mylist_refresh_lock.release()
+        lock.release()
 
 
 # -- 4. frontend ---------------------------------------------------------------

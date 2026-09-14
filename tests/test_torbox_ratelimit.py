@@ -62,21 +62,21 @@ def _log_count():
 
 
 def test_reservation_counts_immediately():
-    entry = torbox._reserve_createtorrent_slot("test")
+    entry = torbox._reserve_createtorrent_slot(1, "test")
     assert isinstance(entry, int)
     assert _log_count() == 1
 
 
 def test_release_gives_the_slot_back():
-    entry = torbox._reserve_createtorrent_slot("test")
+    entry = torbox._reserve_createtorrent_slot(1, "test")
     torbox._release_createtorrent_slot(entry)
     assert _log_count() == 0
 
 
 def test_usage_reads_from_the_database():
-    torbox._reserve_createtorrent_slot("play")
-    torbox._reserve_createtorrent_slot("play")
-    torbox._reserve_createtorrent_slot("upgrade")
+    torbox._reserve_createtorrent_slot(1, "play")
+    torbox._reserve_createtorrent_slot(1, "play")
+    torbox._reserve_createtorrent_slot(1, "upgrade")
 
     usage = torbox.createtorrent_usage()
 
@@ -87,22 +87,22 @@ def test_usage_reads_from_the_database():
 def test_hourly_limit_blocks_reservation_once_reached(monkeypatch):
     monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 10_000)  # isolate the hourly check
     for _ in range(torbox._CREATETORRENT_LIMIT_HOUR - 2):
-        torbox._reserve_createtorrent_slot("test")
+        torbox._reserve_createtorrent_slot(1, "test")
     with pytest.raises(torbox.RateLimited):
-        torbox._reserve_createtorrent_slot("test")
+        torbox._reserve_createtorrent_slot(1, "test")
 
 
 def test_released_slot_is_available_again(monkeypatch):
     monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 10_000)  # isolate the hourly check
-    entries = [torbox._reserve_createtorrent_slot("test")
+    entries = [torbox._reserve_createtorrent_slot(1, "test")
                for _ in range(torbox._CREATETORRENT_LIMIT_HOUR - 2)]
     with pytest.raises(torbox.RateLimited):
-        torbox._reserve_createtorrent_slot("test")
+        torbox._reserve_createtorrent_slot(1, "test")
     torbox._release_createtorrent_slot(entries[0])
     # Releasing one slot should free up room for exactly one more reservation.
-    torbox._reserve_createtorrent_slot("test")
+    torbox._reserve_createtorrent_slot(1, "test")
     with pytest.raises(torbox.RateLimited):
-        torbox._reserve_createtorrent_slot("test")
+        torbox._reserve_createtorrent_slot(1, "test")
 
 
 # -- cached adds do not count against the hour ---------------------------------
@@ -110,10 +110,10 @@ def test_released_slot_is_available_again(monkeypatch):
 def test_cached_reservation_skips_the_hourly_budget(monkeypatch):
     monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 10_000)
     for _ in range(torbox._CREATETORRENT_LIMIT_HOUR - 2):
-        torbox._reserve_createtorrent_slot("play")
+        torbox._reserve_createtorrent_slot(1, "play")
     with pytest.raises(torbox.RateLimited):
-        torbox._reserve_createtorrent_slot("play")
-    entry = torbox._reserve_createtorrent_slot("play", cached=True)
+        torbox._reserve_createtorrent_slot(1, "play")
+    entry = torbox._reserve_createtorrent_slot(1, "play", cached=True)
     assert isinstance(entry, int), "a cached add goes through with the hour full"
     usage = torbox.createtorrent_usage()
     assert usage["count"] == torbox._CREATETORRENT_LIMIT_HOUR - 2
@@ -123,10 +123,10 @@ def test_cached_reservation_skips_the_hourly_budget(monkeypatch):
 
 def test_cached_reservation_still_obeys_the_per_minute_burst(monkeypatch):
     monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 3)
-    torbox._reserve_createtorrent_slot("play", cached=True)
-    torbox._reserve_createtorrent_slot("play", cached=True)
+    torbox._reserve_createtorrent_slot(1, "play", cached=True)
+    torbox._reserve_createtorrent_slot(1, "play", cached=True)
     with pytest.raises(torbox.RateLimited):
-        torbox._reserve_createtorrent_slot("play", cached=True)
+        torbox._reserve_createtorrent_slot(1, "play", cached=True)
 
 
 class _Resp:
@@ -144,36 +144,36 @@ class _Resp:
 
 def test_torbox_saying_cached_frees_the_hourly_slot(monkeypatch):
     monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 10_000)
-    monkeypatch.setattr(torbox, "_headers", lambda: {})
+    monkeypatch.setattr(torbox, "_headers", lambda account_id: {})
     monkeypatch.setattr(torbox, "_base_url", lambda: "http://torbox.test")
-    monkeypatch.setattr(torbox, "invalidate_mylist_cache", lambda: None)
+    monkeypatch.setattr(torbox, "invalidate_mylist_cache", lambda account_id=None: None)
     monkeypatch.setattr(torbox.requests, "post", lambda *a, **k: _Resp(
         {"success": True, "detail": "Found cached torrent. Using cached torrent.", "data": {"torrent_id": 7}}))
-    torbox.add_magnet("magnet:?xt=urn:btih:" + "a" * 40, reason="processor")  # caller did not know
+    torbox.add_magnet(1, "magnet:?xt=urn:btih:" + "a" * 40, reason="processor")  # caller did not know
     usage = torbox.createtorrent_usage()
     assert usage["count"] == 0 and usage["cached_count"] == 1
 
 
 def test_torbox_queueing_a_download_counts_even_when_the_caller_expected_cached(monkeypatch):
     monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 10_000)
-    monkeypatch.setattr(torbox, "_headers", lambda: {})
+    monkeypatch.setattr(torbox, "_headers", lambda account_id: {})
     monkeypatch.setattr(torbox, "_base_url", lambda: "http://torbox.test")
-    monkeypatch.setattr(torbox, "invalidate_mylist_cache", lambda: None)
+    monkeypatch.setattr(torbox, "invalidate_mylist_cache", lambda account_id=None: None)
     monkeypatch.setattr(torbox.requests, "post", lambda *a, **k: _Resp(
         {"success": True, "detail": "Torrent added to queue.", "data": {"id": 8}}))
-    torbox.add_magnet("magnet:?xt=urn:btih:" + "b" * 40, reason="processor", cached=True)
+    torbox.add_magnet(1, "magnet:?xt=urn:btih:" + "b" * 40, reason="processor", cached=True)
     usage = torbox.createtorrent_usage()
     assert usage["count"] == 1 and usage["cached_count"] == 0
 
 
 def test_a_duplicate_item_answer_is_not_an_uncached_add(monkeypatch):
     monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 10_000)
-    monkeypatch.setattr(torbox, "_headers", lambda: {})
+    monkeypatch.setattr(torbox, "_headers", lambda account_id: {})
     monkeypatch.setattr(torbox, "_base_url", lambda: "http://torbox.test")
-    monkeypatch.setattr(torbox, "invalidate_mylist_cache", lambda: None)
+    monkeypatch.setattr(torbox, "invalidate_mylist_cache", lambda account_id=None: None)
     monkeypatch.setattr(torbox.requests, "post", lambda *a, **k: _Resp(
         {"success": False, "error": "DUPLICATE_ITEM", "data": {}}))
-    torbox.add_magnet("magnet:?xt=urn:btih:" + "c" * 40, reason="processor")
+    torbox.add_magnet(1, "magnet:?xt=urn:btih:" + "c" * 40, reason="processor")
     assert torbox.createtorrent_usage()["count"] == 0
 
 
@@ -193,7 +193,7 @@ def test_an_existing_log_gains_the_cached_column():
 def test_cached_rows_do_not_fill_the_hour_for_an_uncached_add(monkeypatch):
     monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 10_000)
     for _ in range(torbox._CREATETORRENT_LIMIT_HOUR + 5):
-        torbox._reserve_createtorrent_slot("play", cached=True)
-    entry = torbox._reserve_createtorrent_slot("play")
+        torbox._reserve_createtorrent_slot(1, "play", cached=True)
+    entry = torbox._reserve_createtorrent_slot(1, "play")
     assert isinstance(entry, int), "65 cached adds leave the uncached budget untouched"
     assert torbox.createtorrent_usage()["count"] == 1

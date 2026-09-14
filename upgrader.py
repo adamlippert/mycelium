@@ -151,11 +151,13 @@ def run_auto_upgrade() -> int:
             if not better:
                 continue
             log.info("Upgrade candidate for %s: %s → %s", row["title"], row.get("quality"), better.quality)
-            torbox.add_magnet(better.magnet, reason="upgrade")
-            item = torbox.wait_until_ready(better.info_hash)
+            import torbox_pool
+            acct = torbox_pool.choose_for_add().id
+            torbox.add_magnet(acct, better.magnet, reason="upgrade")
+            item = torbox.wait_until_ready(acct, better.info_hash)
             if not item:
                 continue
-            strm_generator.create_strm_for_torrent(item["id"], row["title"], "movie")
+            strm_generator.create_strm_for_torrent(acct, item["id"], row["title"], "movie")
             db.update_request(row["id"], "success", quality=better.quality,
                               source=release_tags.source_label(better.name), info_hash=better.info_hash)
             db.log_activity("upgraded", row["title"], f"{row.get('quality')} → {better.quality}", True, imdb_id=row["imdb_id"])
@@ -221,10 +223,13 @@ def run_pack_consolidation() -> int:
                 continue
             log.info("Pack candidate for %s S%02d: %s (%d strms → 1 pack)",
                      title, season, pack.quality, len(strms))
-            torbox.add_magnet(pack.magnet, reason="upgrade-pack")
-            item = torbox.wait_until_ready(pack.info_hash)
+            import torbox_pool
+            acct = torbox_pool.choose_for_add().id
+            torbox.add_magnet(acct, pack.magnet, reason="upgrade-pack")
+            item = torbox.wait_until_ready(acct, pack.info_hash)
             if not item:
                 continue
+            item["torbox_account"] = acct
             # Write pack strms first; only remove old files if new ones were created.
             new_count = strm_generator.process_torrent(item)
             if not new_count:

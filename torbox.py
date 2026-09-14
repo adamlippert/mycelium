@@ -18,9 +18,34 @@ def _base_url() -> str:
     return settings.get("TORBOX_BASE_URL", _TORBOX_BASE_URL_DEFAULT)
 
 
-def _headers() -> dict[str, str]:
-    import settings
-    return {"Authorization": f"Bearer {settings.get('TORBOX_API_KEY', '')}"}
+class AuthFailed(Exception):
+    """TorBox answered 401 or 403 for this account: key revoked, plan
+    restriction, or the account disabled on their side."""
+
+
+def _headers(account_id: int) -> dict[str, str]:
+    import torbox_pool
+    acct = torbox_pool.account(account_id)
+    if acct is None:
+        raise RuntimeError(f"unknown TorBox account {account_id}")
+    return {"Authorization": _AUTH.format(acct.api_key)}
+
+
+_AUTH = "Bearer {}"
+
+
+def _any_headers() -> dict[str, str]:
+    """For calls not bound to an account (cache checks)."""
+    import torbox_pool
+    return {"Authorization": _AUTH.format(torbox_pool.any_key())}
+
+
+def _check_auth(account_id: int, resp) -> None:
+    if resp.status_code in (401, 403):
+        import torbox_pool
+        torbox_pool.mark_auth_failure(account_id)
+        log.warning("TorBox account %s answered %s", account_id, resp.status_code)
+        raise AuthFailed(f"account {account_id}: {resp.status_code}")
 
 
 # ── createtorrent rate-limit visibility ───────────────────────────────────────
@@ -31,28 +56,30 @@ def _headers() -> dict[str, str]:
 # one immediate transaction, so the budget holds across threads AND across
 # processes: the database is the single source of truth, and adding gunicorn
 # workers cannot multiply the local guard into N independent 60/hour counters
-# (TorBox's real limit does not care how many workers we run).
+# (TorBox's real limit does not care how many workers we run). Every account
+# has its own 60/hour budget, so the reservation is keyed by account too.
 
 
-def _reserve_createtorrent_slot(reason: str, cached: bool = False) -> int:
-    """Atomically check both the hourly and per-minute budgets and reserve a
-    slot in the same transaction, so two concurrent callers can't both pass
-    the check before either recorded a call. Raises RateLimited if no budget
-    remains; otherwise returns the reservation's row id so the caller can
-    roll it back if the API call itself fails."""
+def _reserve_createtorrent_slot(account_id: int, reason: str, cached: bool = False) -> int:
+    """Atomically check both the hourly and per-minute budgets for this
+    account and reserve a slot in the same transaction, so two concurrent
+    callers can't both pass the check before either recorded a call. Raises
+    RateLimited if no budget remains; otherwise returns the reservation's
+    row id so the caller can roll it back if the API call itself fails."""
     import db as _db
     res = _db.reserve_createtorrent_slot(
-        time.time(), reason, _CREATETORRENT_LIMIT_HOUR, _CREATETORRENT_LIMIT_MIN, cached=cached)
+        time.time(), reason, _CREATETORRENT_LIMIT_HOUR, _CREATETORRENT_LIMIT_MIN,
+        cached=cached, account_id=account_id)
     if res["id"] is None:
         if not cached and res["hour_count"] >= _CREATETORRENT_LIMIT_HOUR - 2:
-            log.warning("createtorrent [%s] SKIPPED  -  hourly quota %d/%d reached",
-                        reason, res["hour_count"], _CREATETORRENT_LIMIT_HOUR)
+            log.warning("createtorrent [%s] account=%s SKIPPED  -  hourly quota %d/%d reached",
+                        reason, account_id, res["hour_count"], _CREATETORRENT_LIMIT_HOUR)
         else:
-            log.warning("createtorrent [%s] SKIPPED  -  per-minute burst %d/%d reached",
-                        reason, res["min_count"], _CREATETORRENT_LIMIT_MIN)
+            log.warning("createtorrent [%s] account=%s SKIPPED  -  per-minute burst %d/%d reached",
+                        reason, account_id, res["min_count"], _CREATETORRENT_LIMIT_MIN)
         raise RateLimited()
-    log.info("createtorrent [%s] (%d/60h uncached, %d/10m, %s): reserving slot",
-             reason, res["hour_count"], res["min_count"], "cached" if cached else "uncached")
+    log.info("createtorrent [%s] account=%s (%d/60h uncached, %d/10m, %s): reserving slot",
+             reason, account_id, res["hour_count"], res["min_count"], "cached" if cached else "uncached")
     return res["id"]
 
 
@@ -68,10 +95,8 @@ def _release_createtorrent_slot(entry: int) -> None:
 
 def createtorrent_usage(account_id: int | None = None, window_sec: int = 3600) -> dict:
     """Return how many createtorrent calls happened in the last `window_sec`,
-    broken down by reason. Used by the UI to explain rate-limit hits.
-
-    Temporary signature until Task 2 makes the client account-aware; kept
-    compatible with the four-tuple `get_createtorrent_log` now returns."""
+    broken down by reason, for one account or (account_id=None) summed
+    across every account."""
     import db as _db
     cutoff = time.time() - window_sec
     recent = _db.get_createtorrent_log(cutoff, account_id)
@@ -105,32 +130,37 @@ class RateLimited(Exception):
     we never even send a request we know TorBox will reject with 429."""
 
 
-_last_429_at: float | None = None  # wall-clock time of the last 429 from createtorrent
+_last_429: dict[int, float] = {}  # account_id -> wall-clock time of its last createtorrent 429
 
 
-def last_429_at() -> float | None:
-    return _last_429_at
+def last_429_at(account_id: int | None = None) -> float | None:
+    if account_id is not None:
+        return _last_429.get(account_id)
+    return max(_last_429.values(), default=None)
 
 
-def add_magnet(magnet: str, timeout: int = 30, reason: str = "unknown",
+def add_magnet(account_id: int, magnet: str, timeout: int = 30, reason: str = "unknown",
                cached: bool | None = None) -> dict:
-    """Add a magnet. `cached` is what the caller's cache check said: True
-    means the add does not count against TorBox's hourly uncached budget.
-    TorBox's answer corrects the flag afterwards where it is explicit."""
-    global _last_429_at
+    """Add a magnet to this account. `cached` is what the caller's cache
+    check said: True means the add does not count against TorBox's hourly
+    uncached budget. TorBox's answer corrects the flag afterwards where it
+    is explicit."""
     url = f"{_base_url().rstrip('/')}/torrents/createtorrent"
     # Client-side guard: check both the 60/hour and the 10/minute edge limits,
     # and reserve the slot in the same locked step (see _reserve_createtorrent_slot).
-    entry = _reserve_createtorrent_slot(reason, cached=bool(cached))
-    log.info("createtorrent [%s]: %s", reason, magnet[:80])
+    entry = _reserve_createtorrent_slot(account_id, reason, cached=bool(cached))
+    log.info("createtorrent [%s] account=%s: %s", reason, account_id, magnet[:80])
     try:
-        resp = requests.post(url, headers=_headers(), data={"magnet": magnet}, timeout=timeout)
+        resp = requests.post(url, headers=_headers(account_id), data={"magnet": magnet}, timeout=timeout)
         if resp.status_code == 429:
             retry_after = int(resp.headers.get("Retry-After", 60))
-            _last_429_at = time.time()
-            log.warning("createtorrent [%s] got 429 from TorBox (Retry-After=%ds)  -  raising RateLimited",
-                        reason, retry_after)
+            _last_429[account_id] = time.time()
+            import torbox_pool
+            torbox_pool.mark_429(account_id)
+            log.warning("createtorrent [%s] account=%s got 429 from TorBox (Retry-After=%ds)  -  raising RateLimited",
+                        reason, account_id, retry_after)
             raise RateLimited()
+        _check_auth(account_id, resp)
         resp.raise_for_status()
     except Exception:
         # TorBox never actually accepted this call - give the slot back.
@@ -142,7 +172,7 @@ def add_magnet(magnet: str, timeout: int = 30, reason: str = "unknown",
         if payload.get("error") == "DUPLICATE_ITEM":
             log.info("Torbox: torrent already exists (DUPLICATE_ITEM), treating as success")
             _correct_cached_flag(entry, bool(cached), True)
-            invalidate_mylist_cache()
+            invalidate_mylist_cache(account_id)
             return payload.get("data", {}) or {}
         raise RuntimeError(f"Torbox add failed: {payload}")
     data = payload.get("data", {}) or {}
@@ -151,7 +181,7 @@ def add_magnet(magnet: str, timeout: int = 30, reason: str = "unknown",
     if data.get("torrent_id") and not data.get("id"):
         data["id"] = data["torrent_id"]
     log.info("Torbox createtorrent response: %s (id=%s)", payload.get("detail") or data, data.get("id"))
-    invalidate_mylist_cache()
+    invalidate_mylist_cache(account_id)
     return data
 
 
@@ -182,43 +212,55 @@ def _correct_cached_flag(entry: int, reserved_cached: bool, actual: bool | None)
 
 
 _MYLIST_TTL_SECONDS = 45
-_mylist_cache: dict = {"items": None, "ts": 0.0}
+# account_id -> {"items": [...], "ts": monotonic}
+_mylist: dict[int, dict] = {}
 _mylist_lock = threading.Lock()
-# Held for the duration of one refresh, so TTL expiry does not stampede: one
-# thread pays the (up to 20-page) fetch, everyone else waits for its result
-# or keeps serving the barely-stale copy.
-_mylist_refresh_lock = threading.Lock()
+# Held for the duration of one account's refresh, so TTL expiry does not
+# stampede: one thread pays the (up to 20-page) fetch, everyone else waits
+# for its result or keeps serving the barely-stale copy. Created lazily
+# under _mylist_lock so accounts don't share a lock.
+_mylist_refresh_locks: dict[int, threading.Lock] = {}
 
 
-def _mylist_fresh():
+def _refresh_lock(account_id: int) -> threading.Lock:
+    with _mylist_lock:
+        lock = _mylist_refresh_locks.get(account_id)
+        if lock is None:
+            lock = threading.Lock()
+            _mylist_refresh_locks[account_id] = lock
+        return lock
+
+
+def _mylist_fresh(account_id: int):
     import time as _t
-    cached = _mylist_cache["items"]
-    if cached is not None and (_t.monotonic() - _mylist_cache["ts"]) < _MYLIST_TTL_SECONDS:
-        return cached
+    entry = _mylist.get(account_id)
+    if entry is not None and (_t.monotonic() - entry["ts"]) < _MYLIST_TTL_SECONDS:
+        return entry["items"]
     return None
 
 
-def list_torrents(timeout: int = 30, force_refresh: bool = False) -> list[dict]:
-    """Return TorBox mylist (all pages), cached for ~45s."""
+def list_torrents(account_id: int, timeout: int = 30, force_refresh: bool = False) -> list[dict]:
+    """Return this account's TorBox mylist (all pages), cached for ~45s."""
     if not force_refresh:
-        fresh = _mylist_fresh()
+        fresh = _mylist_fresh(account_id)
         if fresh is not None:
             return fresh
-        # Stale but present, and another thread is already refreshing:
-        # serve the stale copy instead of stacking a duplicate fetch.
-        stale = _mylist_cache["items"]
-        if stale is not None and _mylist_refresh_lock.locked():
+        # Stale but present, and another thread is already refreshing this
+        # account: serve the stale copy instead of stacking a duplicate fetch.
+        entry = _mylist.get(account_id)
+        stale = entry["items"] if entry is not None else None
+        if stale is not None and _refresh_lock(account_id).locked():
             return stale
-    with _mylist_refresh_lock:
+    with _refresh_lock(account_id):
         # Re-check: the thread we waited behind may have just refreshed.
         if not force_refresh:
-            fresh = _mylist_fresh()
+            fresh = _mylist_fresh(account_id)
             if fresh is not None:
                 return fresh
-        return _fetch_mylist(timeout)
+        return _fetch_mylist(account_id, timeout)
 
 
-def _fetch_mylist(timeout: int) -> list[dict]:
+def _fetch_mylist(account_id: int, timeout: int) -> list[dict]:
     import time as _t
     url = f"{_base_url().rstrip('/')}/torrents/mylist"
     all_items: list[dict] = []
@@ -226,15 +268,9 @@ def _fetch_mylist(timeout: int) -> list[dict]:
     offset = 0
     limit = 1000
     for _ in range(20):  # max 20 pages = 20 000 items; guards against infinite loop
-        resp = requests.get(url, headers=_headers(), timeout=timeout,
+        resp = requests.get(url, headers=_headers(account_id), timeout=timeout,
                             params={"limit": limit, "offset": offset})
-        if resp.status_code == 403:
-            log.warning("TorBox mylist returned 403 - API key invalid or plan restriction")
-            # Cache the empty result for 5 minutes to avoid hammering TorBox
-            with _mylist_lock:
-                _mylist_cache["items"] = all_items
-                _mylist_cache["ts"] = _t.monotonic() + (5 * 60 - _MYLIST_TTL_SECONDS)
-            return all_items
+        _check_auth(account_id, resp)
         resp.raise_for_status()
         payload = resp.json() or {}
         page = payload.get("data", []) or []
@@ -247,16 +283,18 @@ def _fetch_mylist(timeout: int) -> list[dict]:
             break
         offset += limit
     with _mylist_lock:
-        _mylist_cache["items"] = all_items
-        _mylist_cache["ts"] = _t.monotonic()
+        _mylist[account_id] = {"items": all_items, "ts": _t.monotonic()}
     return all_items
 
 
-def invalidate_mylist_cache() -> None:
-    """Drop the mylist cache so the next list_torrents() hits TorBox fresh."""
+def invalidate_mylist_cache(account_id: int | None = None) -> None:
+    """Drop the mylist cache for one account, or (account_id=None) every
+    account, so the next list_torrents() hits TorBox fresh."""
     with _mylist_lock:
-        _mylist_cache["items"] = None
-        _mylist_cache["ts"] = 0.0
+        if account_id is None:
+            _mylist.clear()
+        else:
+            _mylist.pop(account_id, None)
 
 
 def _matches_hash(item: dict, info_hash: str) -> bool:
@@ -264,19 +302,20 @@ def _matches_hash(item: dict, info_hash: str) -> bool:
     return candidate == info_hash.lower()
 
 
-def find_by_hash(info_hash: str, force_refresh: bool = False) -> dict | None:
-    for item in list_torrents(force_refresh=force_refresh):
+def find_by_hash(account_id: int, info_hash: str, force_refresh: bool = False) -> dict | None:
+    for item in list_torrents(account_id, force_refresh=force_refresh):
         if _matches_hash(item, info_hash):
             return item
     return None
 
 
-def find_by_id(torrent_id: int, timeout: int = 15) -> dict | None:
+def find_by_id(account_id: int, torrent_id: int, timeout: int = 15) -> dict | None:
     """Fetch a single torrent by ID directly from TorBox  -  not limited to mylist top-1000."""
     url = f"{_base_url().rstrip('/')}/torrents/mylist"
     try:
-        resp = requests.get(url, headers=_headers(), timeout=timeout,
+        resp = requests.get(url, headers=_headers(account_id), timeout=timeout,
                             params={"id": torrent_id})
+        _check_auth(account_id, resp)
         resp.raise_for_status()
         data = (resp.json() or {}).get("data")
         if isinstance(data, dict) and data.get("id") == torrent_id:
@@ -286,25 +325,28 @@ def find_by_id(torrent_id: int, timeout: int = 15) -> dict | None:
                 if item.get("id") == torrent_id:
                     return item
     except requests.RequestException as exc:
-        log.warning("TorBox find_by_id(%s) failed: %s", torrent_id, exc)
+        log.warning("TorBox find_by_id(%s) account=%s failed: %s", torrent_id, account_id, exc)
     return None
 
 
-def get_user_info(timeout: int = 10) -> dict | None:
+def get_user_info(account_id: int, timeout: int = 10) -> dict | None:
     """Return TorBox user info (subscription, plan, etc) or None on failure."""
     url = f"{_base_url().rstrip('/')}/user/me"
     try:
-        resp = requests.get(url, headers=_headers(), timeout=timeout)
+        resp = requests.get(url, headers=_headers(account_id), timeout=timeout)
+        _check_auth(account_id, resp)
         resp.raise_for_status()
         return (resp.json() or {}).get("data") or {}
+    except AuthFailed:
+        raise
     except Exception as exc:
-        log.debug("TorBox user info failed: %s", exc)
+        log.debug("TorBox user info account=%s failed: %s", account_id, exc)
         return None
 
 
-def get_usage_summary() -> dict:
+def get_usage_summary(account_id: int) -> dict:
     """Derived usage info: torrent count, total bytes, active-state breakdown."""
-    items = list_torrents()
+    items = list_torrents(account_id)
     total_bytes = sum(t.get("size") or 0 for t in items)
     states: dict[str, int] = {}
     for t in items:
@@ -318,52 +360,59 @@ def get_usage_summary() -> dict:
     }
 
 
-# Track last warning to avoid spamming
-_last_quota_warn: dict[str, float] = {}
+# Track last warning to avoid spamming, keyed by (account_id, metric)
+_last_quota_warn: dict[tuple[int, str], float] = {}
 
 
 def check_quota_and_warn(threshold_count: int = 200, threshold_gb: int = 4000) -> None:
-    """Notify if torrent count or total size approaches the configured threshold.
-    Re-warns at most once every 6 hours per metric."""
+    """Notify if any account's torrent count or total size approaches the
+    configured threshold. Re-warns at most once every 6 hours per account
+    per metric."""
     import time
     import db
     import notify
-    summary = get_usage_summary()
+    import torbox_pool
     now = time.monotonic()
-    for metric, value, limit, fmt in (
-        ("count", summary["torrent_count"], threshold_count, "%d torrents"),
-        ("size", summary["total_gb"], threshold_gb, "%.1f GB"),
-    ):
-        if value < limit * 0.8:
-            continue
-        if now - _last_quota_warn.get(metric, 0) < 6 * 3600:
-            continue
-        _last_quota_warn[metric] = now
-        msg = f"TorBox usage approaching limit: {fmt % value} (threshold {limit})"
-        log.warning(msg)
-        db.log_activity("quota_warn", "TorBox", msg, False)
-        notify.send("TorBox quota warning", msg, success=False)
+    for acct in torbox_pool.accounts():
+        summary = get_usage_summary(acct.id)
+        for metric, value, limit, fmt in (
+            ("count", summary["torrent_count"], threshold_count, "%d torrents"),
+            ("size", summary["total_gb"], threshold_gb, "%.1f GB"),
+        ):
+            if value < limit * 0.8:
+                continue
+            key = (acct.id, metric)
+            if now - _last_quota_warn.get(key, 0) < 6 * 3600:
+                continue
+            _last_quota_warn[key] = now
+            msg = f"TorBox usage approaching limit ({acct.label}): {fmt % value} (threshold {limit})"
+            log.warning(msg)
+            db.log_activity("quota_warn", "TorBox", msg, False)
+            notify.send("TorBox quota warning", msg, success=False)
 
 
-def delete_torrent(torrent_id: int, timeout: int = 15) -> bool:
+def delete_torrent(account_id: int, torrent_id: int, timeout: int = 15) -> bool:
     url = f"{_base_url().rstrip('/')}/torrents/controltorrent"
     try:
         resp = requests.post(
-            url, headers=_headers(),
+            url, headers=_headers(account_id),
             json={"torrent_id": torrent_id, "operation": "delete"},
             timeout=timeout,
         )
+        _check_auth(account_id, resp)
         resp.raise_for_status()
-        log.info("Deleted TorBox torrent %s", torrent_id)
-        invalidate_mylist_cache()
+        log.info("Deleted TorBox torrent %s (account=%s)", torrent_id, account_id)
+        invalidate_mylist_cache(account_id)
         return True
     except Exception as exc:
-        log.warning("Delete torrent %s failed: %s", torrent_id, exc)
+        log.warning("Delete torrent %s (account=%s) failed: %s", torrent_id, account_id, exc)
         return False
 
 
 def check_cached(hashes: list[str], timeout: int = 15) -> set[str]:
-    """Return the subset of hashes that TorBox has cached (instant download available)."""
+    """Return the subset of hashes that TorBox has cached (instant download
+    available). Not bound to one account: any enabled account's key answers
+    the same cache-status question."""
     if not hashes:
         return set()
     _BATCH = 100
@@ -376,7 +425,7 @@ def check_cached(hashes: list[str], timeout: int = 15) -> set[str]:
     url = f"{_base_url().rstrip('/')}/torrents/checkcached"
     params = {"hash": ",".join(hashes), "format": "object"}
     try:
-        resp = requests.get(url, headers=_headers(), params=params, timeout=timeout)
+        resp = requests.get(url, headers=_any_headers(), params=params, timeout=timeout)
         resp.raise_for_status()
     except requests.RequestException as exc:
         log.warning("TorBox checkcached failed: %s", exc)
@@ -413,7 +462,7 @@ def check_cached_files(hashes: list[str], timeout: int = 15) -> dict[str, dict]:
     # 2026-09-13), so a season pack's contents are known before any add.
     params = {"hash": ",".join(hashes), "format": "object", "list_files": "true"}
     try:
-        resp = requests.get(url, headers=_headers(), params=params, timeout=timeout)
+        resp = requests.get(url, headers=_any_headers(), params=params, timeout=timeout)
         resp.raise_for_status()
     except requests.RequestException as exc:
         log.warning("TorBox checkcached (files) failed: %s", exc)
@@ -422,10 +471,10 @@ def check_cached_files(hashes: list[str], timeout: int = 15) -> dict[str, dict]:
     return {h.lower(): v for h, v in data.items()}
 
 
-def title_exists(title: str) -> bool:
-    """Return True if any torrent in mylist appears to match the given title."""
+def title_exists(account_id: int, title: str) -> bool:
+    """Return True if any torrent in this account's mylist appears to match the given title."""
     needle = title.lower()
-    for item in list_torrents():
+    for item in list_torrents(account_id):
         name = (item.get("name") or "").lower()
         if needle in name or name in needle:
             return True
@@ -439,7 +488,7 @@ def _is_ready(item: dict) -> bool:
     return state in ("cached", "completed", "uploading", "metadl_done")
 
 
-def wait_until_ready(info_hash: str, timeout: int | None = None,
+def wait_until_ready(account_id: int, info_hash: str, timeout: int | None = None,
                      torrent_id: int | None = None) -> dict | None:
     """Poll Torbox until the torrent reports completion or the timeout is reached.
     timeout defaults to TORBOX_POLL_TIMEOUT_SEC; pass a smaller value for
@@ -450,9 +499,9 @@ def wait_until_ready(info_hash: str, timeout: int | None = None,
     deadline = time.monotonic() + limit
     last_state: str | None = None
     while time.monotonic() < deadline:
-        item = find_by_id(torrent_id) if torrent_id else find_by_hash(info_hash)
+        item = find_by_id(account_id, torrent_id) if torrent_id else find_by_hash(account_id, info_hash)
         if item is None:
-            log.debug("Torrent %s not in mylist yet", info_hash)
+            log.debug("Torrent %s not in mylist yet (account=%s)", info_hash, account_id)
         else:
             state = item.get("download_state") or ""
             progress = item.get("progress") or 0
@@ -463,5 +512,23 @@ def wait_until_ready(info_hash: str, timeout: int | None = None,
                 log.info("Torbox reports torrent ready: %s", info_hash)
                 return item
         time.sleep(TORBOX_POLL_INTERVAL_SEC)
-    log.warning("Timed out waiting for Torbox to make %s available", info_hash)
-    return find_by_id(torrent_id) if torrent_id else find_by_hash(info_hash)
+    log.warning("Timed out waiting for Torbox to make %s available (account=%s)", info_hash, account_id)
+    return find_by_id(account_id, torrent_id) if torrent_id else find_by_hash(account_id, info_hash)
+
+
+def request_download_link(account_id: int, torrent_id: int, file_id: int, timeout: int = 15) -> str | None:
+    """The CDN link for one file of a torrent in this account (requestdl)."""
+    import torbox_pool
+    acct = torbox_pool.account(account_id)
+    if acct is None:
+        return None
+    url = f"{_base_url().rstrip('/')}/torrents/requestdl"
+    params = {"token": acct.api_key, "torrent_id": torrent_id, "file_id": file_id, "zip_link": "false"}
+    try:
+        resp = requests.get(url, params=params, timeout=timeout)
+        _check_auth(account_id, resp)
+        resp.raise_for_status()
+        return (resp.json() or {}).get("data") or None
+    except Exception as exc:
+        log.warning("requestdl failed account=%s torrent=%s file=%s: %s", account_id, torrent_id, file_id, exc)
+        return None

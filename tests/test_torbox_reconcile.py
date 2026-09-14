@@ -38,8 +38,12 @@ def _isolated_db(tmp_path, monkeypatch):
     _drop_cached_conn()
     for m in _db_modules():
         monkeypatch.setattr(m, "DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("TORBOX_API_KEY", "k1")
     _drop_cached_conn()
     db.init()
+    import torbox_pool
+    torbox_pool.invalidate()
+    torbox_pool._health.clear()
     catbox.invalidate_url_cache()
     with catbox._reconcile_lock:
         catbox._last_reconcile = None
@@ -64,9 +68,9 @@ def seeded(monkeypatch):
     _item("gone", 3, HC)      # id gone, hash gone
     _item("busy", 4, HD)      # id gone but a play holds its token lock
     deleted = []
-    monkeypatch.setattr(catbox.torbox, "delete_torrent", lambda tid, **k: deleted.append(tid))
+    monkeypatch.setattr(catbox.torbox, "delete_torrent", lambda account_id, tid, **k: deleted.append(tid))
     monkeypatch.setattr(catbox.torbox, "list_torrents",
-                        lambda **k: [{"id": 1, "hash": HA.upper()}, {"id": 22, "hash": HB}, {"id": 99, "hash": "f" * 40}])
+                        lambda account_id, **k: [{"id": 1, "hash": HA.upper()}, {"id": 22, "hash": HB}, {"id": 99, "hash": "f" * 40}])
     return deleted
 
 
@@ -91,12 +95,12 @@ def test_reconcile_clears_gone_ids_repoints_moved_ones_and_deletes_nothing(seede
 
 
 def test_an_empty_or_failing_list_changes_nothing(seeded, monkeypatch):
-    monkeypatch.setattr(catbox.torbox, "list_torrents", lambda **k: [])
+    monkeypatch.setattr(catbox.torbox, "list_torrents", lambda account_id, **k: [])
     out = catbox.reconcile_torbox_ids()
     assert out["cleared"] == 0 and out["repointed"] == 0 and out["skipped"]
     assert db.get_virtual_item("gone")["torbox_id"] == 3
 
-    def boom(**k):
+    def boom(account_id, **k):
         raise RuntimeError("torbox down")
     monkeypatch.setattr(catbox.torbox, "list_torrents", boom)
     out = catbox.reconcile_torbox_ids()
@@ -106,7 +110,7 @@ def test_an_empty_or_failing_list_changes_nothing(seeded, monkeypatch):
 
 def test_nothing_stored_means_no_torbox_call(monkeypatch):
     calls = []
-    monkeypatch.setattr(catbox.torbox, "list_torrents", lambda **k: calls.append(1) or [])
+    monkeypatch.setattr(catbox.torbox, "list_torrents", lambda account_id, **k: calls.append(1) or [])
     out = catbox.reconcile_torbox_ids()
     assert out["checked"] == 0 and calls == []
 

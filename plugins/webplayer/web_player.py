@@ -235,13 +235,15 @@ def _get_cdn_url(stream: streams.Stream,
 
     We never wait for a full download here.
     """
-    item = torbox.find_by_hash(stream.info_hash)
+    import torbox_pool
+    acct = torbox_pool.choose_for_add().id
+    item = torbox.find_by_hash(acct, stream.info_hash)
 
     if item is None:
         # Not in library yet  -  add it (instant because caller verified cache).
         log.info("web_player: adding cached magnet hash=%s", stream.info_hash)
         try:
-            result     = torbox.add_magnet(stream.magnet, reason="web_player")
+            result     = torbox.add_magnet(acct, stream.magnet, reason="web_player")
             torrent_id = (result or {}).get("torrent_id") or (result or {}).get("id")
         except torbox.RateLimited:
             log.warning("web_player: TorBox rate-limited on add_magnet hash=%s", stream.info_hash)
@@ -249,10 +251,10 @@ def _get_cdn_url(stream: streams.Stream,
         except (RuntimeError, _req_exc.RequestException) as exc:
             log.warning("web_player: add_magnet failed for hash=%s: %s", stream.info_hash, exc)
             return None, None, None
-        item = torbox.wait_until_ready(stream.info_hash, timeout=60,
+        item = torbox.wait_until_ready(acct, stream.info_hash, timeout=60,
                                        torrent_id=torrent_id)
     elif not torbox._is_ready(item):
-        item = torbox.wait_until_ready(stream.info_hash, timeout=60,
+        item = torbox.wait_until_ready(acct, stream.info_hash, timeout=60,
                                        torrent_id=item.get("id"))
 
     if not item:
@@ -261,7 +263,7 @@ def _get_cdn_url(stream: streams.Stream,
     torrent_id = item.get("id")
     files      = item.get("files") or []
     if not files:
-        fresh = torbox.find_by_id(torrent_id)
+        fresh = torbox.find_by_id(acct, torrent_id)
         files = (fresh or {}).get("files") or []
     if not files:
         return None, None, None
@@ -272,28 +274,19 @@ def _get_cdn_url(stream: streams.Stream,
     main    = max(videos, key=lambda f: f.get("size") or 0)
     file_id = main.get("id")
 
-    url = _request_dl(torrent_id, file_id)
+    url = torbox.request_download_link(acct, torrent_id, file_id)
     return url, torrent_id, file_id
 
 
-def _request_dl(torrent_id: int, file_id: int) -> str | None:
-    """Call TorBox requestdl and return the CDN URL."""
-    import config as _config
-    base = (_settings.get("TORBOX_BASE_URL") or _config.TORBOX_BASE_URL).rstrip("/")
-    url  = f"{base}/torrents/requestdl"
-    params = {
-        "token":      _settings.get("TORBOX_API_KEY") or _config.TORBOX_API_KEY,
-        "torrent_id": torrent_id,
-        "file_id":    file_id,
-        "zip_link":   "false",
-    }
-    try:
-        resp = req_lib.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        return (resp.json() or {}).get("data") or None
-    except Exception as exc:
-        log.warning("web_player: requestdl failed: %s", exc)
-        return None
+def _find_in_any_account(info_hash: str) -> dict | None:
+    """Library check across every enabled account: a hash may sit in any
+    of them, not just the one a future add would pick."""
+    import torbox_pool
+    for a in torbox_pool.accounts():
+        item = torbox.find_by_hash(a.id, info_hash)
+        if item:
+            return item
+    return None
 
 
 def _run_job(job: PrepareJob) -> None:
@@ -328,7 +321,7 @@ def _run_job(job: PrepareJob) -> None:
         best = None
         try:
             for c in candidates:
-                if torbox.find_by_hash(c.info_hash):
+                if _find_in_any_account(c.info_hash):
                     best = c
                     log.info("web_player: found in TorBox library hash=%s", c.info_hash)
                     break
@@ -373,7 +366,7 @@ def _run_job(job: PrepareJob) -> None:
             # Only use instantly-available content.
             _hash = candidate.info_hash
             try:
-                in_library = torbox.find_by_hash(_hash)
+                in_library = _find_in_any_account(_hash)
             except (torbox.RateLimited, RuntimeError, _req_exc.RequestException):
                 in_library = None
             if not in_library:
@@ -465,7 +458,7 @@ def _run_job(job: PrepareJob) -> None:
             job.message = "Fetching via TorBox…"
             _cdn, _torrent_id, _file_id = _get_cdn_url(candidate)
             if not _cdn:
-                log.warning("web_player: requestdl failed for hash=%s, skipping", _hash)
+                log.warning("web_player: no CDN link for hash=%s, skipping", _hash)
                 continue
 
             # Skip probe — serve directly and let the browser decide.

@@ -132,9 +132,9 @@ class TestScanTorboxLibrary:
             "id": 1, "name": "Pulp.Fiction.1994.1080p.WEB-DL", "hash": "a" * 40,
             "files": [{"id": 1, "name": "Pulp.Fiction.1994.1080p.WEB-DL.mkv"}],
         }
-        sg.torbox_mod.list_torrents = lambda force_refresh=True: [item]
+        sg.torbox_mod.list_torrents = lambda account_id, force_refresh=True: [item]
         sg.torbox_mod._is_ready = lambda item: True
-        sg.torbox_mod.find_by_id = lambda torrent_id: item
+        sg.torbox_mod.find_by_id = lambda account_id, torrent_id: item
 
         result = sg.scan_torbox_library()
         assert result == {"scanned": 1, "imported": 1, "skipped": 0, "failed": 0}
@@ -144,7 +144,7 @@ class TestScanTorboxLibrary:
     def test_skips_torrent_already_known(self, monkeypatch):
         monkeypatch.setattr(sg.db, "get_virtual_item_by_hash", lambda info_hash: {"token": "existing"})
         item = {"id": 2, "name": "Known.Movie.2020", "hash": "b" * 40, "files": []}
-        sg.torbox_mod.list_torrents = lambda force_refresh=True: [item]
+        sg.torbox_mod.list_torrents = lambda account_id, force_refresh=True: [item]
         sg.torbox_mod._is_ready = lambda item: True
 
         result = sg.scan_torbox_library()
@@ -152,7 +152,7 @@ class TestScanTorboxLibrary:
 
     def test_skips_not_ready_torrents(self, monkeypatch):
         item = {"id": 3, "name": "Still.Downloading.2020", "hash": "c" * 40, "files": []}
-        sg.torbox_mod.list_torrents = lambda force_refresh=True: [item]
+        sg.torbox_mod.list_torrents = lambda account_id, force_refresh=True: [item]
         sg.torbox_mod._is_ready = lambda item: False
 
         result = sg.scan_torbox_library()

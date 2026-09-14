@@ -78,10 +78,12 @@ def _try_add_magnet(stream: TorrentioStream, label: str, cached: bool = False) -
     when the hourly createtorrent budget is gone, so the request is rescheduled
     rather than wasting the quota or marking a good torrent bad. We do NOT retry
     a 429 inline  -  the hourly window won't reset in seconds."""
+    import torbox_pool
+    acct = torbox_pool.choose_for_add().id
     # Skip createtorrent entirely if this hash is already in our TorBox library  -
     # re-adding it would waste a 60/hour quota slot for content we already have.
     try:
-        existing = torbox.find_by_hash(stream.info_hash)
+        existing = torbox.find_by_hash(acct, stream.info_hash)
     except Exception as exc:
         log.warning("Library lookup failed for %s, proceeding as not-yet-added: %s", label, exc)
         existing = None
@@ -90,8 +92,8 @@ def _try_add_magnet(stream: TorrentioStream, label: str, cached: bool = False) -
                  existing.get("id"), label)
         return True
     try:
-        torbox.add_magnet(stream.magnet, reason="processor", cached=cached)
-        item = torbox.wait_until_ready(stream.info_hash)
+        torbox.add_magnet(acct, stream.magnet, reason="processor", cached=cached)
+        item = torbox.wait_until_ready(acct, stream.info_hash)
         if not item or not torbox._is_ready(item):
             # wait_until_ready() timed out without TorBox ever reporting the
             # torrent ready. Don't create a .strm for a file that isn't there
@@ -791,11 +793,19 @@ def _process_locked(req: MediaRequest, _retry_attempt: int) -> bool:
         # already written during registration, so this loop no-ops.)
         for w in season_winners:
             try:
-                item = torbox.find_by_hash(w.info_hash) if w else None
+                import torbox_pool
+                item = None
+                found_acct = None
+                if w:
+                    for a in torbox_pool.accounts():
+                        item = torbox.find_by_hash(a.id, w.info_hash)
+                        if item:
+                            found_acct = a.id
+                            break
                 torrent_id = item.get('id') if item else None
                 if not torrent_id:
                     continue
-                strm_generator.create_strm_for_torrent(torrent_id, req.title, req.media_type,
+                strm_generator.create_strm_for_torrent(found_acct, torrent_id, req.title, req.media_type,
                                                         imdb_id=req.imdb_id,
                                                         tmdb_id=getattr(req, 'tmdb_id', None))
             except Exception as exc:

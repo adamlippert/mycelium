@@ -38,6 +38,13 @@ ON_PLAY_READY_TIMEOUT_SEC = 45  # max wait on-play before giving up (cached = se
 _url_cache: dict[str, tuple[str, float]] = {}
 _url_cache_lock = threading.Lock()
 
+
+def _home(item: dict) -> int:
+    """The account holding the item's torrent; until Task 3 homes items
+    properly, an unhomed item uses the first enabled account."""
+    import torbox_pool
+    return item.get("torbox_account") or torbox_pool.accounts()[0].id
+
 # Failure cooldown: after a failed materialize (429, timeout, no file found),
 # block retries for a short window so Jellyfin's burst of probe requests doesn't
 # hammer TorBox with repeated createtorrent calls.
@@ -502,20 +509,21 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
 
     # ── TorBox path ───────────────────────────────────────────────────────────
     torbox_id = item["torbox_id"]
+    acct = _home(item)
 
     # Fast path: cached torbox_id still live in TorBox.
     if torbox_id:
-        live = torbox.find_by_id(torbox_id)
+        live = torbox.find_by_id(acct, torbox_id)
         if not live or not torbox._is_ready(live):
             torbox_id = None
             rematerialized = True
 
     # Second chance: torrent may still be in TorBox library under its hash.
     if not torbox_id and item.get("info_hash"):
-        existing = torbox.find_by_hash(item["info_hash"])
+        existing = torbox.find_by_hash(acct, item["info_hash"])
         if existing and torbox._is_ready(existing):
             torbox_id = existing["id"]
-            db.update_virtual_torbox_id(token, torbox_id)
+            db.set_virtual_torbox(token, torbox_id, acct)
             log.info("Catbox: %s still in library (id=%s)  -  no re-add needed",
                      item["title"], torbox_id)
 
@@ -525,18 +533,18 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
     if not torbox_id and item.get("magnet") and allow_readd:
         try:
             log.info("Catbox: %s adding stored magnet", item["title"])
-            added = torbox.add_magnet(item["magnet"], reason="catbox-readd")
+            added = torbox.add_magnet(acct, item["magnet"], reason="catbox-readd")
             _tid = added.get("id") or added.get("torrent_id")
             existing = added if _tid and torbox._is_ready(added) else (
-                torbox.find_by_id(_tid) if _tid else
-                torbox.find_by_hash(item["info_hash"], force_refresh=True)
+                torbox.find_by_id(acct, _tid) if _tid else
+                torbox.find_by_hash(acct, item["info_hash"], force_refresh=True)
             )
             if not (existing and torbox._is_ready(existing)) and _tid:
                 existing = torbox.wait_until_ready(
-                    item["info_hash"], timeout=ON_PLAY_READY_TIMEOUT_SEC, torrent_id=_tid)
+                    acct, item["info_hash"], timeout=ON_PLAY_READY_TIMEOUT_SEC, torrent_id=_tid)
             if existing and torbox._is_ready(existing):
                 torbox_id = existing["id"]
-                db.update_virtual_torbox_id(token, torbox_id)
+                db.set_virtual_torbox(token, torbox_id, acct)
                 log.info("Catbox: %s added via stored magnet (id=%s)", item["title"], torbox_id)
         except Exception as exc:
             exc_str = str(exc)
@@ -644,16 +652,16 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
             item["file_id"] = None
 
         try:
-            added = torbox.add_magnet(new_magnet, reason="catbox-search", cached=True)
+            added = torbox.add_magnet(acct, new_magnet, reason="catbox-search", cached=True)
             # Use the ID from the add response to avoid a full mylist refresh.
             # TorBox returns "torrent_id" for cached adds, "id" for others.
             _tid = added.get("id") or added.get("torrent_id")
             live = added if _tid and torbox._is_ready(added) else None
             if not live:
-                live = torbox.find_by_id(_tid) if _tid else None
+                live = torbox.find_by_id(acct, _tid) if _tid else None
             if not live or not torbox._is_ready(live):
                 live = torbox.wait_until_ready(
-                    new_hash, timeout=ON_PLAY_READY_TIMEOUT_SEC, torrent_id=_tid or None)
+                    acct, new_hash, timeout=ON_PLAY_READY_TIMEOUT_SEC, torrent_id=_tid or None)
             if not live:
                 log.error("Catbox: fresh release not ready for %s  -  keeping .strm, retry soon",
                           item["title"])
@@ -662,7 +670,7 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
                     db.update_playability_fail(ckey, REASON_WAIT_TIMEOUT)
                 return None
             torbox_id = live["id"]
-            db.update_virtual_torbox_id(token, torbox_id)
+            db.set_virtual_torbox(token, torbox_id, acct)
         except Exception as exc:
             is_429 = "429" in str(exc)
             log.error("Catbox: add_magnet failed for %s: %s", token, exc)
@@ -681,7 +689,7 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
     # `if not file_id` sent the first episode of every pack through the
     # listing again and failed the play when the ?id= endpoint omitted files.
     if file_id is None:
-        live = torbox.find_by_id(torbox_id)
+        live = torbox.find_by_id(acct, torbox_id)
         if live:
             import strm_generator
             if item["media_type"] == "movie":
@@ -714,7 +722,7 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
         return None
 
     import strm_generator
-    url = strm_generator._get_stream_url(torbox_id, file_id)
+    url = torbox.request_download_link(acct, torbox_id, file_id)
     if url:
         db.touch_virtual_item(token)
         if ckey:
@@ -962,36 +970,48 @@ def reconcile_torbox_ids() -> dict:
     items = db.get_virtual_items_with_torbox_id()
     result["checked"] = len(items)
     if items:
-        try:
-            live = torbox.list_torrents(force_refresh=True)
-        except Exception as exc:
-            log.warning("Catbox: TorBox id reconcile skipped, list unavailable: %s", exc)
-            live = None
-        if not live:
-            result["skipped"] = "TorBox list empty or unavailable"
-        else:
+        live_by_account: dict[int, list | None] = {}
+
+        def _live_for(acct_id: int):
+            if acct_id not in live_by_account:
+                try:
+                    live_by_account[acct_id] = torbox.list_torrents(acct_id, force_refresh=True)
+                except Exception as exc:
+                    log.warning("Catbox: TorBox id reconcile skipped for account %s, list unavailable: %s",
+                                acct_id, exc)
+                    live_by_account[acct_id] = None
+            return live_by_account[acct_id]
+
+        any_live = False
+        for item in items:
+            acct_id = _home(item)
+            live = _live_for(acct_id)
+            if not live:
+                continue
+            any_live = True
             live_ids = {t.get("id") for t in live}
             by_hash = {(t.get("hash") or "").lower(): t.get("id") for t in live if t.get("hash")}
-            for item in items:
-                if item["torbox_id"] in live_ids:
-                    continue
-                if _token_lock(item["token"]).locked():
-                    continue  # a play is materializing it right now
-                other = by_hash.get((item.get("info_hash") or "").lower())
-                if other is not None:
-                    db.update_virtual_torbox_id(item["token"], other)
-                    result["repointed"] += 1
-                    log.info("Catbox: %s (%s) now under TorBox id %s, was %s",
-                             item.get("title"), item["token"], other, item["torbox_id"])
-                else:
-                    db.update_virtual_torbox_id(item["token"], None)
-                    invalidate_url_cache(item["token"])
-                    result["cleared"] += 1
-                    log.info("Catbox: TorBox id %s for %s (%s) is gone; cleared, next play re-adds",
-                             item["torbox_id"], item.get("title"), item["token"])
-            if result["cleared"] or result["repointed"]:
-                log.info("Catbox: TorBox id reconcile: %d checked, %d cleared, %d repointed",
-                         result["checked"], result["cleared"], result["repointed"])
+            if item["torbox_id"] in live_ids:
+                continue
+            if _token_lock(item["token"]).locked():
+                continue  # a play is materializing it right now
+            other = by_hash.get((item.get("info_hash") or "").lower())
+            if other is not None:
+                db.set_virtual_torbox(item["token"], other, acct_id)
+                result["repointed"] += 1
+                log.info("Catbox: %s (%s) now under TorBox id %s, was %s",
+                         item.get("title"), item["token"], other, item["torbox_id"])
+            else:
+                db.set_virtual_torbox(item["token"], None, None)
+                invalidate_url_cache(item["token"])
+                result["cleared"] += 1
+                log.info("Catbox: TorBox id %s for %s (%s) is gone; cleared, next play re-adds",
+                         item["torbox_id"], item.get("title"), item["token"])
+        if not any_live:
+            result["skipped"] = "TorBox list empty or unavailable"
+        elif result["cleared"] or result["repointed"]:
+            log.info("Catbox: TorBox id reconcile: %d checked, %d cleared, %d repointed",
+                     result["checked"], result["cleared"], result["repointed"])
     global _last_reconcile
     with _reconcile_lock:
         _last_reconcile = result
@@ -1008,11 +1028,12 @@ def release_idle() -> int:
     released = 0
     for item in items:
         try:
-            deleted = torbox.delete_torrent(item["torbox_id"])
+            acct = _home(item)
+            deleted = torbox.delete_torrent(acct, item["torbox_id"])
             if not deleted:
                 # Torrent may already be gone from TorBox (evicted or manually removed).
                 # Still clear the local reference so catbox can re-add it on next play.
-                still_there = torbox.find_by_id(item["torbox_id"])
+                still_there = torbox.find_by_id(acct, item["torbox_id"])
                 if still_there:
                     continue
             db.update_virtual_torbox_id(item["token"], None)

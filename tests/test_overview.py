@@ -110,14 +110,14 @@ def test_last_429_is_recorded_by_add_magnet(monkeypatch):
         status_code = 429
         headers = {"Retry-After": "5"}
 
-    monkeypatch.setattr(torbox, "_last_429_at", None)
+    monkeypatch.setattr(torbox, "_last_429", {})
     monkeypatch.setattr(torbox, "_CREATETORRENT_LIMIT_MIN", 10_000)
-    monkeypatch.setattr(torbox, "_headers", lambda: {})
+    monkeypatch.setattr(torbox, "_headers", lambda account_id: {})
     monkeypatch.setattr(torbox, "_base_url", lambda: "http://torbox.test")
     monkeypatch.setattr(torbox.requests, "post", lambda *a, **k: _Resp())
     assert torbox.last_429_at() is None
     with pytest.raises(torbox.RateLimited):
-        torbox.add_magnet("magnet:?xt=urn:btih:" + "a" * 40, reason="test")
+        torbox.add_magnet(1, "magnet:?xt=urn:btih:" + "a" * 40, reason="test")
     assert torbox.last_429_at() is not None and time.time() - torbox.last_429_at() < 5
 
 
@@ -131,7 +131,7 @@ def test_build_has_the_documented_shape(monkeypatch):
         "count": 3, "cached_count": 41, "limit": 60, "resets_in_sec": 2520, "by_reason": {"processor": 3}})
     monkeypatch.setattr(library_sync, "orphans", lambda: {
         "strm_count": 300, "db_count": 295, "strm_without_db": 5, "db_without_strm": 0})
-    monkeypatch.setattr(torbox, "_last_429_at", None)
+    monkeypatch.setattr(torbox, "_last_429", {})
     rid = db.insert_request("Heat", "tt1", "movie")
     db.update_request(rid, "success", quality="1080p")
     out = overview.build()

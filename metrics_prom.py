@@ -112,7 +112,9 @@ def refresh_gauges() -> None:
     # TorBox usage
     try:
         import torbox
-        summary = torbox.get_usage_summary()
+        import torbox_pool
+        # Account 1 for now; Task 6 reports usage per account.
+        summary = torbox.get_usage_summary(torbox_pool.accounts()[0].id)
         torbox_torrent_count.set(summary["torrent_count"])
         torbox_total_bytes.set(summary["total_bytes"])
     except Exception as exc:

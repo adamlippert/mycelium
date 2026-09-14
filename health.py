@@ -98,12 +98,25 @@ def _torbox_budget_row() -> dict | None:
     return {"name": "TorBox adds this hour", "status": "ok", "note": note}
 
 
+def _torbox_ping_headers() -> dict:
+    """Account 1 for now; Task 6 pings every account. Falls back to an
+    empty header (a doomed ping, not a crash) when the account pool can't
+    be read at all, the way settings.get() already degrades elsewhere."""
+    try:
+        import torbox
+        import torbox_pool
+        return torbox._headers(torbox_pool.accounts()[0].id)
+    except Exception as exc:
+        log.debug("TorBox ping headers unavailable: %s", exc)
+        return {}
+
+
 def check_all() -> list[dict]:
     services = []
     services.append(_ping(
         "TorBox",
         f"{_s('TORBOX_BASE_URL').rstrip('/')}/torrents/mylist",
-        headers={"Authorization": f"Bearer {settings.get('TORBOX_API_KEY', '')}"},
+        headers=_torbox_ping_headers(),
     ))
     budget = _torbox_budget_row()
     if budget:
