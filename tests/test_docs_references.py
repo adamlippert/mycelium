@@ -29,33 +29,35 @@ NOT_VARIABLES = {
     "GUNICORN_THREADS", "GUNICORN_PORT",  # read by the Go streaming front / entrypoint
                                            # shell, not by config.py
     "STREAM_FRONT_ENABLED",    # read by the Go streaming front / entrypoint shell, not by
-                                # config.py (config.py has no matching `= _env(` assignment)
-    "RETRY_BACKOFF_MINUTES",   # real config.py variable, but assigned through a list
-                                # comprehension (`= [int(x) for x in _env(...)]`), so the
-                                # known-vars regex, which only matches `VAR = _env(`, misses it
-    # The seven-category, four-state filter rule model (RESOLUTION, SOURCE, ENCODE,
-    # VISUAL_TAG, AUDIO_TAG, AUDIO_CHANNELS, LANGUAGE): all real config.py variables,
-    # but each is assigned through a list comprehension
-    # (`= [v.strip().lower() for v in _env(...)]`), which the known-vars regex misses
-    # the same way it misses RETRY_BACKOFF_MINUTES above. Only the `_STRICT` sibling of
-    # each category is a plain `= _env(...)` boolean, so those are matched already.
-    "RESOLUTION_PREFERRED", "RESOLUTION_EXCLUDED", "RESOLUTION_REQUIRED", "RESOLUTION_INCLUDED",
-    "SOURCE_PREFERRED", "SOURCE_EXCLUDED", "SOURCE_REQUIRED", "SOURCE_INCLUDED",
-    "ENCODE_PREFERRED", "ENCODE_EXCLUDED", "ENCODE_REQUIRED", "ENCODE_INCLUDED",
-    "VISUAL_TAG_PREFERRED", "VISUAL_TAG_EXCLUDED", "VISUAL_TAG_REQUIRED", "VISUAL_TAG_INCLUDED",
-    "AUDIO_TAG_PREFERRED", "AUDIO_TAG_EXCLUDED", "AUDIO_TAG_REQUIRED", "AUDIO_TAG_INCLUDED",
-    "AUDIO_CHANNELS_PREFERRED", "AUDIO_CHANNELS_EXCLUDED", "AUDIO_CHANNELS_REQUIRED",
-    "AUDIO_CHANNELS_INCLUDED",
-    "LANGUAGE_PREFERRED", "LANGUAGE_EXCLUDED", "LANGUAGE_REQUIRED", "LANGUAGE_INCLUDED",
+                                # config.py at all (no `_env(...)` call for it there)
 }
+# RETRY_BACKOFF_MINUTES and the seven-category, four-state filter rule model
+# (RESOLUTION_PREFERRED, SOURCE_EXCLUDED, ... down to LANGUAGE_STRICT, 35
+# keys) used to need an entry here too: they are real config.py variables,
+# but each is assigned through a list comprehension
+# (`VAR = [v.strip().lower() for v in _env("VAR", ...).split(",")]`) rather
+# than a plain `VAR = _env(...)`, which the old known-vars regex missed
+# entirely. `_known_vars()` below now matches every `_env(...)`/`_env_int(...)`
+# call regardless of assignment form, so they are found directly and no
+# longer need an allow-list entry.
 ROUTE_PREFIXES = ("/webhook", "/stream", "/spore-stream", "/health", "/metrics", "/setup", "/ui/api/", "/internal/")
 
 
 def _known_vars():
+    # Every _env(...)/_env_int(...) call with a literal name, regardless of
+    # how the result is assigned (plain assignment, list comprehension,
+    # float()/bool wrapper, ...). See tests/test_compatibility.py's
+    # _config_vars() for the same fix and why the old assignment-anchored
+    # regex missed the whole filter-rule model and RETRY_BACKOFF_MINUTES.
     src = open(os.path.join(_ROOT, "config.py")).read()
-    known = set(re.findall(r"^([A-Z][A-Z0-9_]+)\s*=\s*_env", src, re.M))
+    known = set(re.findall(r'_env\w*\(\s*"([A-Z][A-Z0-9_]+)"', src))
     known |= {f["key"] for s in settings.SECTIONS for f in s["fields"] if f["kind"] != "custom"}
     known |= set(settings._UNLISTED_KEYS)
+    # The filter-rule model has its own admin tab (Filtering rules), built
+    # from SETTING_GROUPS rather than SECTIONS; its keys are already caught
+    # by the config.py scan above, but naming the group here too keeps this
+    # helper self-explanatory about where they are editable.
+    known |= set(next(g for g in settings.SETTING_GROUPS if g["id"] == "filter_rules")["keys"])
     return known
 
 

@@ -22,21 +22,39 @@ def _block(marker):
 
 
 def _config_vars():
+    # Every _env(...)/_env_int(...) call with a literal name, regardless of
+    # how the result is assigned: a plain `VAR = _env(...)`, a list
+    # comprehension (`VAR = [x for x in _env(...).split(...)]`), a float()
+    # or bool expression wrapped around it, all count. The old regex only
+    # matched the first form and silently missed every filter-rule category
+    # key (RESOLUTION_PREFERRED and friends) plus RETRY_BACKOFF_MINUTES.
     src = open(os.path.join(_ROOT, "config.py")).read()
-    return set(re.findall(r"^([A-Z][A-Z0-9_]+)\s*=\s*_env", src, re.M))
+    return set(re.findall(r'_env\w*\(\s*"([A-Z][A-Z0-9_]+)"', src))
+
+
+def _rule_keys():
+    # The seven-category, four-state filter-rule model plus its strict
+    # toggles (RESOLUTION_PREFERRED/_EXCLUDED/_REQUIRED/_INCLUDED/_STRICT and
+    # its six siblings): all real config.py variables, all editable from the
+    # admin Filtering rules tab, which is not built from settings.SECTIONS
+    # (see settings.py's own comment on SETTING_GROUPS) so they need this
+    # separate source rather than the settings.SECTIONS scan below.
+    group = next(g for g in settings.SETTING_GROUPS if g["id"] == "filter_rules")
+    return set(group["keys"])
 
 
 def test_variable_tiers_match_the_schema_and_config():
     listed = {f["key"]: f for s in settings.SECTIONS for f in s["fields"] if f["kind"] != "custom"}
-    supported = {k for k, f in listed.items() if not f.get("advanced")}
+    rule_keys = _rule_keys()
+    supported = {k for k, f in listed.items() if not f.get("advanced")} | rule_keys
     advanced = {k for k, f in listed.items() if f.get("advanced")}
     internal = set(settings._UNLISTED_KEYS)
-    deployment = _config_vars() - set(listed) - internal
+    deployment = _config_vars() - set(listed) - internal - rule_keys
     assert set(_block("tier: supported")) == supported
     assert set(_block("tier: advanced")) == advanced
     assert set(_block("tier: internal")) == internal
     assert set(_block("tier: deployment")) == deployment
-    assert not (supported & advanced) and not (set(listed) & internal)
+    assert not (supported & advanced) and not (set(listed) & internal) and not (rule_keys & advanced)
 
 
 def test_frozen_routes_match_the_registered_ones():

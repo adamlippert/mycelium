@@ -337,26 +337,34 @@ $ curl -X POST https://mycelium.example/setup/skip
 ## 2. Environment variables by tier
 
 Every variable Mycelium reads falls into exactly one of four tiers,
-derived mechanically from `settings.SECTIONS` (the Settings UI schema) and
-`config.py`: a variable that is listed in the schema and not flagged
-`advanced` is **supported**; listed and flagged `advanced` is
-**advanced**; named in `settings._UNLISTED_KEYS` (no UI field at all) is
-**internal**; everything else `config.py` reads from the environment is
-**deployment**. The guard test computes the same four sets from the code
-and fails if this document disagrees.
+derived mechanically from `settings.SECTIONS` (the Settings UI schema),
+`settings.SETTING_GROUPS`'s `filter_rules` group (the seven-category,
+four-state filter-rule keys and their strict toggles, which the admin
+Filtering rules tab reads from its own structure rather than SECTIONS)
+and `config.py`: a variable listed in the schema or the filter-rule group
+and not flagged `advanced` is **supported**; listed in the schema and
+flagged `advanced` is **advanced**; named in `settings._UNLISTED_KEYS`
+(no UI field at all) is **internal**; everything else `config.py` reads
+from the environment, through any `_env(...)`/`_env_int(...)` call
+regardless of how the result is assigned, is **deployment**. The guard
+test computes the same four sets from the code and fails if this
+document disagrees.
 
 **Supported** and **advanced** variables carry the 1.0 promise: removing
 one, or changing its meaning, follows the deprecation rule in section 3.
 **Deployment** variables are promised too, since they are how the
-container itself is run (paths, ports, secrets, rule-model internals with
-no UI). **Internal** variables are not promised: they exist only for a
+container itself is run (paths, ports, secrets, and a few process-level
+knobs the entrypoint shell or the Go streaming front read directly).
+**Internal** variables are not promised: they exist only for a
 one-time migration marker or a retired setting kept so a stray `.env`
 value from before the rule model is not silently misread as something
 else, and may be removed without a deprecation cycle.
 
-### Supported (83)
+### Supported (118)
 
-Listed in the Settings UI, not flagged advanced. Shown in Settings without
+Listed in the Settings UI and not flagged advanced, or one of the 35
+filter-rule keys the Filtering rules tab edits (its own admin tab, not a
+Settings section). Everything else here is shown in Settings without
 opening "Advanced".
 
 <!-- tier: supported -->
@@ -365,6 +373,16 @@ ARR_STUBS_ENABLED
 ARR_STUB_PATH
 ARR_SYNC_ENABLED
 ARR_SYNC_PURGE_ENABLED
+AUDIO_CHANNELS_EXCLUDED
+AUDIO_CHANNELS_INCLUDED
+AUDIO_CHANNELS_PREFERRED
+AUDIO_CHANNELS_REQUIRED
+AUDIO_CHANNELS_STRICT
+AUDIO_TAG_EXCLUDED
+AUDIO_TAG_INCLUDED
+AUDIO_TAG_PREFERRED
+AUDIO_TAG_REQUIRED
+AUDIO_TAG_STRICT
 AUTH_ENABLED
 AUTH_USERNAME
 AUTO_ADD_MIN_RATING
@@ -384,10 +402,20 @@ DEBRIDIO_ENABLED
 DISCORD_WEBHOOK_URL
 DISK_SYNC_ENABLED
 DISNEY_NL_TOP_COUNT
+ENCODE_EXCLUDED
+ENCODE_INCLUDED
+ENCODE_PREFERRED
+ENCODE_REQUIRED
+ENCODE_STRICT
 EXCLUDE_UNDERSIZED_RELEASES
 JELLYFIN_API_KEY
 JELLYFIN_MEDIA_PATH
 JELLYFIN_URL
+LANGUAGE_EXCLUDED
+LANGUAGE_INCLUDED
+LANGUAGE_PREFERRED
+LANGUAGE_REQUIRED
+LANGUAGE_STRICT
 LITE_MODE
 MAX_SIZE_GB
 MAX_SIZE_GB_BY_RESOLUTION
@@ -415,6 +443,11 @@ RADARR_QUALITY_PROFILE
 RADARR_ROOT_FOLDER
 RADARR_URL
 REALDEBRID_API_KEY
+RESOLUTION_EXCLUDED
+RESOLUTION_INCLUDED
+RESOLUTION_PREFERRED
+RESOLUTION_REQUIRED
+RESOLUTION_STRICT
 SEASON_PACK_CONSOLIDATION_ENABLED
 SEERR_API_KEY
 SEERR_DECLINE_WANTED_AFTER_DAYS
@@ -425,6 +458,11 @@ SONARR_QUALITY_PROFILE
 SONARR_ROOT_FOLDER
 SONARR_URL
 SORT_ORDER
+SOURCE_EXCLUDED
+SOURCE_INCLUDED
+SOURCE_PREFERRED
+SOURCE_REQUIRED
+SOURCE_STRICT
 TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID
 TMDB_API_KEY
@@ -435,6 +473,11 @@ TRAKT_CLIENT_SECRET
 TRENDING_PRECACHE_COUNT
 TRENDING_TV_COUNT
 TRUSTED_PROXY_AUTH
+VISUAL_TAG_EXCLUDED
+VISUAL_TAG_INCLUDED
+VISUAL_TAG_PREFERRED
+VISUAL_TAG_REQUIRED
+VISUAL_TAG_STRICT
 WEB_PLAYER_MAX_SIZE_GB
 ZILEAN_ENABLED
 ZILEAN_MODE
@@ -452,6 +495,16 @@ ZILEAN_URL
 | `ARR_STUB_PATH` | `/arr-stubs` | Folder inside this container where the stubs are written; mount it in Radarr and Sonarr as their root folders. |
 | `ARR_SYNC_ENABLED` | `false` | Create every title in the arr as a monitored entry with search off, and remove it on purge. |
 | `ARR_SYNC_PURGE_ENABLED` | `true` | Once an hour, a mirrored title the arr no longer holds is removed from Mycelium. Off re-adds it to the arr instead. |
+| `AUDIO_CHANNELS_EXCLUDED` | `(empty)` | Drops a candidate whose audio channel count matches. Self-relaxes (with a log line) if it would empty the whole candidate pool, unless AUDIO_CHANNELS_STRICT is set. |
+| `AUDIO_CHANNELS_INCLUDED` | `(empty)` | Rescues a matching candidate from every other rule, in every category, even `_REQUIRED`/`_EXCLUDED` on an unrelated category. The one setting that can seriously surprise you; use it deliberately. |
+| `AUDIO_CHANNELS_PREFERRED` | `(empty)` | Tie-break only, ranks a matching audio channel count ahead of others. Never rescues a value another rule dropped. |
+| `AUDIO_CHANNELS_REQUIRED` | `(empty)` | Drops every candidate whose audio channel count does not match. A release the scraper could not tag for this category ("unknown") always survives, it never counts as a mismatch. |
+| `AUDIO_CHANNELS_STRICT` | `false` | Reject non-matching audio-channel candidates outright instead of relaxing the rule when it would empty the pool. |
+| `AUDIO_TAG_EXCLUDED` | `(empty)` | Drops a candidate whose audio tag matches. Self-relaxes (with a log line) if it would empty the whole candidate pool, unless AUDIO_TAG_STRICT is set. |
+| `AUDIO_TAG_INCLUDED` | `(empty)` | Rescues a matching candidate from every other rule, in every category, even `_REQUIRED`/`_EXCLUDED` on an unrelated category. The one setting that can seriously surprise you; use it deliberately. |
+| `AUDIO_TAG_PREFERRED` | `(empty)` | Tie-break only, ranks a matching audio tag ahead of others. Never rescues a value another rule dropped. |
+| `AUDIO_TAG_REQUIRED` | `(empty)` | Drops every candidate whose audio tag does not match. A release the scraper could not tag for this category ("unknown") always survives, it never counts as a mismatch. |
+| `AUDIO_TAG_STRICT` | `false` | Same as AUDIO_CHANNELS_STRICT, for the audio tag category. |
 | `AUTH_ENABLED` | `false` | Ask for a login on every page. Off is only safe behind another login. |
 | `AUTH_USERNAME` | `admin` | Username for the built-in admin login. |
 | `AUTO_ADD_MIN_RATING` | `6.0` | Skip titles rated below this on TMDB. |
@@ -471,10 +524,20 @@ ZILEAN_URL
 | `DISCORD_WEBHOOK_URL` | `(empty)` | A webhook from a Discord channel's integrations page. Treated as a secret. |
 | `DISK_SYNC_ENABLED` | `true` | Once an hour, a title whose .strm files are gone (a Jellyfin delete) is removed from Mycelium too. Off keeps the files coming back. |
 | `DISNEY_NL_TOP_COUNT` | `0` | How many from the Disney+ top list. 0 is off. |
+| `ENCODE_EXCLUDED` | `(empty)` | Drops a candidate whose encode matches. Self-relaxes (with a log line) if it would empty the whole candidate pool, unless ENCODE_STRICT is set. |
+| `ENCODE_INCLUDED` | `(empty)` | Rescues a matching candidate from every other rule, in every category, even `_REQUIRED`/`_EXCLUDED` on an unrelated category. The one setting that can seriously surprise you; use it deliberately. |
+| `ENCODE_PREFERRED` | `hevc` | Tie-break only, ranks a matching encode ahead of others. Never rescues a value another rule dropped. |
+| `ENCODE_REQUIRED` | `(empty)` | Drops every candidate whose encode does not match. A release the scraper could not tag for this category ("unknown") always survives, it never counts as a mismatch. |
+| `ENCODE_STRICT` | `false` | Reject non-matching encode candidates outright instead of relaxing. |
 | `EXCLUDE_UNDERSIZED_RELEASES` | `true` | Drop releases far smaller than expected for their resolution; they are usually re-encodes or fakes. |
 | `JELLYFIN_API_KEY` | `(empty)` | Dashboard, API Keys. Lets Mycelium trigger library refreshes. |
 | `JELLYFIN_MEDIA_PATH` | `(empty)` | Only when Jellyfin mounts the media folder at a different path than Mycelium does. Blank means the same path. |
 | `JELLYFIN_URL` | `(empty)` | Address Mycelium can reach Jellyfin on, from inside Docker if both run there. |
+| `LANGUAGE_EXCLUDED` | `(empty)` | Drops a candidate whose language matches. Self-relaxes (with a log line) if it would empty the whole candidate pool, unless LANGUAGE_STRICT is set. |
+| `LANGUAGE_INCLUDED` | `(empty)` | Rescues a matching candidate from every other rule, in every category, even `_REQUIRED`/`_EXCLUDED` on an unrelated category. The one setting that can seriously surprise you; use it deliberately. |
+| `LANGUAGE_PREFERRED` | `(empty)` | Tie-break only, ranks a matching language ahead of others. Never rescues a value another rule dropped. |
+| `LANGUAGE_REQUIRED` | `(empty)` | Drops every candidate whose language does not match. A release the scraper could not tag for this category ("unknown") always survives, it never counts as a mismatch. |
+| `LANGUAGE_STRICT` | `false` | Reject non-matching language candidates outright instead of relaxing. |
 | `LITE_MODE` | `false` | Run only the webhook, the processor and this admin: no Discover, no schedulers, no plugins. For Seerr and Jellyfin-only setups. Restart after changing. |
 | `MAX_SIZE_GB` | `0` | Largest release to accept, in GB. 0 means no limit. |
 | `MAX_SIZE_GB_BY_RESOLUTION` | `(empty)` | Caps per resolution as resolution:GB pairs, for example 2160p:40,1080p:12. Blank uses the single maximum above. |
@@ -502,6 +565,11 @@ ZILEAN_URL
 | `RADARR_ROOT_FOLDER` | `(empty)` | Where mirrored movies are filed in Radarr. Blank uses its first root folder. |
 | `RADARR_URL` | `(empty)` | Address Mycelium can reach Radarr on. |
 | `REALDEBRID_API_KEY` | `(empty)` | From real-debrid.com, My account, API token. |
+| `RESOLUTION_EXCLUDED` | `(empty)` | Drops a candidate whose resolution matches. Self-relaxes (with a log line) if it would empty the whole candidate pool, unless RESOLUTION_STRICT is set. |
+| `RESOLUTION_INCLUDED` | `(empty)` | Rescues a matching candidate from every other rule, in every category, even `_REQUIRED`/`_EXCLUDED` on an unrelated category. The one setting that can seriously surprise you; use it deliberately. |
+| `RESOLUTION_PREFERRED` | `1080p,2160p,720p` | Tie-break only, ranks a matching resolution ahead of others. Never rescues a value another rule dropped. |
+| `RESOLUTION_REQUIRED` | `(empty)` | Drops every candidate whose resolution does not match. A release the scraper could not tag for this category ("unknown") always survives, it never counts as a mismatch. |
+| `RESOLUTION_STRICT` | `false` | Reject non-matching resolution candidates outright instead of relaxing. |
 | `SEASON_PACK_CONSOLIDATION_ENABLED` | `true` | Replace single episodes with a season pack once one is cached, so a season is one torrent. |
 | `SEERR_API_KEY` | `(empty)` | Settings, General, API key in Seerr. |
 | `SEERR_DECLINE_WANTED_AFTER_DAYS` | `30` | Days a released title may stay without a release before Seerr is told it was declined. 0 never declines. |
@@ -512,6 +580,11 @@ ZILEAN_URL
 | `SONARR_ROOT_FOLDER` | `(empty)` | Where mirrored series are filed in Sonarr. Blank uses its first root folder. |
 | `SONARR_URL` | `(empty)` | Address Mycelium can reach Sonarr on. |
 | `SORT_ORDER` | `(empty)` | Which properties decide between surviving releases, most important first. |
+| `SOURCE_EXCLUDED` | `remux,cam,ts,tc,scr,r5,ppvrip,workprint` | Drops a candidate whose source matches. Self-relaxes (with a log line) if it would empty the whole candidate pool, unless SOURCE_STRICT is set. |
+| `SOURCE_INCLUDED` | `(empty)` | Rescues a matching candidate from every other rule, in every category, even `_REQUIRED`/`_EXCLUDED` on an unrelated category. The one setting that can seriously surprise you; use it deliberately. |
+| `SOURCE_PREFERRED` | `webdl,webrip,web` | Tie-break only, ranks a matching source ahead of others. Never rescues a value another rule dropped. |
+| `SOURCE_REQUIRED` | `(empty)` | Drops every candidate whose source does not match. A release the scraper could not tag for this category ("unknown") always survives, it never counts as a mismatch. |
+| `SOURCE_STRICT` | `false` | Reject non-matching source candidates outright instead of relaxing. |
 | `TELEGRAM_BOT_TOKEN` | `(empty)` | Token from BotFather. |
 | `TELEGRAM_CHAT_ID` | `(empty)` | The chat or channel the bot posts to. |
 | `TMDB_API_KEY` | `(empty)` | A free key from themoviedb.org. Powers Discover, posters and the runtime in stub files. |
@@ -522,6 +595,11 @@ ZILEAN_URL
 | `TRENDING_PRECACHE_COUNT` | `0` | How many trending movies to add each run. 0 is off. |
 | `TRENDING_TV_COUNT` | `0` | How many trending series to add each run. 0 is off. |
 | `TRUSTED_PROXY_AUTH` | `false` | Accept the user name from a header set by a reverse proxy such as Authelia. |
+| `VISUAL_TAG_EXCLUDED` | `dv_only` | Drops a candidate whose visual tag matches. Self-relaxes (with a log line) if it would empty the whole candidate pool, unless VISUAL_TAG_STRICT is set. |
+| `VISUAL_TAG_INCLUDED` | `(empty)` | Rescues a matching candidate from every other rule, in every category, even `_REQUIRED`/`_EXCLUDED` on an unrelated category. The one setting that can seriously surprise you; use it deliberately. |
+| `VISUAL_TAG_PREFERRED` | `(empty)` | Tie-break only, ranks a matching visual tag ahead of others. Never rescues a value another rule dropped. |
+| `VISUAL_TAG_REQUIRED` | `(empty)` | Drops every candidate whose visual tag does not match. A release the scraper could not tag for this category ("unknown") always survives, it never counts as a mismatch. |
+| `VISUAL_TAG_STRICT` | `false` | Reject non-matching visual-tag candidates outright instead of relaxing. |
 | `WEB_PLAYER_MAX_SIZE_GB` | `15` | Largest release the built-in web player will pick, in GB. |
 | `ZILEAN_ENABLED` | `false` | Search a Zilean DMM index next to Torrentio for cached releases. |
 | `ZILEAN_MODE` | `external` | External talks to a running Zilean service. Native imports its Postgres into a built-in index. |
@@ -614,23 +692,19 @@ WEBDAV_ENABLED
 | `TRUSTED_PROXY_USER_HEADER` | `X-Forwarded-User` | Header carrying the user name. |
 | `WEBDAV_ENABLED` | `false` | Serve the library over WebDAV as well. |
 
-### Deployment (31)
+### Deployment (25)
 
-Read only from the environment, with no field in the Settings UI: paths,
-network binding, secrets, and the per-category `_STRICT` toggles of the
-filter-rule model. Promised because they are how the container is run.
+Read only from the environment, with no field anywhere in the admin UI
+(not in Settings, not in the Filtering rules tab): paths, network
+binding, and secrets. Promised because they are how the container is run.
 
 <!-- tier: deployment -->
 ```
-AUDIO_CHANNELS_STRICT
-AUDIO_TAG_STRICT
 AUTH_PASSWORD
 AUTH_SESSION_SECRET
 COOKIE_SECURE
 DB_PATH
 DEBRIDIO_SEND_TORBOX_KEY
-ENCODE_STRICT
-LANGUAGE_STRICT
 LISTEN_HOST
 LISTEN_PORT
 LOG_LEVEL
@@ -640,14 +714,12 @@ QUOTA_CHECK_INTERVAL_HOURS
 QUOTA_WARN_SIZE_GB
 QUOTA_WARN_TORRENT_COUNT
 REALDEBRID_BASE_URL
-RESOLUTION_STRICT
-SOURCE_STRICT
+RETRY_BACKOFF_MINUTES
 SPORE_ENABLED
 SPORE_MEDIA_PATH
 SPORE_PORT
 TORRENTIO_BASE_URL
 TORRENTIO_OPTS
-VISUAL_TAG_STRICT
 WANTED_RECHECK_INTERVAL_HOURS
 WEBDAV_PATH_PREFIX
 WEBDAV_URL_CACHE_TTL_SECONDS
@@ -657,15 +729,11 @@ ZILEAN_DB_PATH
 
 | Name | Default | Meaning |
 |---|---|---|
-| `AUDIO_CHANNELS_STRICT` | `false` | Reject non-matching audio-channel candidates outright instead of relaxing the rule when it would empty the pool. |
-| `AUDIO_TAG_STRICT` | `false` | Same as AUDIO_CHANNELS_STRICT, for the audio tag category. |
 | `AUTH_PASSWORD` | `(empty)` | Plain admin password read on first login and immediately upgraded to a scrypt hash; blank after that. |
 | `AUTH_SESSION_SECRET` | `mycelium-please-change-me` | Signs the session cookie. Change it in production. |
 | `COOKIE_SECURE` | `false` | Mark the session cookie Secure; needs HTTPS in front of Mycelium. |
 | `DB_PATH` | `/data/requests.db` | Path to the SQLite database file. |
 | `DEBRIDIO_SEND_TORBOX_KEY` | `false` | Send the TorBox key inside Debridio's config segment. Off by default: the addon does not validate it. |
-| `ENCODE_STRICT` | `false` | Reject non-matching encode candidates outright instead of relaxing. |
-| `LANGUAGE_STRICT` | `false` | Reject non-matching language candidates outright instead of relaxing. |
 | `LISTEN_HOST` | `0.0.0.0` | Interface the app (or the Go streaming front) binds to. |
 | `LISTEN_PORT` | `8088` | Port the app (or the Go streaming front) listens on. |
 | `LOG_LEVEL` | `INFO` | Root log level. |
@@ -675,14 +743,12 @@ ZILEAN_DB_PATH
 | `QUOTA_WARN_SIZE_GB` | `999999` | Library size that triggers a quota warning. |
 | `QUOTA_WARN_TORRENT_COUNT` | `999999` | Torrent count that triggers a quota warning. |
 | `REALDEBRID_BASE_URL` | `https://api.real-debrid.com/rest/1.0` | RealDebrid API base URL, used only when MULTI_DEBRID_ENABLED. |
-| `RESOLUTION_STRICT` | `false` | Reject non-matching resolution candidates outright instead of relaxing. |
-| `SOURCE_STRICT` | `false` | Reject non-matching source candidates outright instead of relaxing. |
+| `RETRY_BACKOFF_MINUTES` | `60,360,1440` | Minutes to wait before each retry of a failed request, comma separated: the Nth retry waits the Nth value, the last value repeats after that. |
 | `SPORE_ENABLED` | `false` | Turn on the Plex stub-MKV library and the spore-stream proxy. Not rolled out on the current VPS. |
 | `SPORE_MEDIA_PATH` | `/data/plex-media` | Where Spore stub MKVs and the .fsh fast-start cache are written. |
 | `SPORE_PORT` | `8089` | Port for the Spore TCP range server. |
 | `TORRENTIO_BASE_URL` | `https://torrentio.strem.fun` | Torrentio scraper base URL. |
 | `TORRENTIO_OPTS` | `(empty)` | Extra options appended to the Torrentio manifest path, as pasted from Torrentio's own configure page. |
-| `VISUAL_TAG_STRICT` | `false` | Reject non-matching visual-tag candidates outright instead of relaxing. |
 | `WANTED_RECHECK_INTERVAL_HOURS` | `12` | How often a wanted movie with no acceptable release yet is re-searched. |
 | `WEBDAV_PATH_PREFIX` | `/dav` | URL prefix the WebDAV server mounts the library under. |
 | `WEBDAV_URL_CACHE_TTL_SECONDS` | `3600` | How long a resolved WebDAV CDN URL is cached. |
