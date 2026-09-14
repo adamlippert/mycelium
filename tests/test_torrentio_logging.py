@@ -42,3 +42,27 @@ def test_the_opts_segment_never_reaches_the_logs(monkeypatch, caplog):
     joined = "\n".join(r.getMessage() for r in caplog.records)
     assert "tt0111161" in joined
     assert "movie" in joined
+
+
+# Fix round 1, item 2: the raise_for_status() error path still leaked the
+# opts segment - requests/urllib3 embed the full request URL in HTTPError
+# and ConnectionError text, and scrapers._redact_exc had no rule for it.
+
+def test_redact_strips_the_configured_opts_segment(monkeypatch):
+    monkeypatch.setattr(torrentio, "TORRENTIO_OPTS", _SECRET_OPTS)
+    text = ("HTTPError: 500 Server Error for url: "
+            "https://torrentio.strem.fun/" + _SECRET_OPTS + "/stream/movie/tt0111161.json")
+
+    out = torrentio.redact(text)
+
+    assert _SECRET_OPTS not in out
+    assert "SUPERSECRET123" not in out
+    assert "***" in out
+    assert "tt0111161" in out
+
+
+def test_redact_is_a_no_op_when_opts_is_empty(monkeypatch):
+    monkeypatch.setattr(torrentio, "TORRENTIO_OPTS", "")
+    text = "HTTPError: 500 Server Error for url: https://torrentio.strem.fun/stream/movie/tt0111161.json"
+
+    assert torrentio.redact(text) == text

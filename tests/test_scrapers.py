@@ -429,3 +429,25 @@ def test_unique_win_recorded_only_when_no_other_source_had_it(monkeypatch):
     processor._record_source_metrics(shared)
     assert ("source_win", "debridio") in recorded
     assert ("source_unique_win", "debridio") not in recorded
+
+
+def test_redact_exc_scrubs_the_torrentio_opts_segment(monkeypatch):
+    # Fix round 1, item 2: raise_for_status() embeds the full request URL
+    # (opts included) in the exception text, and _redact_exc had no rule
+    # for it - only debridio.redact and torznab_scraper.redact ran.
+    fake_opts = "realdebrid=RD_FAKE_KEY|torbox=TB_FAKE_KEY"
+    monkeypatch.setattr(scrapers.torrentio, "TORRENTIO_OPTS", fake_opts)
+    text = ("HTTPError: 404 Client Error for url: "
+            "https://torrentio.strem.fun/" + fake_opts + "/stream/movie/tt1.json")
+
+    out = scrapers._redact_exc(text)
+
+    assert "RD_FAKE_KEY" not in out
+    assert "TB_FAKE_KEY" not in out
+
+
+def test_redact_exc_is_unchanged_when_torrentio_opts_is_empty(monkeypatch):
+    monkeypatch.setattr(scrapers.torrentio, "TORRENTIO_OPTS", "")
+    text = "HTTPError: 404 Client Error for url: https://torrentio.strem.fun/stream/movie/tt1.json"
+
+    assert scrapers._redact_exc(text) == text

@@ -103,6 +103,23 @@ def _to_stream(raw: dict, season: int | None) -> TorrentioStream | None:
     )
 
 
+def redact(text) -> str:
+    """Strip TORRENTIO_OPTS out of a URL or exception message before it is
+    logged. requests/urllib3 embed the fully-resolved request URL in
+    HTTPError and ConnectionError text (raise_for_status, connection
+    failures), and TORRENTIO_OPTS - a config segment users paste from
+    Torrentio's own configure page - can carry a debrid API key. Scrubs the
+    live value at call time, not the value the module was imported with, so
+    a test or a runtime settings change is covered too."""
+    if not text:
+        return ""
+    out = str(text)
+    opts = str(TORRENTIO_OPTS or "").strip()
+    if opts:
+        out = out.replace(opts, "***")
+    return out
+
+
 def _build_url(media_type: str, imdb_id: str, season: int | None, episode: int | None) -> str:
     prefix = f"{TORRENTIO_BASE_URL.rstrip('/')}"
     if TORRENTIO_OPTS:

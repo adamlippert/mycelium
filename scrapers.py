@@ -80,10 +80,12 @@ def _fetch_mediafusion(media_type, imdb_id, season, episode, timeout=None):
 
 def _redact_exc(exc) -> str:
     """Scrub every known secret shape from a caught scraper exception before
-    it is logged: the Torznab api key / Comet access-token path (C1, I2) and
-    Debridio's own config-token patterns, combined so this one call site
-    protects whichever scraper actually failed."""
-    return debridio.redact(torznab_scraper.redact(exc))
+    it is logged: the Torznab api key / Comet access-token path (C1, I2),
+    Debridio's own config-token patterns, and TORRENTIO_OPTS (which
+    raise_for_status embeds in the exception text via the full request URL),
+    combined so this one call site protects whichever scraper actually
+    failed."""
+    return debridio.redact(torznab_scraper.redact(torrentio.redact(exc)))
 
 
 # Which filter-rule categories each scraper can populate, by registry name.

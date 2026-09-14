@@ -16,7 +16,11 @@ All notable changes to Mycelium are documented in this file.
 - torrentio.py no longer logs the full Torrentio request URL at INFO.
   TORRENTIO_OPTS, appended into that URL, is a config segment users paste
   from Torrentio's own configure page and can carry a debrid API key; the
-  log line now carries only the imdb id and media type.
+  log line now carries only the imdb id and media type. The error path
+  leaked the same value too: requests embeds the full URL in
+  raise_for_status()'s exception text, which scrapers._redact_exc did not
+  scrub; it now redacts TORRENTIO_OPTS the same way it already redacts
+  the Torznab and Debridio secrets.
 - /ui/logs now requires an admin session, matching its sibling
   /ui/api/logs. Any logged-in non-admin could previously read the last
   100 raw log lines, including scraper and CDN URLs, tokens and
