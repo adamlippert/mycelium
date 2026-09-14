@@ -39,11 +39,34 @@ _url_cache: dict[str, tuple[str, float]] = {}
 _url_cache_lock = threading.Lock()
 
 
-def _home(item: dict) -> int:
-    """The account holding the item's torrent; until Task 3 homes items
-    properly, an unhomed item uses the first enabled account."""
+def _home(item: dict) -> int | None:
+    """The account holding the item's torrent, or None when the item has
+    no torrent on TorBox (or its home is disabled, which counts as none)."""
     import torbox_pool
-    return item.get("torbox_account") or torbox_pool.accounts()[0].id
+    acct_id = item.get("torbox_account")
+    if not acct_id or not item.get("torbox_id"):
+        return None
+    acct = torbox_pool.account(acct_id)
+    if acct is None or not acct.enabled:
+        return None
+    return acct_id
+
+
+def _adopt_or_choose(item: dict) -> tuple[int, dict | None]:
+    """Where an unhomed torrent goes: the enabled account whose library
+    already holds the hash (no add needed), else the pool's choice."""
+    import torbox_pool
+    h = item.get("info_hash") or ""
+    if h:
+        for acct in torbox_pool.accounts():
+            try:
+                existing = torbox.find_by_hash(acct.id, h)
+            except torbox.AuthFailed:
+                continue
+            if existing and torbox._is_ready(existing):
+                log.info("Catbox: %s found in %s's library (id=%s), adopting", item["title"], acct.label, existing["id"])
+                return acct.id, existing
+    return torbox_pool.choose_for_add().id, None
 
 # Failure cooldown: after a failed materialize (429, timeout, no file found),
 # block retries for a short window so Jellyfin's burst of probe requests doesn't
@@ -520,56 +543,65 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
 
     # ── TorBox path ───────────────────────────────────────────────────────────
     torbox_id = item["torbox_id"]
-    acct = _home(item)
+    account_id = _home(item)
+    if torbox_id and account_id is None:
+        # Homed on an account that no longer exists or is disabled.
+        log.info("Catbox: %s was on a disabled account, re-homing", item["title"])
+        torbox_id = None
+        rematerialized = True
 
-    # Fast path: cached torbox_id still live in TorBox.
+    # Fast path: the home still has the torrent.
     if torbox_id:
         try:
-            live = torbox.find_by_id(acct, torbox_id)
+            live = torbox.find_by_id(account_id, torbox_id)
         except torbox.AuthFailed:
-            _auth_failed(token, ckey, item["title"])
-            return None
+            live = None
         if not live or not torbox._is_ready(live):
             torbox_id = None
             rematerialized = True
 
-    # Second chance: torrent may still be in TorBox library under its hash.
+    # Unhomed: adopt from a library that has it, else add to the pool's choice.
+    # `choose_for_add()` raises when no account is enabled; caught here (same
+    # cooldown as a failed add below) rather than surfacing as a 500.
     if not torbox_id and item.get("info_hash"):
         try:
-            existing = torbox.find_by_hash(acct, item["info_hash"])
-        except torbox.AuthFailed:
-            _auth_failed(token, ckey, item["title"])
+            account_id, existing = _adopt_or_choose(item)
+        except Exception as exc:
+            log.warning("Catbox: could not choose a TorBox account for %s: %s", item["title"], exc)
+            _fail_put(token, _FAIL_COOLDOWN_429_SEC)
+            if ckey:
+                db.update_playability_fail(ckey, REASON_TB_429)
             return None
-        if existing and torbox._is_ready(existing):
+        if existing:
             torbox_id = existing["id"]
-            db.set_virtual_torbox(token, torbox_id, acct)
-            log.info("Catbox: %s still in library (id=%s)  -  no re-add needed",
-                     item["title"], torbox_id)
+            db.set_virtual_torbox(token, torbox_id, account_id)
 
     # Third chance: use the stored magnet to add directly  -  covers both items that
     # previously had a torbox_id (fell out of mylist top-1000) and freshly lazy-
     # registered items (torbox_id=NULL, magnet already selected at request time).
     if not torbox_id and item.get("magnet") and allow_readd:
         try:
-            log.info("Catbox: %s adding stored magnet", item["title"])
-            added = torbox.add_magnet(acct, item["magnet"], reason="catbox-readd")
+            log.info("Catbox: %s adding stored magnet to account %s", item["title"], account_id)
+            added = torbox.add_magnet(account_id, item["magnet"], reason="catbox-readd")
             _tid = added.get("id") or added.get("torrent_id")
             existing = added if _tid and torbox._is_ready(added) else (
-                torbox.find_by_id(acct, _tid) if _tid else
-                torbox.find_by_hash(acct, item["info_hash"], force_refresh=True)
+                torbox.find_by_id(account_id, _tid) if _tid else
+                torbox.find_by_hash(account_id, item["info_hash"], force_refresh=True)
             )
             if not (existing and torbox._is_ready(existing)) and _tid:
                 existing = torbox.wait_until_ready(
-                    acct, item["info_hash"], timeout=ON_PLAY_READY_TIMEOUT_SEC, torrent_id=_tid)
+                    account_id, item["info_hash"], timeout=ON_PLAY_READY_TIMEOUT_SEC, torrent_id=_tid)
             if existing and torbox._is_ready(existing):
                 torbox_id = existing["id"]
-                db.set_virtual_torbox(token, torbox_id, acct)
-                log.info("Catbox: %s added via stored magnet (id=%s)", item["title"], torbox_id)
+                db.set_virtual_torbox(token, torbox_id, account_id)
+                log.info("Catbox: %s added via stored magnet (id=%s, account %s)", item["title"], torbox_id, account_id)
+        except torbox.AuthFailed:
+            _auth_failed(token, ckey, item["title"])
+            return None
         except Exception as exc:
             exc_str = str(exc)
-            is_rate_limited = (isinstance(exc, (torbox.RateLimited, torbox.AuthFailed))
-                               or "429" in exc_str or "403" in exc_str)
-            log.warning("Catbox: stored-magnet re-add failed for %s: %s", item["title"], exc)
+            is_rate_limited = isinstance(exc, torbox.RateLimited) or "429" in exc_str or "403" in exc_str
+            log.warning("Catbox: stored-magnet re-add failed for %s on account %s: %s", item["title"], account_id, exc)
             if is_rate_limited:
                 # 429 = rate limited; 403 = API key/plan issue  -  either way
                 # there is no point continuing to checkcached, it will also fail.
@@ -671,16 +703,16 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
             item["file_id"] = None
 
         try:
-            added = torbox.add_magnet(acct, new_magnet, reason="catbox-search", cached=True)
+            added = torbox.add_magnet(account_id, new_magnet, reason="catbox-search", cached=True)
             # Use the ID from the add response to avoid a full mylist refresh.
             # TorBox returns "torrent_id" for cached adds, "id" for others.
             _tid = added.get("id") or added.get("torrent_id")
             live = added if _tid and torbox._is_ready(added) else None
             if not live:
-                live = torbox.find_by_id(acct, _tid) if _tid else None
+                live = torbox.find_by_id(account_id, _tid) if _tid else None
             if not live or not torbox._is_ready(live):
                 live = torbox.wait_until_ready(
-                    acct, new_hash, timeout=ON_PLAY_READY_TIMEOUT_SEC, torrent_id=_tid or None)
+                    account_id, new_hash, timeout=ON_PLAY_READY_TIMEOUT_SEC, torrent_id=_tid or None)
             if not live:
                 log.error("Catbox: fresh release not ready for %s  -  keeping .strm, retry soon",
                           item["title"])
@@ -689,7 +721,7 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
                     db.update_playability_fail(ckey, REASON_WAIT_TIMEOUT)
                 return None
             torbox_id = live["id"]
-            db.set_virtual_torbox(token, torbox_id, acct)
+            db.set_virtual_torbox(token, torbox_id, account_id)
         except Exception as exc:
             is_429 = isinstance(exc, torbox.AuthFailed) or "429" in str(exc)
             log.error("Catbox: add_magnet failed for %s: %s", token, exc)
@@ -709,7 +741,7 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
     # listing again and failed the play when the ?id= endpoint omitted files.
     if file_id is None:
         try:
-            live = torbox.find_by_id(acct, torbox_id)
+            live = torbox.find_by_id(account_id, torbox_id)
         except torbox.AuthFailed:
             _auth_failed(token, ckey, item["title"])
             return None
@@ -745,7 +777,7 @@ def _materialize_locked(token: str, allow_readd: bool = True) -> str | None:
         return None
 
     import strm_generator
-    url = torbox.request_download_link(acct, torbox_id, file_id)
+    url = torbox.request_download_link(account_id, torbox_id, file_id)
     if url:
         db.touch_virtual_item(token)
         if ckey:

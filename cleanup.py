@@ -370,7 +370,7 @@ def _regenerate_wrong_files(strm_files: list[Path], mylist: list[dict], run_id: 
         log.info("Wrong file detected: %s (file_id=%s, should be %s)  -  regenerating",
                  path.name, file_id, main.get("id"))
         import torbox_pool
-        acct = item.get("_account") or torbox_pool.accounts()[0].id
+        acct = item.get("_account") or torbox_pool.choose_for_add().id
         new_url = torbox.request_download_link(acct, int(torrent_id), main["id"])
         if not new_url:
             continue

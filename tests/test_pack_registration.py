@@ -270,6 +270,6 @@ def test_materialize_treats_a_preset_file_id_of_zero_as_known():
     the single-item endpoint omitted the files list."""
     src = open(os.path.join(_ROOT, "catbox.py")).read()
     body = src.split("def materialize(")[1]
-    assert "    if file_id is None:\n        try:\n            live = torbox.find_by_id(acct, torbox_id)" in body
+    assert "    if file_id is None:\n        try:\n            live = torbox.find_by_id(account_id, torbox_id)" in body
     assert 'if file_id is not None and is_episode and db.hash_has_duplicate_file_ids(item["info_hash"]):' in body
     assert "    if not file_id:\n        live = torbox.find_by_id" not in body
