@@ -16,6 +16,13 @@ All notable changes to Mycelium are documented in this file.
   `deprecations.warn_deprecated_env()`, logged once next to the existing
   filter-migration warning. The deprecation map is empty at 1.0.
 
+### Removed
+
+- The `JELLYFIN_REFRESH_DELAY_SEC` setting. It had no effect: nothing in
+  the codebase read it outside its own Settings schema field, so it never
+  delayed anything. Not a deprecation (nothing to point users at) and not
+  a breaking change (nothing depended on it doing something).
+
 ### Security
 
 - The Go streaming front now appends its own peer address to

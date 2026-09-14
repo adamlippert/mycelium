@@ -121,7 +121,6 @@ _INT_KEYS = {
     "CATBOX_GC_INTERVAL_MINUTES",
     "TORBOX_POLL_INTERVAL_SEC",
     "TORBOX_POLL_TIMEOUT_SEC",
-    "JELLYFIN_REFRESH_DELAY_SEC",
     "MERGE_VERSIONS_INTERVAL_HOURS",
     "CLEANUP_INTERVAL_HOURS",
     "STRM_GENERATOR_INTERVAL_HOURS",
@@ -377,8 +376,6 @@ SECTIONS = [
             _f("JELLYFIN_MEDIA_PATH", "Media path as Jellyfin sees it",
                "Only when Jellyfin mounts the media folder at a different path than Mycelium does. Blank means the same path.",
                "path", placeholder="/media"),
-            _f("JELLYFIN_REFRESH_DELAY_SEC", "Refresh delay", "Seconds to wait after writing files before asking Jellyfin to look.",
-               unit="seconds", min=0, advanced=True),
         ],
     },
     {

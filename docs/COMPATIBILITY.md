@@ -17,7 +17,10 @@ own frontend should call it.
 The routes below are the integration surface: what Seerr, TorBox, Radarr,
 Sonarr, Jellyfin, Plex, the setup wizard and the in-app manual talk to.
 Their path, method and general request/response shape are promised; a
-change to any of them is a breaking change (see section 4).
+change to any of them is a breaking change (see section 4). The five
+`/setup/*` routes are also rate limited per caller address; those limits
+are part of the promise too, the same as everything else here: raising a
+limit is a minor change, lowering one is breaking.
 
 <!-- routes -->
 ```
@@ -67,10 +70,13 @@ $ curl https://mycelium.example/healthz
 
 ### `GET /metrics`
 
-Prometheus scrape endpoint. Requires either an admin session cookie, or
-(when `METRICS_TOKEN` is set) the header `X-Metrics-Token: <token>` or the
-query parameter `?metrics_token=<token>`. Returns the Prometheus text
-exposition format, or 401 when neither is presented.
+Prometheus scrape endpoint. The check is exclusive, not either/or: when
+`METRICS_TOKEN` is set, only the header `X-Metrics-Token: <token>` or the
+query parameter `?metrics_token=<token>` is checked, and an admin session
+with no token still gets 401; when `METRICS_TOKEN` is unset, an admin
+session is required and a token (there being none configured to match)
+does nothing. Returns the Prometheus text exposition format on success, or
+401 on failure either way.
 
 ```
 $ curl -H "X-Metrics-Token: <token>" https://mycelium.example/metrics
@@ -84,10 +90,14 @@ mycelium_requests_total 42
 Seerr's (Overseerr's, Jellyseerr's) notification webhook. Requires the
 webhook secret when `WEBHOOK_SECRET` is set, via the `X-Webhook-Secret`
 header (preferred) or a `?secret=` query parameter (deprecated: it leaks
-into access logs). The body is Seerr's own JSON notification shape. A
-request seen before for the same title, media type and seasons is answered
-as a duplicate and not reprocessed; otherwise the request is queued in a
-background thread and the endpoint answers immediately.
+into access logs); a missing or wrong secret answers 401 (Flask's default
+error page, not JSON). The body is Seerr's own JSON notification shape; a
+body Mycelium cannot parse into a request (missing fields, an unknown
+notification type it should act on) answers 400
+`{"status": "error", "error": "<reason>"}`. A request seen before for the
+same title, media type and seasons is answered as a duplicate and not
+reprocessed; otherwise the request is queued in a background thread and
+the endpoint answers immediately.
 
 ```
 $ curl -X POST https://mycelium.example/webhook \
@@ -115,11 +125,14 @@ $ curl -X POST https://mycelium.example/torbox-webhook \
 ### `POST /webhook/arr`
 
 Delete notifications: Radarr's `MovieDelete`, Sonarr's `SeriesDelete`, and
-the Jellyfin webhook plugin's `ItemDeleted`. Same secret gate. The body
-must be a JSON object in the sender's own webhook shape. A title Mycelium
-does not recognise, or a Jellyfin event fired while the `.strm` files are
-still on disk, is answered `ignored` and nothing is purged; a recognised
-deletion purges the title in a background thread.
+the Jellyfin webhook plugin's `ItemDeleted`. Same secret gate as
+`/webhook`, including the 401 on a missing or wrong secret. The body must
+be a JSON object in the sender's own webhook shape; a body that is not a
+JSON object, or one `arr_webhook.parse()` cannot make sense of, answers
+400 `{"status": "error", "error": "<reason>"}`. A title Mycelium does not
+recognise, or a Jellyfin event fired while the `.strm` files are still on
+disk, is answered `ignored` and nothing is purged; a recognised deletion
+purges the title in a background thread.
 
 ```
 $ curl -X POST https://mycelium.example/webhook/arr \
@@ -151,12 +164,15 @@ unauthenticated token. Accepts a standard `Range` header. Answers one of:
 a 302 to the TorBox CDN URL for a non-MP4 file (after confirming the link
 is still alive); a streamed `video/mp4` body, 200 or 206 with
 `Content-Range`, moov-first once the local fast-start cache is warm and a
-Range pass-through to the CDN while it is still building; or 404 (no
-release found), 502 (TorBox or the CDN failed) and 416 (unsatisfiable
-range) on failure. In the default deployment the Go streaming front
-(`spore-stream/`) serves these bytes itself and calls
-`/internal/stream-resolve` instead; this Flask route is the complete
-fallback when `STREAM_FRONT_ENABLED=false`.
+Range pass-through to the CDN while it is still building; or a failure,
+raised via Flask's `abort()` (its default error page, not JSON): 404 when
+the token does not resolve to a release at all, 502 when TorBox or the
+CDN fails outright (an unusable HEAD response while building the
+fast-start cache), 503 when the CDN itself is rate limiting (a HEAD
+returning 429), and 416 for a `Range` header that does not fit the file.
+In the default deployment the Go streaming front (`spore-stream/`) serves
+these bytes itself and calls `/internal/stream-resolve` instead; this
+Flask route is the complete fallback when `STREAM_FRONT_ENABLED=false`.
 
 ```
 $ curl -i -H "Range: bytes=0-1048575" \
@@ -179,10 +195,20 @@ capability links, so this must never be reachable from outside the
 container, and the Go front additionally refuses to proxy `/internal/*` at
 all. Documented here because it is part of the frozen contract between the
 two processes in this image, not because a third party should call it.
+On success, answers the same `mode`-tagged JSON the route above acts on
+(`redirect`, `cold` or `warm`, without the raw `.fsh` bytes). On the same
+failures `/spore-stream` raises via `abort()`, this route instead answers
+JSON with the matching status code: 404 `{"error": "materialize failed"}`,
+502 `{"error": "HEAD failed"}` or `{"error": "HEAD status <code>"}`, and
+503 `{"error": "HEAD status 429"}` when the CDN itself is rate limiting.
 
 ```
 $ curl -s http://127.0.0.1:8090/internal/stream-resolve/1a2b3c4d5e6f7890
 {"mode": "warm", "cdn_url": "https://...", "cdn_size": 734003200, "fsh_path": "/data/..."}
+
+$ curl -si http://127.0.0.1:8090/internal/stream-resolve/deadtoken0000000
+HTTP/1.1 404 NOT FOUND
+{"error": "materialize failed"}
 ```
 
 ### `POST /internal/stream-report/<token>`
@@ -202,8 +228,14 @@ $ curl -X POST http://127.0.0.1:8090/internal/stream-report/1a2b3c4d5e6f7890 \
 ### `GET /docs/<path:filename>`
 
 Serves a static file out of the repository's `docs/` folder, such as
-`install-guide.html`, the source of the in-app manual. No authentication;
-this is a plain file server scoped to that one directory.
+`install-guide.html`, the source of the in-app manual. A plain file server
+scoped to that one directory; not in `auth._PUBLIC_PATHS` and not
+otherwise carved out of the auth gate, so its authentication follows
+`AUTH_ENABLED` like every other page route: no authentication when auth
+is disabled (the default), and any logged-in session (not admin
+specifically) when it is enabled. An anonymous request while
+`AUTH_ENABLED=true` is redirected to `/login?next=<path>` rather than
+answered with 401, the same as any other non-API page route.
 
 ```
 $ curl https://mycelium.example/docs/install-guide.html
@@ -230,7 +262,8 @@ Content-Type: text/html; charset=utf-8
 The wizard's steps and pre-filled values. Gated by the same rule as every
 other `/setup/*` action below: open while nothing can log in yet, admin
 session required afterwards. No request body. Returns JSON: the step list
-with each field's current value, plus `needs_first_admin`.
+with each field's current value, plus `needs_first_admin`. Rate limited to
+`"30 per minute"`.
 
 ```
 $ curl https://mycelium.example/setup/schema
@@ -244,7 +277,7 @@ quality profiles) against posted credentials, so the wizard can offer a
 dropdown instead of free text. Same gate as `/setup/schema`. Body:
 `{"values": {KEY: value, ...}}`, JSON. Returns the picker's own result
 shape, or 404 `{"ok": false, "error": "unknown picker"}` for an
-unregistered name.
+unregistered name. Rate limited to `"30 per minute"`.
 
 ```
 $ curl -X POST https://mycelium.example/setup/picker/radarr_root_folder \
@@ -262,7 +295,7 @@ a plain form. Only keys that exist in the settings schema are accepted; an
 unknown key is dropped and logged, not rejected. Returns
 `{"ok": true, "saved": <count>}`, with `needs_first_admin: true` added
 when no admin account exists yet (settings are saved, but setup is not
-marked complete until one does).
+marked complete until one does). Rate limited to `"10 per minute"`.
 
 ```
 $ curl -X POST https://mycelium.example/setup/save \
@@ -279,7 +312,7 @@ or a plain form body (answered as `{"ok": true, "detail": <str>}` on
 success or `{"ok": false, "error": <str>}` on failure) - the response
 shape depends on how the body was sent, matching the wizard's own two
 call sites. 404 `{"ok": false, "error": "unknown integration"}` for an
-unregistered `kind`.
+unregistered `kind`. Rate limited to `"20 per minute"`.
 
 ```
 $ curl -X POST https://mycelium.example/setup/test/jellyfin \
@@ -293,7 +326,8 @@ $ curl -X POST https://mycelium.example/setup/test/jellyfin \
 Marks setup complete without saving any settings, for the wizard's "skip"
 button. Same gate as `/setup/schema`. No request body. Returns
 `{"ok": true}`, or `{"ok": true, "needs_first_admin": true}` (without
-marking setup complete) when no admin account exists yet.
+marking setup complete) when no admin account exists yet. Rate limited to
+`"10 per minute"`.
 
 ```
 $ curl -X POST https://mycelium.example/setup/skip
@@ -498,7 +532,7 @@ ZILEAN_URL
 | `ZILEAN_PG_USER` | `postgres` | Database user with read access. |
 | `ZILEAN_URL` | `(empty)` | Address of the Zilean service. |
 
-### Advanced (36)
+### Advanced (35)
 
 Listed in the Settings UI, behind "Advanced". Intervals, timeouts and
 niche knobs most installs never touch.
@@ -522,7 +556,6 @@ DEBRIDIO_MAX_RESULTS
 DISK_SYNC_INTERVAL_MINUTES
 EXCLUDE_UNDERSIZED_STRICT
 HEALTH_CACHE_SECONDS
-JELLYFIN_REFRESH_DELAY_SEC
 MAX_RETRY_ATTEMPTS
 MEDIAFUSION_API_KEY
 MERGE_VERSIONS_INTERVAL_HOURS
@@ -562,7 +595,6 @@ WEBDAV_ENABLED
 | `DISK_SYNC_INTERVAL_MINUTES` | `60` | Purges titles whose files were deleted. 0 disables it. |
 | `EXCLUDE_UNDERSIZED_STRICT` | `false` | Keep dropping undersized releases even when nothing else is left. Off relaxes the rule rather than return nothing. |
 | `HEALTH_CACHE_SECONDS` | `60` | How long the Overview health rows are cached. |
-| `JELLYFIN_REFRESH_DELAY_SEC` | `(unset)` | Seconds to wait after writing files before asking Jellyfin to look. |
 | `MAX_RETRY_ATTEMPTS` | `10` | Times a failed request is retried before it is declined for good. |
 | `MEDIAFUSION_API_KEY` | `(empty)` | Only for a private instance: its API password. |
 | `MERGE_VERSIONS_INTERVAL_HOURS` | `6` | Folds duplicate versions of a title together. |

@@ -21,7 +21,7 @@ function schemaFixture() {
       ] },
       { id: 'jellyfin', title: 'Jellyfin', description: 'The player.', icon: 'x', fields: [
         field({ key: 'JELLYFIN_URL', kind: 'url', label: 'Jellyfin URL', value: 'http://jf' , test: 'jellyfin' }),
-        field({ key: 'JELLYFIN_REFRESH_DELAY_SEC', kind: 'int', label: 'Refresh delay', advanced: true, value: 5 }),
+        field({ key: 'JELLYFIN_FIXTURE_ADVANCED_INT', kind: 'int', label: 'Refresh delay', advanced: true, value: 5 }),
       ] },
       { id: 'intervals', title: 'Intervals', description: 'Timers.', icon: 'x', fields: [
         field({ key: 'CLEANUP_INTERVAL_HOURS', kind: 'int', label: 'Cleanup', advanced: true, value: 24, hot_reload: false }),
