@@ -13,6 +13,10 @@ All notable changes to Mycelium are documented in this file.
   the front reached Flask as if it came from loopback, which made
   TRUSTED_PROXY_AUTH accept a forwarded admin username from any caller
   and made the login rate limiter one shared bucket for every visitor.
+- torrentio.py no longer logs the full Torrentio request URL at INFO.
+  TORRENTIO_OPTS, appended into that URL, is a config segment users paste
+  from Torrentio's own configure page and can carry a debrid API key; the
+  log line now carries only the imdb id and media type.
 
 ### Changed
 

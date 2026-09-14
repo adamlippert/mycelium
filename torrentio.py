@@ -122,7 +122,11 @@ def fetch_streams(
     timeout: int = 30,
 ) -> list[TorrentioStream]:
     url = _build_url(media_type, imdb_id, season, episode)
-    log.info("Querying Torrentio: %s", url)
+    # Never log the URL: TORRENTIO_OPTS (appended into it above) is a config
+    # segment users paste from Torrentio's own configure page and can carry
+    # a debrid API key, and this line lands at INFO in log_buffer, which
+    # /ui/api/logs serves to any logged-in user.
+    log.info("Querying Torrentio: %s %s", media_type, imdb_id)
     resp = requests.get(url, timeout=timeout, headers=_HTTP_HEADERS)
     resp.raise_for_status()
     payload = resp.json() or {}
