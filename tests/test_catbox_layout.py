@@ -13,12 +13,25 @@ _ROOT = os.path.join(os.path.dirname(__file__), "..")
 def test_modules_own_their_functions():
     assert {"release_idle", "reconcile_torbox_ids", "last_reconcile", "_account_lists"} <= set(dir(catbox_jobs))
     assert {"reconcile_pack_files", "detach_episode", "series_title", "_search_detached", "_start_detached_search"} <= set(dir(catbox_packs))
-    for name in ("_resolve_pack_files", "_reconcile_pack", "_detach_episode", "_account_lists"):
+    for name in ("_resolve_pack_files", "_reconcile_pack", "_detach_episode", "_account_lists",
+                 "reconcile_pack_files", "detach_episode", "series_title"):
         assert name not in catbox.__dict__, f"{name} moved out of catbox.py"
 
 
-def test_re_exports_delegate_and_are_listed():
-    assert catbox.release_idle.__module__ == "catbox" and "catbox_jobs" in open(os.path.join(_ROOT, "catbox.py")).read().split("def release_idle")[1][:200]
+def test_re_exports_actually_delegate(monkeypatch):
+    """A text-window check on the source can pass even when the wrapper
+    body was replaced with `return 0` (the docstring alone mentions the
+    jobs module). Prove delegation by swapping the real implementation and
+    checking the sentinel comes back through the wrapper."""
+    monkeypatch.setattr(catbox_jobs, "release_idle", lambda: 4242)
+    assert catbox.release_idle() == 4242
+    monkeypatch.setattr(catbox_jobs, "reconcile_torbox_ids", lambda: {"sentinel": 4242})
+    assert catbox.reconcile_torbox_ids() == {"sentinel": 4242}
+    monkeypatch.setattr(catbox_jobs, "last_reconcile", lambda: {"sentinel": 4242})
+    assert catbox.last_reconcile() == {"sentinel": 4242}
+
+
+def test_re_exports_are_listed_in_the_docstring():
     doc = catbox.__doc__ or ""
     for name in ("release_idle", "reconcile_torbox_ids", "last_reconcile"):
         assert name in doc, "re-export listed in the module docstring"

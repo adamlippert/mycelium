@@ -26,7 +26,7 @@ import uuid
 import db
 import settings as _settings
 import torbox
-from config import CATBOX_HOST, CATBOX_IDLE_MINUTES as _CATBOX_IDLE_MINUTES_DEFAULT
+from config import CATBOX_HOST
 
 log = logging.getLogger(__name__)
 

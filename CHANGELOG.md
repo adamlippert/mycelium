@@ -4,6 +4,14 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Internal: catbox.py's idle release, hourly TorBox id check and
+  season-pack handling moved into their own modules, catbox_jobs.py and
+  catbox_packs.py. Their log lines now carry catbox_jobs or catbox_packs
+  as the logger name instead of catbox; the messages themselves are
+  unchanged.
+
 ## [0.29.0] - 2026-09-14
 
 ### Added

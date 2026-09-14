@@ -12,6 +12,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 
 import catbox
+from config import CATBOX_IDLE_MINUTES as _CATBOX_IDLE_MINUTES_DEFAULT
 
 log = logging.getLogger(__name__)
 
@@ -129,7 +130,7 @@ def reconcile_torbox_ids() -> dict:
 def release_idle() -> int:
     """Remove TorBox items idle longer than CATBOX_IDLE_MINUTES. Returns count released."""
     catbox._sweep_caches()
-    idle_minutes = catbox._settings.get("CATBOX_IDLE_MINUTES", catbox._CATBOX_IDLE_MINUTES_DEFAULT)
+    idle_minutes = catbox._settings.get("CATBOX_IDLE_MINUTES", _CATBOX_IDLE_MINUTES_DEFAULT)
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=idle_minutes)
     cutoff_iso = cutoff.strftime("%Y-%m-%d %H:%M:%S")
     items = catbox.db.get_idle_virtual_items(cutoff_iso)
