@@ -1,5 +1,16 @@
 [
   {
+    "version": "1.0.0",
+    "date": "2026-09-14",
+    "notes": [
+      "The 1.0 compatibility promise: docs/COMPATIBILITY.md freezes the integration routes (webhooks, stream, health, metrics, setup, docs) and the environment variables by tier, with the deprecation rule, the breaking-change rule and the database guarantee; guard tests keep the document equal to the code",
+      "Upgrade and rollback: a backup runs automatically before the first start on a new version, the schema version is recorded, the startup log names both, and docs/RECOVERY.md documents the procedure with a per-release table of what each version added",
+      "Security: the Go streaming front now appends its peer to X-Forwarded-For, so the trusted-proxy header check and the login rate limiter see real addresses again; /ui/logs, the virtual-items list and the NFS/SMB tree routes are gated; the Torrentio log line and its error path no longer carry TORRENTIO_OPTS; /metrics is exempt from the login gate and enforces its own token or admin check",
+      "Module layout: app.py is split into a routes/ package of blueprints (appcore.py holds the Flask app, version.py the version), catbox.py into catbox.py, catbox_jobs.py and catbox_packs.py, the two longest play-path functions into helpers; no route, response or variable changed, guarded by a frozen route table",
+      "Docs swept against 0.17 through 0.29 with a reference guard; the dead JELLYFIN_REFRESH_DELAY_SEC setting removed; the web player works with auth disabled; the discover page number is clamped"
+    ]
+  },
+  {
     "version": "0.29.0",
     "date": "2026-09-14",
     "notes": [
