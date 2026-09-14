@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.28.0",
+    "date": "2026-09-13",
+    "notes": [
+      "Hourly TorBox id check (catbox mode): stored TorBox ids are compared with TorBox's list; an id whose torrent is gone is cleared so the next play re-adds cleanly, an item whose hash lives under another id is repointed. Nothing on TorBox is deleted; a materializing item is left alone; an empty or failing list changes nothing. The Overview's consistency card shows the last run",
+      "Overview: the TorBox card shows the idle cleanup delay again, a countdown under a minute reads \"under 1 min\", the activity feed only knows pills for events the backend logs, and the latency formatter is shared with the Scrapers page"
+    ]
+  },
+  {
     "version": "0.27.1",
     "date": "2026-09-13",
     "notes": [

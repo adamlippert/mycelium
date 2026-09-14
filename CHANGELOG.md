@@ -4,6 +4,8 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-09-13
+
 ### Added
 
 - Hourly TorBox id check (catbox mode). Stored TorBox ids are compared
