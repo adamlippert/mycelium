@@ -89,11 +89,14 @@ mycelium_requests_total 42
 
 ### `POST /webhook`
 
-Seerr's (Overseerr's, Jellyseerr's) notification webhook. Requires the
-webhook secret when `WEBHOOK_SECRET` is set, via the `X-Webhook-Secret`
-header (preferred) or a `?secret=` query parameter (deprecated: it leaks
-into access logs); a missing or wrong secret answers 401 (Flask's default
-error page, not JSON). The body is Seerr's own JSON notification shape; a
+Seerr's (Overseerr's, Jellyseerr's) notification webhook. Always requires
+the webhook secret, via the `X-Webhook-Secret` header (preferred) or a
+`?secret=` query parameter (deprecated: it leaks into access logs); a
+missing or wrong secret answers 401 (Flask's default error page, not
+JSON). Leaving `WEBHOOK_SECRET` blank does not turn the check off:
+Mycelium generates a secret at first start and stores it, shows it in
+Settings, and serves it from `GET /ui/api/webhook-secret`. Either way the
+caller has to send it. The body is Seerr's own JSON notification shape; a
 body Mycelium cannot parse into a request (missing fields, an unknown
 notification type it should act on) answers 400
 `{"status": "error", "error": "<reason>"}`. A request seen before for the
@@ -754,7 +757,7 @@ ZILEAN_DB_PATH
 | `WANTED_RECHECK_INTERVAL_HOURS` | `12` | How often a wanted movie with no acceptable release yet is re-searched. |
 | `WEBDAV_PATH_PREFIX` | `/dav` | URL prefix the WebDAV server mounts the library under. |
 | `WEBDAV_URL_CACHE_TTL_SECONDS` | `3600` | How long a resolved WebDAV CDN URL is cached. |
-| `WEBHOOK_SECRET` | `(empty)` | Shared secret required on /webhook, /torbox-webhook and /webhook/arr. Blank accepts any caller. |
+| `WEBHOOK_SECRET` | `(empty)` | Shared secret required on /webhook, /torbox-webhook and /webhook/arr. Blank means Mycelium generates one at first start, shown in Settings and served by `GET /ui/api/webhook-secret`; callers must send it either way. |
 | `ZILEAN_DB_PATH` | `/data/zilean_native.db` | Path to the native Zilean SQLite index (ZILEAN_MODE=native). |
 
 ### Internal (13)
