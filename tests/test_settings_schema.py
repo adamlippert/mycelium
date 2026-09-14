@@ -18,26 +18,12 @@ import pytest
 import db
 import settings
 
-_ROOT = os.path.join(os.path.dirname(__file__), "..")
+from _helpers import _src, _drop_cached_conn
+
 FIELD_KEYS = {"key", "label", "help", "kind", "options", "placeholder", "unit", "min", "max",
               "advanced", "depends_on", "test", "picker", "component", "readonly", "required"}
 KINDS = {"bool", "int", "float", "str", "list", "url", "path", "secret", "select",
          "multiselect", "ordered", "custom"}
-
-
-def _src(name):
-    with open(os.path.join(_ROOT, name), encoding="utf-8") as f:
-        return f.read()
-
-
-def _drop_cached_conn():
-    conn = getattr(db._tls, "conn", None)
-    if conn is not None:
-        try:
-            conn.close()
-        except Exception:
-            pass
-        db._tls.conn = None
 
 
 @pytest.fixture(autouse=True)

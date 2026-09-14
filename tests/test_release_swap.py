@@ -17,20 +17,7 @@ from streams import Stream
 _ROOT = os.path.join(os.path.dirname(__file__), "..")
 
 
-def _src(name):
-    with open(os.path.join(_ROOT, name), encoding="utf-8") as f:
-        return f.read()
-
-
-def _drop_cached_conn():
-    conn = getattr(db._tls, "conn", None)
-    if conn is not None:
-        try:
-            conn.close()
-        except Exception:
-            pass
-        db._tls.conn = None
-
+from _helpers import _src, _drop_cached_conn
 
 @pytest.fixture(autouse=True)
 def _isolated_db(tmp_path, monkeypatch):

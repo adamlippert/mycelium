@@ -12,13 +12,7 @@ from _routes import src_for_route
 
 import pytest
 
-_ROOT = os.path.join(os.path.dirname(__file__), "..")
-
-
-def _src(name):
-    with open(os.path.join(_ROOT, name), encoding="utf-8") as f:
-        return f.read()
-
+from _helpers import _src
 
 class FakeResp:
     def __init__(self, status, body=None):

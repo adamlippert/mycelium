@@ -13,15 +13,7 @@ from _routes import src_for_route
 _ROOT = os.path.join(os.path.dirname(__file__), "..")
 
 
-def _drop_cached_conn():
-    conn = getattr(db._tls, "conn", None)
-    if conn is not None:
-        try:
-            conn.close()
-        except Exception:
-            pass
-        db._tls.conn = None
-
+from _helpers import _drop_cached_conn
 
 @pytest.fixture(autouse=True)
 def _isolated_db(tmp_path, monkeypatch):

@@ -27,13 +27,7 @@ import pytest
 import db
 import settings
 
-_ROOT = os.path.join(os.path.dirname(__file__), "..")
-
-
-def _src(name):
-    with open(os.path.join(_ROOT, name), encoding="utf-8") as f:
-        return f.read()
-
+from _helpers import _src
 
 def _func_body(src: str, name: str) -> str:
     m = re.search(rf"def {name}\(.*?\n(?=@bp\.|\ndef )", src, re.S)

@@ -22,15 +22,7 @@ import pytest
 import db
 
 
-def _drop_cached_conn():
-    conn = getattr(db._tls, "conn", None)
-    if conn is not None:
-        try:
-            conn.close()
-        except Exception:
-            pass
-        db._tls.conn = None
-
+from _helpers import _drop_cached_conn
 
 @pytest.fixture(autouse=True)
 def _isolated_db(tmp_path, monkeypatch):

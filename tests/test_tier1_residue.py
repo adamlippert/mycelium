@@ -20,26 +20,11 @@ import pytest
 import auth
 import db
 
-_ROOT = os.path.join(os.path.dirname(__file__), "..")
+from _helpers import _src, _drop_cached_conn
 
 
-def _src(name):
-    with open(os.path.join(_ROOT, name), encoding="utf-8") as f:
-        return f.read()
-
-
-def _drop_cached_conn():
-    conn = getattr(db._tls, "conn", None)
-    if conn is not None:
-        try:
-            conn.close()
-        except Exception:
-            pass
-        db._tls.conn = None
-
-
-@pytest.fixture()
-def isolated_db(tmp_path, monkeypatch):
+@pytest.fixture(autouse=True)
+def _isolated_db(tmp_path, monkeypatch):
     _drop_cached_conn()
     monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.db"))
     _drop_cached_conn()
@@ -102,7 +87,7 @@ def test_the_create_user_carve_out_is_an_exact_path():
 
 # -- epoch-timestamped tables get pruned too ----------------------------------
 
-def test_createtorrent_log_is_pruned(isolated_db):
+def test_createtorrent_log_is_pruned():
     """Its ts is a REAL epoch, so it cannot share the text-datetime query:
     SQLite orders every number below every string, which would delete every
     row rather than the old ones."""
@@ -122,7 +107,7 @@ def test_createtorrent_log_is_pruned(isolated_db):
     assert rows == ["recent"], "pruning removed the wrong rows"
 
 
-def test_epoch_pruning_keeps_everything_inside_the_window(isolated_db):
+def test_epoch_pruning_keeps_everything_inside_the_window():
     """The failure this guards against deletes the whole table."""
     now = time.time()
     with db._connect() as conn:
@@ -137,7 +122,7 @@ def test_epoch_pruning_keeps_everything_inside_the_window(isolated_db):
         assert conn.execute("SELECT COUNT(*) n FROM createtorrent_log").fetchone()["n"] == 3
 
 
-def test_text_timestamped_tables_still_prune(isolated_db):
+def test_text_timestamped_tables_still_prune():
     """The original loop must keep working alongside the epoch one."""
     with db._connect() as conn:
         conn.execute("INSERT INTO activity_log (event, title, message, success, created_at) "
@@ -153,7 +138,7 @@ def test_text_timestamped_tables_still_prune(isolated_db):
 
 # -- no_credentials_exist covers every credential type ------------------------
 
-def test_oidc_alone_counts_as_a_credential(isolated_db, monkeypatch):
+def test_oidc_alone_counts_as_a_credential(monkeypatch):
     """The third credential type had no test. If OIDC is the only way in,
     the setup surface must stay closed."""
     import oidc
@@ -163,7 +148,7 @@ def test_oidc_alone_counts_as_a_credential(isolated_db, monkeypatch):
     assert auth.no_credentials_exist() is False
 
 
-def test_no_credentials_when_oidc_is_off_and_nothing_else_exists(isolated_db, monkeypatch):
+def test_no_credentials_when_oidc_is_off_and_nothing_else_exists(monkeypatch):
     import oidc
     monkeypatch.setattr(auth.settings, "get", lambda k, d=None: d)
     monkeypatch.setattr(oidc, "is_enabled", lambda: False)
@@ -173,7 +158,7 @@ def test_no_credentials_when_oidc_is_off_and_nothing_else_exists(isolated_db, mo
 
 # -- finishing setup must not lock the install out of itself ------------------
 
-def test_needs_first_admin_only_when_auth_is_on_and_nothing_can_log_in(isolated_db, monkeypatch):
+def test_needs_first_admin_only_when_auth_is_on_and_nothing_can_log_in(monkeypatch):
     """A no-auth single-user install has no credential either, and must not be
     forced to create an account."""
     src = _src("routes/_common.py")
