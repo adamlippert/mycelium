@@ -84,3 +84,45 @@ func TestProxySetsOnlyThePeerWhenNoForwardedForHeaderArrives(t *testing.T) {
 		t.Fatalf("X-Forwarded-For = %q, want the loopback test client address", xff)
 	}
 }
+
+// Fix round 1, item 7: the two cases the reviewer found missing coverage for.
+
+func TestProxyRestoresInboundForwardedHost(t *testing.T) {
+	front, headers := newProxyFront(t)
+
+	req, _ := http.NewRequest("GET", front.URL+"/anything", nil)
+	req.Header.Set("X-Forwarded-Host", "mycelium.example")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	got := <-headers
+	// SetXForwarded would otherwise set this to pr.In.Host, the front's own
+	// listen address as the test client dialed it, not the public hostname
+	// the outer proxy terminated for.
+	if got.Get("X-Forwarded-Host") != "mycelium.example" {
+		t.Fatalf("X-Forwarded-Host = %q, want the inbound value preserved", got.Get("X-Forwarded-Host"))
+	}
+}
+
+func TestProxySynthesizesProtoFromTheConnectionWhenAbsent(t *testing.T) {
+	front, headers := newProxyFront(t)
+
+	// No X-Forwarded-Proto on the inbound request at all: nothing for this
+	// process to restore, so SetXForwarded's own synthesis (derived from
+	// whether the connection reaching this process is TLS) must stand. The
+	// test client talks to the front over plain HTTP, so that is "http".
+	req, _ := http.NewRequest("GET", front.URL+"/anything", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	got := <-headers
+	if got.Get("X-Forwarded-Proto") != "http" {
+		t.Fatalf("X-Forwarded-Proto = %q, want \"http\" synthesized from the connection", got.Get("X-Forwarded-Proto"))
+	}
+}

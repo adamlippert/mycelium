@@ -48,6 +48,15 @@ def test_peer_address_with_no_front_is_the_remote_socket():
         assert auth.peer_address() == "10.0.0.5"
 
 
+def test_peer_address_falls_back_to_remote_addr_when_the_chain_is_blank():
+    """Fix round 1, item 7. The front marker is present and the peer is
+    loopback (so this did come through the front), but X-Forwarded-For
+    itself is blank - _forwarded_chain() returns an empty list. Must not
+    IndexError or return an empty string; falls back to the socket peer."""
+    with _ctx("127.0.0.1", {"X-Forwarded-For": " , ,", "X-Stream-Front": "1"}):
+        assert auth.peer_address() == "127.0.0.1"
+
+
 # ── _proxy_user(): the trusted-proxy hole ───────────────────────────────────
 
 def test_proxy_user_default_networks_reject_the_spoofed_client_behind_the_front(monkeypatch):
@@ -128,6 +137,14 @@ def test_client_address_with_the_proxy_network_configured_is_the_real_client(mon
     headers = {"X-Forwarded-For": "198.51.100.7, 172.18.0.3", "X-Stream-Front": "1"}
     with _ctx("127.0.0.1", headers):
         assert auth.client_address() == "198.51.100.7"
+
+
+def test_client_address_is_unknown_with_no_remote_addr_at_all():
+    """Fix round 1, item 7. An empty REMOTE_ADDR (no socket peer to fall
+    back to, and nothing in the forwarded chain either) must not raise or
+    return an empty string - the limiter needs a usable bucket key."""
+    with _ctx(""):
+        assert auth.client_address() == "unknown"
 
 
 # ── the limiter key_func no longer keys every caller into one bucket ───────
