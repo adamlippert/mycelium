@@ -4,6 +4,18 @@ All notable changes to Mycelium are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- `docs/COMPATIBILITY.md`, the 1.0 compatibility promise: the frozen
+  integration routes, the environment variables by tier (supported,
+  advanced, deployment, internal), the deprecation rule, breaking-change
+  and database guarantees, and versioning. Guarded by
+  `tests/test_compatibility.py`, which fails the suite the moment the
+  document and the code disagree.
+- A startup warning for a deprecated environment variable still set:
+  `deprecations.warn_deprecated_env()`, logged once next to the existing
+  filter-migration warning. The deprecation map is empty at 1.0.
+
 ### Security
 
 - The Go streaming front now appends its own peer address to
