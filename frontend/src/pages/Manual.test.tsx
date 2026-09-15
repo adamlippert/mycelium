@@ -83,7 +83,7 @@ describe('Manual', () => {
 
     await waitFor(() => expect(screen.getByText('First section text.')).toBeInTheDocument());
     const link = screen.getByRole('link', { name: /README on GitHub/i });
-    expect(link).toHaveAttribute('href', 'https://github.com/adamlippert/mycelium#readme');
+    expect(link).toHaveAttribute('href', 'https://github.com/survivalizer/mycelium#readme');
   });
 
   it('drops the detached <style> and any inline event handler attributes from the source', async () => {

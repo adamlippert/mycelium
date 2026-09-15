@@ -3,9 +3,9 @@
 <img src="assets/banner.svg" alt="myc3l1um: the hidden network beneath your media library" width="800"/>
 
 <p>
-  <a href="https://github.com/adamlippert/mycelium/releases"><img src="https://img.shields.io/github/v/release/adamlippert/mycelium?include_prereleases&color=22d3ee" alt="Release"/></a>
-  <a href="https://github.com/adamlippert/mycelium/pkgs/container/mycelium"><img src="https://img.shields.io/badge/pulls-ghcr.io-2496ED?logo=docker&logoColor=white" alt="Container pulls"/></a>
-  <a href="https://github.com/adamlippert/mycelium/pkgs/container/mycelium"><img src="https://img.shields.io/badge/ghcr.io-mycelium-2496ED.svg?logo=docker&logoColor=white" alt="GHCR"/></a>
+  <a href="https://github.com/survivalizer/mycelium/releases"><img src="https://img.shields.io/github/v/release/survivalizer/mycelium?include_prereleases&color=22d3ee" alt="Release"/></a>
+  <a href="https://github.com/survivalizer/mycelium/pkgs/container/mycelium"><img src="https://img.shields.io/badge/pulls-ghcr.io-2496ED?logo=docker&logoColor=white" alt="Container pulls"/></a>
+  <a href="https://github.com/survivalizer/mycelium/pkgs/container/mycelium"><img src="https://img.shields.io/badge/ghcr.io-mycelium-2496ED.svg?logo=docker&logoColor=white" alt="GHCR"/></a>
   <img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python 3.12"/>
   <img src="https://img.shields.io/badge/license-MIT-22d3ee.svg" alt="MIT licensed"/>
 </p>
@@ -45,7 +45,7 @@
 > **Beta.** Mycelium is in active use and works reliably, but it's still evolving.
 > Primarily tested on Synology NAS + Jellyfin + TorBox. The setup wizard handles
 > initial configuration, no `.env` editing required.
-> [Open an issue](https://github.com/adamlippert/mycelium/issues) if something breaks.
+> [Open an issue](https://github.com/survivalizer/mycelium/issues) if something breaks.
 
 ---
 
@@ -336,13 +336,13 @@ docker run -d \
   -p 8088:8088 \
   -v ./data:/data \
   --name mycelium \
-  ghcr.io/adamlippert/mycelium:latest
+  ghcr.io/survivalizer/mycelium:latest
 ```
 
 Or with Docker Compose:
 
 ```bash
-git clone https://github.com/adamlippert/mycelium.git
+git clone https://github.com/survivalizer/mycelium.git
 cd mycelium
 docker compose up -d
 ```
@@ -530,7 +530,7 @@ Admin > Blacklist tab > add the offending hash. The blacklist auto-fills after `
 
 ## 🗺 Roadmap
 
-See [open issues](https://github.com/adamlippert/mycelium/issues) and [discussions](https://github.com/adamlippert/mycelium/discussions).
+See [open issues](https://github.com/survivalizer/mycelium/issues) and [discussions](https://github.com/survivalizer/mycelium/discussions).
 
 ---
 
@@ -544,7 +544,7 @@ PRs and issues welcome. Keep changes focused, run the tests in `tests/`, and don
 
 [MIT](LICENSE). Do whatever, just don't blame me if your library disappears.
 
-If you use Mycelium or build on top of it, a mention or link back to [github.com/adamlippert/mycelium](https://github.com/adamlippert/mycelium) is appreciated.
+If you use Mycelium or build on top of it, a mention or link back to [github.com/survivalizer/mycelium](https://github.com/survivalizer/mycelium) is appreciated.
 
 ## 🙏 Credits
 

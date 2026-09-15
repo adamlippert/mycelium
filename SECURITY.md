@@ -11,7 +11,7 @@ configuration.
 Please report vulnerabilities privately through GitHub's vulnerability
 reporting: go to the repository's **Security** tab and click **Report a
 vulnerability** (or open
-https://github.com/adamlippert/mycelium/security/advisories/new).
+https://github.com/survivalizer/mycelium/security/advisories/new).
 
 Please do NOT open a public issue for a security problem, and do not include
 working exploits in public discussions.

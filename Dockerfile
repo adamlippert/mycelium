@@ -36,7 +36,7 @@ ARG BUILD_VERSION=dev
 LABEL org.opencontainers.image.title="mycelium" \
       org.opencontainers.image.description="Self-hosted media pipeline: watchlist to .strm via TorBox" \
       org.opencontainers.image.version="${BUILD_VERSION}" \
-      org.opencontainers.image.source="https://github.com/adamlippert/mycelium"
+      org.opencontainers.image.source="https://github.com/survivalizer/mycelium"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

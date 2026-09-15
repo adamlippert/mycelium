@@ -11,7 +11,7 @@ services:
   mycelium:
     # Pin a version in production so a redeploy cannot silently move you to a
     # new release: set MYCELIUM_VERSION=0.7.2 in .env. Defaults to latest.
-    image: ghcr.io/adamlippert/mycelium:${MYCELIUM_VERSION:-latest}
+    image: ghcr.io/survivalizer/mycelium:${MYCELIUM_VERSION:-latest}
     container_name: mycelium
     restart: unless-stopped
 

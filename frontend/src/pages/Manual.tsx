@@ -6,7 +6,7 @@ interface TocEntry {
   level: 1 | 2;
 }
 
-const README_URL = 'https://github.com/adamlippert/mycelium#readme';
+const README_URL = 'https://github.com/survivalizer/mycelium#readme';
 
 // Exported for tests: asserting on class-list coverage of the source doc's
 // class names (.alert.danger, .comment-tree, ...) is cheaper and more

@@ -18,7 +18,7 @@ issue: see [SECURITY.md](SECURITY.md).
 ## Getting set up
 
 ```bash
-git clone https://github.com/adamlippert/mycelium.git
+git clone https://github.com/survivalizer/mycelium.git
 cd mycelium
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements-dev.txt

@@ -5,10 +5,10 @@ import { SourceCard } from './SourceCard';
 
 describe('SourceCard', () => {
   it('shows the source identity and detail line', () => {
-    render(<SourceCard abbr="TR" name="Trakt" detail="adamlippert" connected onSync={() => {}} />);
+    render(<SourceCard abbr="TR" name="Trakt" detail="survivalizer" connected onSync={() => {}} />);
     expect(screen.getByText('TR')).toBeInTheDocument();
     expect(screen.getByText('Trakt')).toBeInTheDocument();
-    expect(screen.getByText('adamlippert')).toBeInTheDocument();
+    expect(screen.getByText('survivalizer')).toBeInTheDocument();
   });
 
   it('marks connection state as a pill', () => {
